@@ -1,18 +1,18 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
 import { User } from './entities/user.entity';
-
-interface RegisterDto {
-  email: string;
-  password: string;
-  username: string;
-}
-
-interface LoginDto {
-  email: string;
-  password: string;
-}
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 
 export type UserResponse = Omit<User, 'password'>;
 
@@ -25,15 +25,35 @@ export class UserController {
 
   @Post('register')
   async register(@Body() registerDto: RegisterDto): Promise<UserResponse> {
-    const user = await this.userService.create(
-      registerDto.email,
-      registerDto.password,
-      registerDto.username,
-    );
+    try {
+      // Check if user with this email already exists
+      const existingUser = await this.userService.findByEmail(
+        registerDto.email,
+      );
+      if (existingUser) {
+        throw new ConflictException('User with this email already exists');
+      }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...result } = user;
-    return result;
+      // Create the new user
+      const user = await this.userService.create(
+        registerDto.email,
+        registerDto.password,
+        registerDto.username,
+      );
+
+      // Return user without password
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...result } = user;
+      return result;
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      // Handle generic errors
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to register user: ' + errorMessage);
+    }
   }
 
   @Post('login')
@@ -41,7 +61,17 @@ export class UserController {
   async login(
     @Body() loginDto: LoginDto,
   ): Promise<{ access_token: string; user: UserResponse }> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    return await this.authService.login(loginDto.email, loginDto.password);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      return await this.authService.login(loginDto.email, loginDto.password);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      // Handle generic errors
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to login: ' + errorMessage);
+    }
   }
 }
