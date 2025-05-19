@@ -85,4 +85,4 @@ We welcome contributions! Here’s how you can help:
 5. **Push your branch** and create a pull request.
 
 ### Issues
-Check out the [Issues](https://github.com/YOUR_USERNAME/xconfess/issues) section for current tasks and bugs.
+Check out the [Issues](https://github.com/Godsmiracle001/Xconfess/issues) section for current tasks and bugs.
