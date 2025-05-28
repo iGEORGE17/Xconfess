@@ -2,6 +2,8 @@
 
 An anonymous confession platform where users can share their thoughts, react to confessions, and engage in private messaging. Built with Next.js (frontend) and NestJS (backend), offering high security, real-time interactions, and an intuitive UI.
 
+First Join our community on Telegram immediately : https://t.me/xconfess_Community
+
 ## Table of Contents
 - [Installation](#installation)
 - [Usage](#usage)
