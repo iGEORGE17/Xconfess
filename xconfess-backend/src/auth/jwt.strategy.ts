@@ -4,16 +4,19 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(private configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get('JWT_SECRET'),
+      secretOrKey: configService.get<string>('JWT_SECRET'),
     });
   }
 
   async validate(payload: any) {
-    return { id: payload.sub, email: payload.email };
+    // This method will be called after the token is validated
+    // You can add logic here to fetch the user based on the payload
+    // and return the user object
+    return { userId: payload.sub, username: payload.username }; // Example payload structure
   }
 }
