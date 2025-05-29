@@ -12,6 +12,11 @@ export class ConfessionController {
   create(@Body() createConfessionDto: CreateConfessionDto) {
     return this.confessionService.create(createConfessionDto);
   }
+
+  @Get('search')
+  search(@Query() searchDto: SearchConfessionDto) {
+    return this.confessionService.search(searchDto);
+  }
   
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -26,10 +31,5 @@ export class ConfessionController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.confessionService.remove(+id);
-  }
-  
-  @Get('search')
-  search(@Query() searchDto: SearchConfessionDto) {
-    return this.confessionService.search(searchDto);
   }
 }
