@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
+import { SearchConfessionDto } from './dto/search-confession.dto';
 
 @Controller('confession')
 export class ConfessionController {
@@ -27,4 +28,8 @@ export class ConfessionController {
     return this.confessionService.remove(+id);
   }
   
+  @Get('search')
+  search(@Query() searchDto: SearchConfessionDto) {
+    return this.confessionService.search(searchDto);
+  }
 }
