@@ -12,11 +12,7 @@ export class ConfessionController {
     return this.confessionService.create(createConfessionDto);
   }
   
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.confessionService.findOne(+id);
-  }
-  
+ 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateConfessionDto: UpdateConfessionDto) {
     return this.confessionService.update(+id, updateConfessionDto);

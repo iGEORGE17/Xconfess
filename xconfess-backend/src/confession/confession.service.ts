@@ -17,9 +17,7 @@ export class ConfessionService {
     return this.confessionRepo.find({ order: { created_at: 'DESC' } });
   }
 
-  findOne(id: number) {
-    return this.confessionRepo.findOneBy({ id });
-  }
+  
   
   update(id: number, updateConfessionDto: UpdateConfessionDto) {
     return this.confessionRepo.update(id, updateConfessionDto);
