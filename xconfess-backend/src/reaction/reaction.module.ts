@@ -10,5 +10,6 @@ import { ConfessionModule } from 'src/confession/confession.module';
   imports: [ConfessionModule, TypeOrmModule.forFeature([Reaction, AnonymousConfession])],
   controllers: [ReactionController],
   providers: [ReactionService],
+  exports: [ReactionService],
 })
 export class ReactionModule {}
