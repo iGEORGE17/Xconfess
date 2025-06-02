@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, BadRequestException, InternalServerErrorException } from "@nestjs/common";
 import { AnonymousConfessionRepository } from "./repository/confession.repository";
 import { CreateConfessionDto } from "./dto/create-confession.dto";
 import { UpdateConfessionDto } from "./dto/update-confession.dto";
@@ -9,35 +9,79 @@ import { ILike } from "typeorm";
 export class ConfessionService {
   constructor(private confessionRepo: AnonymousConfessionRepository) {}
 
-  create(createConfessionDto: CreateConfessionDto) {
-    const { message } = createConfessionDto;
-    const confession = this.confessionRepo.create({ message });
-    return this.confessionRepo.save(confession);
+  private sanitizeMessage(message: string): string {
+    // Remove any potential XSS or harmful content
+    return message
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/javascript:/gi, '') // Remove javascript: protocol
+      .trim();
   }
 
-  findAll() {
-    return this.confessionRepo.find({ order: { created_at: 'DESC' } });
+  async create(createConfessionDto: CreateConfessionDto) {
+    try {
+      const { message } = createConfessionDto;
+      const sanitizedMessage = this.sanitizeMessage(message);
+      
+      if (!sanitizedMessage) {
+        throw new BadRequestException('Invalid confession content');
+      }
+
+      const confession = this.confessionRepo.create({ message: sanitizedMessage });
+      return await this.confessionRepo.save(confession);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to create confession');
+    }
   }
 
-  
-  
-  update(id: number, updateConfessionDto: UpdateConfessionDto) {
-    return this.confessionRepo.update(id, updateConfessionDto);
+  async findAll() {
+    try {
+      return await this.confessionRepo.find({ 
+        order: { created_at: 'DESC' },
+        relations: ['reactions']
+      });
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch confessions');
+    }
+  }
+
+  async update(id: number, updateConfessionDto: UpdateConfessionDto) {
+    try {
+      if (updateConfessionDto.message) {
+        updateConfessionDto.message = this.sanitizeMessage(updateConfessionDto.message);
+      }
+      return await this.confessionRepo.update(id, updateConfessionDto);
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to update confession');
+    }
   }
   
-  remove(id: number) {
-    return this.confessionRepo.delete(id);
+  async remove(id: number) {
+    try {
+      return await this.confessionRepo.delete(id);
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to delete confession');
+    }
   }
 
   async search(searchDto: SearchConfessionDto) {
-    const { keyword } = searchDto;
-    return this.confessionRepo.find({
-      where: {
-        message: ILike(`%${keyword}%`),
-      },
-      order: {
-        created_at: 'DESC',
-      },
-    });
+    try {
+      const { keyword } = searchDto;
+      const sanitizedKeyword = this.sanitizeMessage(keyword);
+      
+      return await this.confessionRepo.find({
+        where: {
+          message: ILike(`%${sanitizedKeyword}%`),
+        },
+        order: {
+          created_at: 'DESC',
+        },
+        relations: ['reactions']
+      });
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to search confessions');
+    }
   }
 }
