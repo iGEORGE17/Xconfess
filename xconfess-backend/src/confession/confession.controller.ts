@@ -25,11 +25,11 @@ export class ConfessionController {
   
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateConfessionDto: UpdateConfessionDto) {
-    return this.confessionService.update(+id, updateConfessionDto);
+    return this.confessionService.update(id, updateConfessionDto);
   }
   
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.confessionService.remove(+id);
+    return this.confessionService.remove(id);
   }
 }

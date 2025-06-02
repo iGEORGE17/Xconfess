@@ -1,20 +1,21 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from "@nestjs/common";
+import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { AnonymousConfessionRepository } from "./repository/confession.repository";
 import { CreateConfessionDto } from "./dto/create-confession.dto";
 import { UpdateConfessionDto } from "./dto/update-confession.dto";
 import { SearchConfessionDto } from "./dto/search-confession.dto";
 import { ILike } from "typeorm";
+import sanitizeHtml from 'sanitize-html';
 
 @Injectable()
 export class ConfessionService {
   constructor(private confessionRepo: AnonymousConfessionRepository) {}
 
   private sanitizeMessage(message: string): string {
-    // Remove any potential XSS or harmful content
-    return message
-      .replace(/<[^>]*>/g, '') // Remove HTML tags
-      .replace(/javascript:/gi, '') // Remove javascript: protocol
-      .trim();
+    return sanitizeHtml(message, {
+      allowedTags: [], // No HTML tags allowed
+      allowedAttributes: {}, // No attributes allowed
+      disallowedTagsMode: 'recursiveEscape'
+    }).trim();
   }
 
   async create(createConfessionDto: CreateConfessionDto) {
@@ -47,21 +48,45 @@ export class ConfessionService {
     }
   }
 
-  async update(id: number, updateConfessionDto: UpdateConfessionDto) {
+  async update(id: string, updateConfessionDto: UpdateConfessionDto) {
     try {
+      // First check if the confession exists
+      const confession = await this.confessionRepo.findOne({ where: { id } });
+      if (!confession) {
+        throw new NotFoundException(`Confession with ID ${id} not found`);
+      }
+
       if (updateConfessionDto.message) {
         updateConfessionDto.message = this.sanitizeMessage(updateConfessionDto.message);
+        if (!updateConfessionDto.message) {
+          throw new BadRequestException('Invalid confession content');
+        }
       }
-      return await this.confessionRepo.update(id, updateConfessionDto);
+
+      await this.confessionRepo.update(id, updateConfessionDto);
+      return await this.confessionRepo.findOne({ where: { id } });
     } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to update confession');
     }
   }
   
-  async remove(id: number) {
+  async remove(id: string) {
     try {
-      return await this.confessionRepo.delete(id);
+      // First check if the confession exists
+      const confession = await this.confessionRepo.findOne({ where: { id } });
+      if (!confession) {
+        throw new NotFoundException(`Confession with ID ${id} not found`);
+      }
+
+      await this.confessionRepo.delete(id);
+      return { message: 'Confession successfully deleted' };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to delete confession');
     }
   }
@@ -69,11 +94,10 @@ export class ConfessionService {
   async search(searchDto: SearchConfessionDto) {
     try {
       const { keyword } = searchDto;
-      const sanitizedKeyword = this.sanitizeMessage(keyword);
-      
+      // Remove sanitization to allow special characters in search
       return await this.confessionRepo.find({
         where: {
-          message: ILike(`%${sanitizedKeyword}%`),
+          message: ILike(`%${keyword}%`),
         },
         order: {
           created_at: 'DESC',
