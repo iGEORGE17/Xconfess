@@ -7,12 +7,16 @@ import {
   BadRequestException,
   ConflictException,
   UnauthorizedException,
+  Get,
+  UseGuards,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
 import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GetUser } from '../auth/get-user.decorator';
 
 export type UserResponse = Omit<User, 'password'>;
 
@@ -72,6 +76,21 @@ export class UserController {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException('Failed to login: ' + errorMessage);
+    }
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@GetUser() user: User): Promise<UserResponse> {
+    try {
+      // Return user without password
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...result } = user;
+      return result;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to get profile: ' + errorMessage);
     }
   }
 }
