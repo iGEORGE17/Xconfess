@@ -3,6 +3,7 @@ import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
+import { GetConfessionsDto } from './dto/get-confessions.dto';
 
 @Controller('confessions')
 export class ConfessionController {
@@ -14,8 +15,8 @@ export class ConfessionController {
   }
 
   @Get()
-  findAll() {
-    return this.confessionService.findAll();
+  getConfessions(@Query() getConfessionsDto: GetConfessionsDto) {
+    return this.confessionService.getConfessions(getConfessionsDto);
   }
 
   @Get('search')

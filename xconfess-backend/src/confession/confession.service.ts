@@ -3,6 +3,7 @@ import { AnonymousConfessionRepository } from "./repository/confession.repositor
 import { CreateConfessionDto } from "./dto/create-confession.dto";
 import { UpdateConfessionDto } from "./dto/update-confession.dto";
 import { SearchConfessionDto } from "./dto/search-confession.dto";
+import { GetConfessionsDto, SortOrder } from "./dto/get-confessions.dto";
 import { ILike } from "typeorm";
 import sanitizeHtml from 'sanitize-html';
 
@@ -37,12 +38,52 @@ export class ConfessionService {
     }
   }
 
-  async findAll() {
+  async getConfessions(getConfessionsDto: GetConfessionsDto) {
     try {
-      return await this.confessionRepo.find({ 
-        order: { created_at: 'DESC' },
-        relations: ['reactions']
-      });
+      const { page = 1, limit = 10, sort = SortOrder.NEWEST, gender } = getConfessionsDto;
+      const skip = (page - 1) * limit;
+
+      const queryBuilder = this.confessionRepo.createQueryBuilder('confession')
+        .leftJoinAndSelect('confession.reactions', 'reactions');
+
+      // Apply gender filter if provided
+      if (gender) {
+        queryBuilder.andWhere('confession.gender = :gender', { gender });
+      }
+
+      // Apply sorting
+      if (sort === SortOrder.TRENDING) {
+        queryBuilder
+          .addSelect((subQuery) => {
+            return subQuery
+              .select('COUNT(*)', 'reaction_count')
+              .from('reaction', 'r')
+              .where('r.confession_id = confession.id');
+          }, 'reaction_count')
+          .orderBy('reaction_count', 'DESC')
+          .addOrderBy('confession.created_at', 'DESC');
+      } else {
+        queryBuilder.orderBy('confession.created_at', 'DESC');
+      }
+
+      // Get total count
+      const total = await queryBuilder.getCount();
+
+      // Apply pagination
+      queryBuilder.skip(skip).take(limit);
+
+      // Execute query
+      const confessions = await queryBuilder.getMany();
+
+      return {
+        data: confessions,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      };
     } catch (error) {
       throw new InternalServerErrorException('Failed to fetch confessions');
     }
