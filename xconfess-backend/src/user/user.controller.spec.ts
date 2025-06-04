@@ -15,6 +15,8 @@ describe('UserController', () => {
     username: 'testuser',
     email: 'test@example.com',
     password: 'hashedpassword',
+    resetPasswordToken: null,
+    resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
