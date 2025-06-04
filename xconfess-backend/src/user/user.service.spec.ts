@@ -3,7 +3,7 @@ import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { InternalServerErrorException } from '@nestjs/common';
+import { InternalServerErrorException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('UserService', () => {
@@ -181,6 +181,14 @@ describe('UserService', () => {
       expect(mockRepository.save).toHaveBeenCalledWith(mockUser);
     });
 
+    it('should throw ConflictException if email already exists', async () => {
+      mockRepository.findOne.mockResolvedValue(mockUser);
+
+      await expect(
+        service.create('test@example.com', 'password123', 'testuser'),
+      ).rejects.toThrow(ConflictException);
+    });
+
     it('should throw InternalServerErrorException on database error', async () => {
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
       mockRepository.create.mockReturnValue(mockUser);
@@ -189,6 +197,35 @@ describe('UserService', () => {
       await expect(
         service.create('test@example.com', 'password123', 'testuser'),
       ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should throw InternalServerErrorException on password hashing error', async () => {
+      jest.spyOn(bcrypt, 'hash').mockRejectedValue(new Error('Hashing error') as never);
+
+      await expect(
+        service.create('test@example.com', 'password123', 'testuser'),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('should handle empty username', async () => {
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      mockRepository.create.mockReturnValue({ ...mockUser, username: '' });
+      mockRepository.save.mockResolvedValue({ ...mockUser, username: '' });
+
+      const result = await service.create('test@example.com', 'password123', '');
+
+      expect(result.username).toBe('');
+    });
+
+    it('should handle special characters in username', async () => {
+      const specialUsername = 'test-user_123';
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      mockRepository.create.mockReturnValue({ ...mockUser, username: specialUsername });
+      mockRepository.save.mockResolvedValue({ ...mockUser, username: specialUsername });
+
+      const result = await service.create('test@example.com', 'password123', specialUsername);
+
+      expect(result.username).toBe(specialUsername);
     });
   });
 }); 
