@@ -39,6 +39,28 @@ export class UserService {
     }
   }
 
+  async findById(id: number): Promise<User | null> {
+    try {
+      this.logger.debug(`Finding user by ID: ${id}`);
+      const user = await this.userRepository.findOne({ where: { id } });
+
+      if (user) {
+        this.logger.debug(`User found with ID: ${user.id}`);
+      } else {
+        this.logger.debug(`No user found with ID: ${id}`);
+      }
+
+      return user;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error finding user by ID: ${errorMessage}`);
+      throw new InternalServerErrorException(
+        `Error finding user: ${errorMessage}`,
+      );
+    }
+  }
+
   async findByResetToken(token: string): Promise<User | null> {
     try {
       this.logger.debug(`Finding user by reset token`);
