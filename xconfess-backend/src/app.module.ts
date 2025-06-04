@@ -10,17 +10,25 @@ import { ConfessionModule } from './confession/confession.module';
 import { ReactionModule } from './reaction/reaction.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import throttleConfig from './config/throttle.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      load: [throttleConfig],
     }),
-    ThrottlerModule.forRoot([{
-      ttl: 60, // Time window in seconds
-      limit: 10, // Maximum number of requests per time window
-    }]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [{
+          ttl: config.get<number>('throttle.ttl') || 900,
+          limit: config.get<number>('throttle.limit') || 100,
+        }],
+      }),
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

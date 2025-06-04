@@ -9,11 +9,13 @@ export class ThrottlerExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const status = exception.getStatus();
 
-    response.status(status).json({
-      statusCode: status,
-      message: 'Too many requests. Please try again later.',
-      error: 'Too Many Requests',
-      timestamp: new Date().toISOString(),
-    });
+    response
+      .status(status)
+      .json({
+        statusCode: status,
+        message: 'Too Many Requests',
+        error: 'Rate limit exceeded',
+        timestamp: new Date().toISOString(),
+      });
   }
 } 
