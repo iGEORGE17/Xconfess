@@ -16,6 +16,12 @@ export class User {
   @Column()
   email: string;
 
+  @Column({ nullable: true })
+  resetPasswordToken: string | null;
+
+  @Column({ nullable: true })
+  resetPasswordExpires: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
