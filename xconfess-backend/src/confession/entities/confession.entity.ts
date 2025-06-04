@@ -1,5 +1,6 @@
 import { Reaction } from 'src/reaction/entities/reaction.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
+import { Gender } from '../dto/get-confessions.dto';
 
 /**
  * Entity representing an anonymous confession in the system.
@@ -21,6 +22,17 @@ export class AnonymousConfession {
   @Column('text')
   @Index()
   message: string;
+
+  /**
+   * The gender of the confessor.
+   * Can be male, female, or other.
+   */
+  @Column({
+    type: 'enum',
+    enum: Gender,
+    nullable: true
+  })
+  gender: Gender;
 
   /**
    * Associated reactions to this confession.
