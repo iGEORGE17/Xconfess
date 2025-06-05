@@ -194,10 +194,28 @@ export class UserService {
 
 
   async updateProfile(userId: number, updateDto: UpdateUserProfileDto): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    try {
+
+      const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     Object.assign(user, updateDto);
-    return this.userRepository.save(user);
+
+    const updatedProfile = await this.userRepository.save(user);
+
+    this.logger.log(`User profile updated sucessfully for user ID: ${userId}`);
+
+    return updatedProfile
+      
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error updating user profile: ${errorMessage}`);
+      throw new InternalServerErrorException(
+        `Error updating user profile: ${errorMessage}`,
+      );
+      
+    }
   }
 }

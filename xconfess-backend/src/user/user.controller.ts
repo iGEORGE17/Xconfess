@@ -98,12 +98,18 @@ export class UserController {
   }
   @UseGuards(JwtAuthGuard)
   @Put('profile')
-  async updateProfile(
-    @Request() req,
-    @Body() updateUserProfileDto: UpdateUserProfileDto,
-  ) {
-    const updatedUser = await this.userService.updateProfile(req.user.id, updateUserProfileDto);
-    return updatedUser;
+  async updateProfile(@Request() req, @Body() updateUserProfileDto: UpdateUserProfileDto): Promise<UserResponse> {
+
+    try {
+      const updatedUser = await this.userService.updateProfile(req.user.id, updateUserProfileDto);
+      return updatedUser;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to update profile: ' + errorMessage);
+      
+    }
+
   }
 
 }
