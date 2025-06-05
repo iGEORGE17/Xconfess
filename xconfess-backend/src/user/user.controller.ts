@@ -9,6 +9,8 @@ import {
   UnauthorizedException,
   Get,
   UseGuards,
+  Put,
+  Request
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
@@ -17,6 +19,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
+import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 
 export type UserResponse = Omit<User, 'password'>;
 
@@ -93,4 +96,14 @@ export class UserController {
       throw new BadRequestException('Failed to get profile: ' + errorMessage);
     }
   }
+  @UseGuards(JwtAuthGuard)
+  @Put('profile')
+  async updateProfile(
+    @Request() req,
+    @Body() updateUserProfileDto: UpdateUserProfileDto,
+  ) {
+    const updatedUser = await this.userService.updateProfile(req.user.id, updateUserProfileDto);
+    return updatedUser;
+  }
+
 }
