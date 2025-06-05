@@ -1,14 +1,18 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
+import { EmailService } from '../email/email.service';
+
 
 @Injectable()
 export class UserService {
@@ -17,6 +21,8 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @Inject(forwardRef(() => EmailService))
+    private emailService: EmailService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -35,6 +41,28 @@ export class UserService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error finding user by email: ${errorMessage}`);
+      throw new InternalServerErrorException(
+        `Error finding user: ${errorMessage}`,
+      );
+    }
+  }
+
+  async findById(id: number): Promise<User | null> {
+    try {
+      this.logger.debug(`Finding user by ID: ${id}`);
+      const user = await this.userRepository.findOne({ where: { id } });
+
+      if (user) {
+        this.logger.debug(`User found with ID: ${user.id}`);
+      } else {
+        this.logger.debug(`No user found with ID: ${id}`);
+      }
+
+      return user;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error finding user by ID: ${errorMessage}`);
       throw new InternalServerErrorException(
         `Error finding user: ${errorMessage}`,
       );
@@ -125,13 +153,11 @@ export class UserService {
       this.logger.log(`Creating new user with email: ${email}`);
 
       // Hash the password with bcrypt
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Create user entity
       const user = this.userRepository.create({
         email,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         password: hashedPassword,
         username,
       });
@@ -139,6 +165,18 @@ export class UserService {
       // Save user to database
       const savedUser = await this.userRepository.save(user);
       this.logger.log(`User created successfully with ID: ${savedUser.id}`);
+
+      // Send welcome email (fire and forget)
+      try {
+        await this.emailService.sendWelcomeEmail(savedUser.email, savedUser.username);
+        this.logger.log(`Welcome email sent to ${savedUser.email}`);
+      } catch (emailError) {
+        // Log but don't fail the user registration if email sending fails
+        this.logger.error(
+          `Failed to send welcome email to ${savedUser.email}: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`,
+          emailError instanceof Error ? emailError.stack : ''
+        );
+      }
 
       return savedUser;
     } catch (error) {
