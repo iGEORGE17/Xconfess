@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { AnonymousConfession } from '../../confession/entities/confession.entity';
 
 @Entity()
 @Unique(['username'])
@@ -27,4 +28,10 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  /**
+   * Confessions created by this user
+   */
+  @OneToMany(() => AnonymousConfession, confession => confession.user)
+  confessions: AnonymousConfession[];
 }
