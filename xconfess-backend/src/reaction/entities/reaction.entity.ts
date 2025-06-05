@@ -1,4 +1,5 @@
-import { AnonymousConfession } from 'src/confession/entities/confession.entity';
+import { User } from '../../user/entities/user.entity';
+import { AnonymousConfession } from '../../confession/entities/confession.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 
 @Entity()
@@ -13,6 +14,10 @@ export class Reaction {
   @JoinColumn({ name: 'confession_id' })
   confession: AnonymousConfession;
 
-  @CreateDateColumn()
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'user_id' })
+  user: User | null;
+
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

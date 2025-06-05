@@ -1,5 +1,6 @@
 import { Reaction } from 'src/reaction/entities/reaction.entity';
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index } from 'typeorm';
+import { User } from '../../user/entities/user.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { Gender } from '../dto/get-confessions.dto';
 
 /**
@@ -47,4 +48,19 @@ export class AnonymousConfession {
    */
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
+
+  /**
+   * The user who created this confession.
+   * Can be null if the confession is truly anonymous.
+   */
+  @ManyToOne(() => User, user => user.confessions, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'user_id' })
+  user: User | null;
+
+  /**
+   * Getter for message alias to content for consistency
+   */
+  get content(): string {
+    return this.message;
+  }
 }
