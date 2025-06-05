@@ -3,13 +3,16 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { EmailService } from '../email/email.service';
+
 
 @Injectable()
 export class UserService {
@@ -187,5 +190,14 @@ export class UserService {
         `Failed to create user: ${errorMessage}`,
       );
     }
+  }
+
+
+  async updateProfile(userId: number, updateDto: UpdateUserProfileDto): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    Object.assign(user, updateDto);
+    return this.userRepository.save(user);
   }
 }
