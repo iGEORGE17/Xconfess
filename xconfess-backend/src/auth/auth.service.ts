@@ -1,9 +1,12 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
+import { EmailService } from '../email/email.service';
+import { PasswordResetService } from './password-reset.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 
 interface JwtPayload {
   email: string;
@@ -12,9 +15,13 @@ interface JwtPayload {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
+    private emailService: EmailService,
+    private passwordResetService: PasswordResetService,
   ) {}
 
   async validateUser(
@@ -69,20 +76,116 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-    // Find user by reset token
-    const user = await this.userService.findByResetToken(token);
-    if (!user) {
-      throw new BadRequestException('Invalid or expired reset token');
+    try {
+      // Find and validate the reset token
+      const passwordReset = await this.passwordResetService.findValidToken(token);
+      if (!passwordReset) {
+        this.logger.warn(`Invalid or expired reset token attempted`, { token });
+        throw new BadRequestException('Invalid or expired reset token');
+      }
+
+      // Update the user's password
+      await this.userService.updatePassword(passwordReset.userId, newPassword);
+
+      // Mark the token as used
+      await this.passwordResetService.markTokenAsUsed(passwordReset.id);
+
+      this.logger.log(`Password reset successful`, {
+        userId: passwordReset.userId,
+        tokenId: passwordReset.id,
+      });
+
+      return { message: 'Password has been reset successfully' };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      this.logger.error(`Password reset failed: ${errorMessage}`, { token, error: errorMessage });
+      throw new BadRequestException('Failed to reset password');
     }
+  }
 
-    // Check if token has expired
-    if (!user.resetPasswordExpires || new Date() > user.resetPasswordExpires) {
-      throw new BadRequestException('Reset token has expired');
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    try {
+      // Validate that at least one identifier is provided
+      if (!ForgotPasswordDto.validate(forgotPasswordDto)) {
+        throw new BadRequestException('Either email or userId must be provided');
+      }
+
+      let user;
+      
+      // Find user by email or userId
+      if (forgotPasswordDto.email) {
+        user = await this.userService.findByEmail(forgotPasswordDto.email);
+        this.logger.log(`Password reset requested for email: ${forgotPasswordDto.email}`, {
+          email: forgotPasswordDto.email,
+          ipAddress,
+        });
+      } else if (forgotPasswordDto.userId) {
+        user = await this.userService.findById(forgotPasswordDto.userId);
+        this.logger.log(`Password reset requested for user ID: ${forgotPasswordDto.userId}`, {
+          userId: forgotPasswordDto.userId,
+          ipAddress,
+        });
+      }
+
+      if (!user) {
+        // For security, we don't reveal whether the user exists or not
+        this.logger.warn(`Password reset attempted for non-existent user`, {
+          email: forgotPasswordDto.email,
+          userId: forgotPasswordDto.userId,
+          ipAddress,
+        });
+        return { message: 'If the user exists, a password reset email has been sent.' };
+      }
+
+      // Invalidate any existing tokens for this user
+      await this.passwordResetService.invalidateUserTokens(user.id);
+
+      // Generate new reset token
+      const token = await this.passwordResetService.createResetToken(
+        user.id,
+        ipAddress,
+        userAgent,
+      );
+
+      // Send password reset email
+      await this.emailService.sendPasswordResetEmail(
+        user.email,
+        token,
+        user.username,
+      );
+
+      this.logger.log(`Password reset email sent successfully`, {
+        userId: user.id,
+        email: user.email,
+        ipAddress,
+      });
+
+      return { message: 'If the user exists, a password reset email has been sent.' };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      this.logger.error(`Forgot password process failed: ${errorMessage}`, {
+        email: forgotPasswordDto.email,
+        userId: forgotPasswordDto.userId,
+        ipAddress,
+        error: errorMessage,
+      });
+
+      // Don't expose internal errors to the user
+      return { message: 'If the user exists, a password reset email has been sent.' };
     }
-
-    // Update the user's password and clear reset token
-    await this.userService.updatePassword(user.id, newPassword);
-
-    return { message: 'Password has been reset successfully' };
   }
 }

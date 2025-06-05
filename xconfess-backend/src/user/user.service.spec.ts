@@ -78,6 +78,35 @@ describe('UserService', () => {
     });
   });
 
+  describe('findById', () => {
+    it('should return user when found by ID', async () => {
+      mockRepository.findOne.mockResolvedValue(mockUser);
+
+      const result = await service.findById(1);
+
+      expect(result).toEqual(mockUser);
+      expect(mockRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+    });
+
+    it('should return null when user not found by ID', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.findById(999);
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw InternalServerErrorException on database error', async () => {
+      mockRepository.findOne.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.findById(1)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
   describe('findByResetToken', () => {
     it('should return user when found by reset token', async () => {
       const userWithToken = {
