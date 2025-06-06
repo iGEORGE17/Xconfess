@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
 import { User } from './entities/user.entity';
 import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { RegisterDto } from './dto/register.dto';
 
 describe('UserController', () => {
   let controller: UserController;
@@ -19,6 +20,7 @@ describe('UserController', () => {
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    confessions: [],
   };
 
   const mockUserService = {
@@ -62,16 +64,25 @@ describe('UserController', () => {
       const result = await controller.getProfile(mockUser);
       expect(result).toEqual(expectedResult);
     });
+
+    it('should handle errors gracefully', async () => {
+      const error = new Error('Profile error');
+      jest.spyOn(controller, 'getProfile').mockRejectedValue(error);
+
+      await expect(controller.getProfile(mockUser)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
   });
 
   describe('register', () => {
-    const validRegistrationData = {
+    const validRegistrationData: RegisterDto = {
       email: 'test@example.com',
       password: 'password123',
       username: 'testuser',
     };
 
-    it('should create a new user', async () => {
+    it('should create a new user successfully', async () => {
       mockUserService.findByEmail.mockResolvedValue(null);
       mockUserService.create.mockResolvedValue(mockUser);
 
@@ -122,22 +133,17 @@ describe('UserController', () => {
       expect(mockUserService.create).not.toHaveBeenCalled();
     });
 
-    it('should handle empty username', async () => {
+    it('should throw BadRequestException for empty username', async () => {
       const emptyUsernameData = {
         ...validRegistrationData,
         username: '',
       };
-      mockUserService.findByEmail.mockResolvedValue(null);
-      mockUserService.create.mockResolvedValue({ ...mockUser, username: '' });
 
-      const result = await controller.register(emptyUsernameData);
-
-      expect(result.username).toBe('');
-      expect(mockUserService.create).toHaveBeenCalledWith(
-        emptyUsernameData.email,
-        emptyUsernameData.password,
-        emptyUsernameData.username,
+      await expect(controller.register(emptyUsernameData)).rejects.toThrow(
+        BadRequestException,
       );
+      expect(mockUserService.findByEmail).not.toHaveBeenCalled();
+      expect(mockUserService.create).not.toHaveBeenCalled();
     });
 
     it('should handle special characters in username', async () => {
@@ -150,11 +156,29 @@ describe('UserController', () => {
 
       const result = await controller.register(specialUsernameData);
 
-      expect(result.username).toBe(specialUsernameData.username);
+      const { password, ...expectedResult } = { ...mockUser, username: specialUsernameData.username };
+      expect(result).toEqual(expectedResult);
       expect(mockUserService.create).toHaveBeenCalledWith(
         specialUsernameData.email,
         specialUsernameData.password,
         specialUsernameData.username,
+      );
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.create.mockRejectedValue(new Error('Database error'));
+
+      await expect(controller.register(validRegistrationData)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should handle service errors gracefully', async () => {
+      mockUserService.findByEmail.mockRejectedValue(new Error('Service error'));
+
+      await expect(controller.register(validRegistrationData)).rejects.toThrow(
+        BadRequestException,
       );
     });
   });

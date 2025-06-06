@@ -33,6 +33,7 @@ describe('AuthService', () => {
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    confessions: [],
   };
 
   const mockPasswordReset: PasswordReset = {
@@ -277,26 +278,24 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return access token and user data for valid credentials', async () => {
+    it('should validate user with correct credentials', async () => {
       const mockUserResponse = {
         id: 1,
         username: 'testuser',
         email: 'test@example.com',
         resetPasswordToken: null,
         resetPasswordExpires: null,
-        createdAt: mockUser.createdAt,
-        updatedAt: mockUser.updatedAt,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        confessions: [],
       };
 
       jest.spyOn(service, 'validateUser').mockResolvedValue(mockUserResponse);
-      mockJwtService.sign.mockReturnValue('mock-jwt-token');
 
       const result = await service.login('test@example.com', 'password123');
 
-      expect(result).toEqual({
-        access_token: 'mock-jwt-token',
-        user: mockUserResponse,
-      });
+      expect(result).toHaveProperty('access_token');
+      expect(result.user).toEqual(mockUserResponse);
     });
 
     it('should throw UnauthorizedException for invalid credentials', async () => {

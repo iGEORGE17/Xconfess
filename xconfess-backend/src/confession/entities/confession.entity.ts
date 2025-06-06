@@ -1,4 +1,4 @@
-import { Reaction } from 'src/reaction/entities/reaction.entity';
+import { Reaction } from '../../reaction/entities/reaction.entity';
 import { User } from '../../user/entities/user.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { Gender } from '../dto/get-confessions.dto';
