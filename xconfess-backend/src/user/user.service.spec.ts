@@ -3,7 +3,7 @@ import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { InternalServerErrorException, ConflictException } from '@nestjs/common';
+import { InternalServerErrorException, ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from '../email/email.service';
 
@@ -17,6 +17,7 @@ describe('UserService', () => {
     username: 'testuser',
     email: 'test@example.com',
     password: 'hashedpassword',
+    is_active: true,
     resetPasswordToken: null,
     resetPasswordExpires: null,
     createdAt: new Date(),
@@ -310,6 +311,74 @@ describe('UserService', () => {
         password: 'hashedpassword',
         username: specialUsername,
       });
+    });
+  });
+
+  describe('deactivateAccount', () => {
+    it('should deactivate a user account', async () => {
+      const userId = 1;
+      const mockUser = {
+        id: userId,
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'hashedpassword',
+        is_active: true,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        confessions: [],
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockUser);
+      mockRepository.save.mockResolvedValue({ ...mockUser, is_active: false });
+
+      const result = await service.deactivateAccount(userId);
+
+      expect(result.is_active).toBe(false);
+      expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: userId } });
+      expect(mockRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      const userId = 999;
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.deactivateAccount(userId)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('reactivateAccount', () => {
+    it('should reactivate a user account', async () => {
+      const userId = 1;
+      const mockUser = {
+        id: userId,
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'hashedpassword',
+        is_active: false,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        confessions: [],
+      };
+
+      mockRepository.findOne.mockResolvedValue(mockUser);
+      mockRepository.save.mockResolvedValue({ ...mockUser, is_active: true });
+
+      const result = await service.reactivateAccount(userId);
+
+      expect(result.is_active).toBe(true);
+      expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: userId } });
+      expect(mockRepository.save).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      const userId = 999;
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.reactivateAccount(userId)).rejects.toThrow(NotFoundException);
     });
   });
 }); 

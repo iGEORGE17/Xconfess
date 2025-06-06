@@ -30,6 +30,9 @@ export class AuthService {
   ): Promise<UserResponse | null> {
     const user = await this.userService.findByEmail(email);
     if (user && (await bcrypt.compare(password, user.password))) {
+      if (!user.is_active) {
+        throw new UnauthorizedException('Account is deactivated. Please reactivate your account to continue.');
+      }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: _, ...result } = user;
       return result;
