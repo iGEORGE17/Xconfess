@@ -4,10 +4,12 @@ import { Repository } from 'typeorm';
 import { PasswordResetService } from './password-reset.service';
 import { PasswordReset } from './entities/password-reset.entity';
 import { User } from '../user/entities/user.entity';
+import { BadRequestException } from '@nestjs/common';
 
 describe('PasswordResetService', () => {
   let service: PasswordResetService;
-  let repository: Repository<PasswordReset>;
+  let passwordResetRepository: Repository<PasswordReset>;
+  let userRepository: Repository<User>;
 
   const mockUser: User = {
     id: 1,
@@ -18,6 +20,7 @@ describe('PasswordResetService', () => {
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    confessions: [],
   };
 
   const mockPasswordReset: PasswordReset = {
@@ -49,11 +52,19 @@ describe('PasswordResetService', () => {
           provide: getRepositoryToken(PasswordReset),
           useValue: mockRepository,
         },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<PasswordResetService>(PasswordResetService);
-    repository = module.get<Repository<PasswordReset>>(getRepositoryToken(PasswordReset));
+    passwordResetRepository = module.get<Repository<PasswordReset>>(getRepositoryToken(PasswordReset));
+    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
 
     jest.clearAllMocks();
   });

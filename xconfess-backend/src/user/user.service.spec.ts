@@ -5,10 +5,12 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InternalServerErrorException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { EmailService } from '../email/email.service';
 
 describe('UserService', () => {
   let service: UserService;
   let repository: Repository<User>;
+  let mockEmailService: any;
 
   const mockUser: User = {
     id: 1,
@@ -19,6 +21,7 @@ describe('UserService', () => {
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    confessions: [],
   };
 
   const mockRepository = {
@@ -29,12 +32,20 @@ describe('UserService', () => {
   };
 
   beforeEach(async () => {
+    mockEmailService = {
+      sendWelcomeEmail: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         {
           provide: getRepositoryToken(User),
           useValue: mockRepository,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
       ],
     }).compile();
@@ -189,72 +200,116 @@ describe('UserService', () => {
   });
 
   describe('create', () => {
-    it('should successfully create a new user', async () => {
+    const validUserData = {
+      email: 'test@example.com',
+      password: 'password123',
+      username: 'testuser',
+    };
+
+    beforeEach(() => {
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+    });
+
+    it('should successfully create a new user', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
       mockRepository.create.mockReturnValue(mockUser);
       mockRepository.save.mockResolvedValue(mockUser);
+      mockEmailService.sendWelcomeEmail.mockResolvedValue(undefined);
 
       const result = await service.create(
-        'test@example.com',
-        'password123',
-        'testuser',
+        validUserData.email,
+        validUserData.password,
+        validUserData.username,
       );
 
       expect(result).toEqual(mockUser);
-      expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
+      expect(bcrypt.hash).toHaveBeenCalledWith(validUserData.password, 10);
       expect(mockRepository.create).toHaveBeenCalledWith({
-        email: 'test@example.com',
+        email: validUserData.email,
         password: 'hashedpassword',
-        username: 'testuser',
+        username: validUserData.username,
       });
       expect(mockRepository.save).toHaveBeenCalledWith(mockUser);
+      expect(mockEmailService.sendWelcomeEmail).toHaveBeenCalledWith(
+        validUserData.email,
+        validUserData.username,
+      );
     });
 
     it('should throw ConflictException if email already exists', async () => {
       mockRepository.findOne.mockResolvedValue(mockUser);
 
       await expect(
-        service.create('test@example.com', 'password123', 'testuser'),
+        service.create(validUserData.email, validUserData.password, validUserData.username),
       ).rejects.toThrow(ConflictException);
+      expect(mockRepository.create).not.toHaveBeenCalled();
+      expect(mockRepository.save).not.toHaveBeenCalled();
     });
 
     it('should throw InternalServerErrorException on database error', async () => {
-      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      mockRepository.findOne.mockResolvedValue(null);
       mockRepository.create.mockReturnValue(mockUser);
       mockRepository.save.mockRejectedValue(new Error('Database error'));
 
       await expect(
-        service.create('test@example.com', 'password123', 'testuser'),
+        service.create(validUserData.email, validUserData.password, validUserData.username),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
     it('should throw InternalServerErrorException on password hashing error', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
       jest.spyOn(bcrypt, 'hash').mockRejectedValue(new Error('Hashing error') as never);
 
       await expect(
-        service.create('test@example.com', 'password123', 'testuser'),
+        service.create(validUserData.email, validUserData.password, validUserData.username),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
+    it('should continue registration even if welcome email fails', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+      mockRepository.create.mockReturnValue(mockUser);
+      mockRepository.save.mockResolvedValue(mockUser);
+      mockEmailService.sendWelcomeEmail.mockRejectedValue(new Error('Email error'));
+
+      const result = await service.create(
+        validUserData.email,
+        validUserData.password,
+        validUserData.username,
+      );
+
+      expect(result).toEqual(mockUser);
+      expect(mockEmailService.sendWelcomeEmail).toHaveBeenCalled();
+    });
+
     it('should handle empty username', async () => {
-      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      mockRepository.findOne.mockResolvedValue(null);
       mockRepository.create.mockReturnValue({ ...mockUser, username: '' });
       mockRepository.save.mockResolvedValue({ ...mockUser, username: '' });
 
-      const result = await service.create('test@example.com', 'password123', '');
+      const result = await service.create(validUserData.email, validUserData.password, '');
 
       expect(result.username).toBe('');
+      expect(mockRepository.create).toHaveBeenCalledWith({
+        email: validUserData.email,
+        password: 'hashedpassword',
+        username: '',
+      });
     });
 
     it('should handle special characters in username', async () => {
       const specialUsername = 'test-user_123';
-      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      mockRepository.findOne.mockResolvedValue(null);
       mockRepository.create.mockReturnValue({ ...mockUser, username: specialUsername });
       mockRepository.save.mockResolvedValue({ ...mockUser, username: specialUsername });
 
-      const result = await service.create('test@example.com', 'password123', specialUsername);
+      const result = await service.create(validUserData.email, validUserData.password, specialUsername);
 
       expect(result.username).toBe(specialUsername);
+      expect(mockRepository.create).toHaveBeenCalledWith({
+        email: validUserData.email,
+        password: 'hashedpassword',
+        username: specialUsername,
+      });
     });
   });
 }); 

@@ -95,6 +95,15 @@ export class EmailService implements OnModuleInit {
     await this.sendEmail(toEmail, subject, html, text);
   }
 
+  async sendPasswordResetEmail(email: string, token: string, username?: string): Promise<void> {
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const subject = 'Reset Your XConfess Password';
+    const html = this.generateResetEmailTemplate(username || 'User', resetUrl, token);
+    const text = this.generateResetEmailText(username || 'User', resetUrl);
+    
+    await this.sendEmail(email, subject, html, text);
+  }
+
   private generateWelcomeEmailTemplate(username: string): string {
     return `
       <!DOCTYPE html>
