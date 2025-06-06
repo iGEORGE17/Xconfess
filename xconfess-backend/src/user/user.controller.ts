@@ -96,6 +96,37 @@ export class UserController {
       throw new BadRequestException('Failed to get profile: ' + errorMessage);
     }
   }
+
+  @Post('deactivate')
+  @UseGuards(JwtAuthGuard)
+  async deactivateAccount(@GetUser() user: User): Promise<UserResponse> {
+    try {
+      const updatedUser = await this.userService.deactivateAccount(user.id);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...result } = updatedUser;
+      return result;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to deactivate account: ' + errorMessage);
+    }
+  }
+
+  @Post('reactivate')
+  @UseGuards(JwtAuthGuard)
+  async reactivateAccount(@GetUser() user: User): Promise<UserResponse> {
+    try {
+      const updatedUser = await this.userService.reactivateAccount(user.id);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...result } = updatedUser;
+      return result;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to reactivate account: ' + errorMessage);
+    }
+  }
+
   @UseGuards(JwtAuthGuard)
   @Put('profile')
   async updateProfile(

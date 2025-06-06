@@ -200,4 +200,46 @@ export class UserService {
     Object.assign(user, updateDto);
     return this.userRepository.save(user);
   }
+
+  async deactivateAccount(userId: number): Promise<User> {
+    try {
+      this.logger.log(`Deactivating account for user ID: ${userId}`);
+      
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      user.is_active = false;
+      const updatedUser = await this.userRepository.save(user);
+      
+      this.logger.log(`Account deactivated successfully for user ID: ${userId}`);
+      return updatedUser;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to deactivate account: ${errorMessage}`);
+      throw error instanceof NotFoundException ? error : new InternalServerErrorException(`Failed to deactivate account: ${errorMessage}`);
+    }
+  }
+
+  async reactivateAccount(userId: number): Promise<User> {
+    try {
+      this.logger.log(`Reactivating account for user ID: ${userId}`);
+      
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      user.is_active = true;
+      const updatedUser = await this.userRepository.save(user);
+      
+      this.logger.log(`Account reactivated successfully for user ID: ${userId}`);
+      return updatedUser;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to reactivate account: ${errorMessage}`);
+      throw error instanceof NotFoundException ? error : new InternalServerErrorException(`Failed to reactivate account: ${errorMessage}`);
+    }
+  }
 }
