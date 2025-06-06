@@ -25,7 +25,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
   }
 
   /**
-   * Find confessions by a search term in the message.
+   * Find confessions by a search term in the message using basic ILIKE.
    * @param searchTerm The term to search for in confession messages
    * @returns Array of confessions matching the search term
    */
@@ -39,6 +39,93 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       },
       relations: ['reactions']
     });
+  }
+
+  /**
+   * Full-text search confessions using PostgreSQL's tsvector and ts_rank.
+   * @param searchTerm The search query
+   * @param page Page number for pagination
+   * @param limit Number of results per page
+   * @returns Array of confessions ranked by relevance
+   */
+  async fullTextSearch(searchTerm: string, page: number = 1, limit: number = 10): Promise<{
+    confessions: AnonymousConfession[];
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
+    
+    // Sanitize search term for tsquery
+    const sanitizedTerm = searchTerm
+      .replace(/[^\w\s]/g, ' ') // Remove special characters
+      .trim()
+      .split(/\s+/)
+      .filter(term => term.length > 0)
+      .join(' & '); // Join with AND operator
+
+    if (!sanitizedTerm) {
+      return { confessions: [], total: 0 };
+    }
+
+    // Build the query with ts_rank for relevance scoring
+    const queryBuilder = this.createQueryBuilder('confession')
+      .leftJoinAndSelect('confession.reactions', 'reactions')
+      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', { searchTerm })
+      .addSelect('ts_rank(confession.search_vector, plainto_tsquery(:searchTerm))', 'rank')
+      .orderBy('rank', 'DESC')
+      .addOrderBy('confession.created_at', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    // Get total count for pagination
+    const totalQuery = this.createQueryBuilder('confession')
+      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', { searchTerm });
+
+    const [confessions, total] = await Promise.all([
+      queryBuilder.getMany(),
+      totalQuery.getCount()
+    ]);
+
+    return { confessions, total };
+  }
+
+  /**
+   * Hybrid search that combines full-text search with fallback to ILIKE.
+   * @param searchTerm The search query
+   * @param page Page number for pagination
+   * @param limit Number of results per page
+   * @returns Array of confessions with relevance ranking
+   */
+  async hybridSearch(searchTerm: string, page: number = 1, limit: number = 10): Promise<{
+    confessions: AnonymousConfession[];
+    total: number;
+  }> {
+    // First try full-text search
+    const fullTextResult = await this.fullTextSearch(searchTerm, page, limit);
+    
+    // If full-text search returns results, use them
+    if (fullTextResult.total > 0) {
+      return fullTextResult;
+    }
+
+    // Fallback to ILIKE search for partial matches
+    const offset = (page - 1) * limit;
+    
+    const queryBuilder = this.createQueryBuilder('confession')
+      .leftJoinAndSelect('confession.reactions', 'reactions')
+      .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` })
+      .orderBy('confession.created_at', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    const totalQuery = this.createQueryBuilder('confession')
+      .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });
+
+    const [confessions, total] = await Promise.all([
+      queryBuilder.getMany(),
+      totalQuery.getCount()
+    ]);
+
+    return { confessions, total };
   }
 
   /**

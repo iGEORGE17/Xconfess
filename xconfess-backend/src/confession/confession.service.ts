@@ -134,19 +134,63 @@ export class ConfessionService {
 
   async search(searchDto: SearchConfessionDto) {
     try {
-      const { keyword } = searchDto;
-      // Remove sanitization to allow special characters in search
-      return await this.confessionRepo.find({
-        where: {
-          message: ILike(`%${keyword}%`),
-        },
-        order: {
-          created_at: 'DESC',
-        },
-        relations: ['reactions']
-      });
+      const { q: searchTerm, page = 1, limit = 10 } = searchDto;
+      
+      // Validate search term
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        throw new BadRequestException('Search term cannot be empty');
+      }
+
+      // Use hybrid search for better results
+      const result = await this.confessionRepo.hybridSearch(searchTerm.trim(), page, limit);
+
+      return {
+        data: result.confessions,
+        meta: {
+          total: result.total,
+          page,
+          limit,
+          totalPages: Math.ceil(result.total / limit),
+          searchTerm: searchTerm.trim()
+        }
+      };
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to search confessions');
+    }
+  }
+
+  /**
+   * Advanced search with full-text search capabilities
+   */
+  async fullTextSearch(searchDto: SearchConfessionDto) {
+    try {
+      const { q: searchTerm, page = 1, limit = 10 } = searchDto;
+      
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        throw new BadRequestException('Search term cannot be empty');
+      }
+
+      const result = await this.confessionRepo.fullTextSearch(searchTerm.trim(), page, limit);
+
+      return {
+        data: result.confessions,
+        meta: {
+          total: result.total,
+          page,
+          limit,
+          totalPages: Math.ceil(result.total / limit),
+          searchTerm: searchTerm.trim(),
+          searchType: 'fulltext'
+        }
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to perform full-text search');
     }
   }
 }
