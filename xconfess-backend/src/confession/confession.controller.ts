@@ -23,6 +23,11 @@ export class ConfessionController {
   search(@Query() searchDto: SearchConfessionDto) {
     return this.confessionService.search(searchDto);
   }
+
+  @Get('search/fulltext')
+  fullTextSearch(@Query() searchDto: SearchConfessionDto) {
+    return this.confessionService.fullTextSearch(searchDto);
+  }
   
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateConfessionDto: UpdateConfessionDto) {
