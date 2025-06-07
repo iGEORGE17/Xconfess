@@ -16,6 +16,7 @@ describe('PasswordResetService', () => {
     username: 'testuser',
     email: 'test@example.com',
     password: 'hashedpassword',
+    is_active: true,
     resetPasswordToken: null,
     resetPasswordExpires: null,
     createdAt: new Date(),
