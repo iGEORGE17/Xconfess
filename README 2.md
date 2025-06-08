@@ -14,7 +14,7 @@ First Join our community on Telegram immediately : https://t.me/xconfess_Communi
 
 ### Prerequisites
 - Node.js (v16 or higher)
-- Postgre (for the backend)
+- PostgreSQL (for the backend)
 
 ### Setup
 
@@ -40,7 +40,7 @@ First Join our community on Telegram immediately : https://t.me/xconfess_Communi
     - Copy `.env.example` to `.env` and add your MySQL database and JWT secret.
     - Example:
         ```env
-        DATABASE_URL=mysql://username:password@localhost:3306/xconfess
+        DATABASE_URL=postgresql://username:password@localhost:5432/xconfess
         JWT_SECRET=your-secret-key
         ```
 
