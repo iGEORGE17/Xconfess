@@ -104,6 +104,27 @@ export class EmailService implements OnModuleInit {
     await this.sendEmail(email, subject, html, text);
   }
 
+  async sendCommentNotification(data: {
+    to: string;
+    confessionId: string;
+    commentPreview: string;
+  }): Promise<void> {
+    const { to, confessionId, commentPreview } = data;
+
+    const subject = 'New Comment on Your Confession';
+    const html = `
+      <h2>Someone commented on your confession!</h2>
+      <p>Here's a preview of the comment:</p>
+      <blockquote>${commentPreview}</blockquote>
+      <p>Click the link below to view the full comment:</p>
+      <a href="${this.configService.get('FRONTEND_URL')}/confessions/${confessionId}">
+        View Confession
+      </a>
+    `;
+
+    await this.sendEmail(to, subject, html);
+  }
+
   private generateWelcomeEmailTemplate(username: string): string {
     return `
       <!DOCTYPE html>
