@@ -95,6 +95,7 @@ export class ConfessionService {
     try {
       const { page = 1, limit = 10, sort = SortOrder.TRENDING, gender } = getTrendingConfessionsDto;
       const skip = (page - 1) * limit;
+      const decayFactor = 1.5;
 
       const queryBuilder = this.confessionRepo.createQueryBuilder('confession')
         .leftJoinAndSelect('confession.reactions', 'reactions');
@@ -112,6 +113,20 @@ export class ConfessionService {
             .from('reaction', 'r')
             .where('r.confession_id = confession.id');
         }, 'reaction_count')
+            .addSelect('COALESCE(confession.view_count, 0)', 'view_count')
+      .addSelect(`
+        (
+          (
+            COALESCE(
+              (
+                SELECT COUNT(*) FROM reaction r WHERE r.confession_id = confession.id
+              ), 0
+            ) + COALESCE(confession.view_count, 0)
+          )
+          /
+          POW(EXTRACT(EPOCH FROM (NOW() - confession.created_at)) / 3600 + 2, ${decayFactor})
+        )
+      `, 'trending_score')
         .orderBy('reaction_count', 'DESC')
         .addOrderBy('confession.created_at', 'DESC');
 

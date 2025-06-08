@@ -32,4 +32,8 @@ export class GetTrendingConfessionsDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @IsInt()
+  @Min(0)
+  view_count?: number = 0;
 } 
