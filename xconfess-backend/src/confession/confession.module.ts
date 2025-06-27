@@ -14,6 +14,7 @@ import { ConfessionViewCacheService } from './confession-view-cache.service';
   providers: [
     AnonymousConfessionRepository,
     ConfessionViewCacheService,
+    { provide: 'VIEW_CACHE_EXPIRY', useValue: 60 * 60 },
   ],
   exports: [AnonymousConfessionRepository],
 })

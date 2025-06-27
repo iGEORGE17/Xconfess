@@ -199,17 +199,34 @@ export class ConfessionService {
     }
   }
 
-  async getConfessionByIdWithViewCount(id: string, req: Request) {
-    const confession = await this.confessionRepo.findOne({ where: { id } });
-    if (!confession) throw new NotFoundException('Confession not found');
-    // Identify user or IP
-    const userOrIp = (req as any).user?.id || req.ip;
-    const viewed = await this.viewCache.hasViewedRecently(id, userOrIp);
-    if (!viewed) {
-      await this.confessionRepo.incrementViewCountAtomically(id);
-      await this.viewCache.markViewed(id, userOrIp);
-      confession.view_count += 1;
+   async getConfessionByIdWithViewCount(id: string, req: Request) {
+    try {
+      const confession = await this.confessionRepo.findOne({ where: { id } });
+      if (!confession) throw new NotFoundException('Confession not found');
+      
+      // Properly type the user property and handle IP with forwarded headers
+      interface AuthenticatedRequest extends Request {
+        user?: { id: string };
+      }
+      const authReq = req as AuthenticatedRequest;
+      const userOrIp = authReq.user?.id || req.headers['x-forwarded-for'] || req.ip;
+      
+      // Atomically check and mark view to prevent race conditions
+      const shouldIncrement = await this.viewCache.checkAndMarkView(id, userOrIp);
+      if (shouldIncrement) {
+        await this.confessionRepo.incrementViewCountAtomically(id);
+        // Re-fetch to get accurate view count instead of local increment
+        const updatedConfession = await this.confessionRepo.findOne({ where: { id } });
+        return updatedConfession || confession;
+      }
+      return confession;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to get confession with view count');
     }
-    return confession;
   }
+
+  
 }

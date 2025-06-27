@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpStatus, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpStatus, Req, HttpCode, ParseUUIDPipe, NotFoundException } from '@nestjs/common';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
@@ -39,8 +39,15 @@ export class ConfessionController {
     return this.confessionService.remove(id);
   }
 
-  @Get(':id')
-  async getConfessionById(@Param('id') id: string, @Req() req) {
-    return this.confessionService.getConfessionByIdWithViewCount(id, req);
+   @HttpCode(HttpStatus.OK)
+  async getConfessionById(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+   try {
+      return this.confessionService.getConfessionByIdWithViewCount(id, req);
+   } catch (error) {
+     if (error.message.includes('not found')) {
+       throw new NotFoundException(`Confession with ID ${id} not found`);
+     }
+     throw error;
+  }
   }
 }
