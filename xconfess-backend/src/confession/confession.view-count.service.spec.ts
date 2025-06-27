@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfessionService } from './confession.service';
 import { AnonymousConfessionRepository } from './repository/confession.repository';
 import { ConfessionViewCacheService } from './confession-view-cache.service';
-import { Controller } from '@nestjs/common';
+
 
 describe('ConfessionService - View Count Logic', () => {
   let service: ConfessionService;
@@ -82,13 +82,5 @@ describe('ConfessionService - View Count Logic', () => {
    await expect(service.getConfessionByIdWithViewCount('1', req as any)).rejects.toThrow();
  });
 
-  it('should increment view count for new viewer', async () => {
-   const confession = { id: '1', view_count: 1 };
-    (service.getConfessionByIdWithViewCount as jest.Mock).mockResolvedValue(confession);
-    const req = { user: { id: 'user1' }, ip: '127.0.0.1' };
-    const result = await Controller.getConfessionById('1', req as any);
-    expect(result.view_count).toBe(1);
-   expect(service.getConfessionByIdWithViewCount).toHaveBeenCalledWith('1', req);
-  });
-
+  
 });
