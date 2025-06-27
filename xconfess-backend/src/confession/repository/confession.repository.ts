@@ -152,4 +152,15 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
   async countTotal(): Promise<number> {
     return this.count();
   }
+
+  /**
+   * Atomically increment the view count of a confession.
+   * @param id The UUID of the confession
+   */
+  async incrementViewCountAtomically(id: string): Promise<void> {
+    const result = await this.increment({ id }, 'view_count', 1);
+    if (result.affected === 0) {
+      throw new Error(`Confession with ID ${id} not found`);
+    }
+  }
 }

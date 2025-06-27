@@ -58,6 +58,12 @@ export class AnonymousConfession {
   user: User | null;
 
   /**
+   * Number of times this confession has been viewed.
+   */
+  @Column({ type: 'int', default: 0 })
+  view_count: number;
+
+  /**
    * Getter for message alias to content for consistency
    */
   get content(): string {

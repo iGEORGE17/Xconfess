@@ -6,10 +6,15 @@ import { SearchConfessionDto } from "./dto/search-confession.dto";
 import { GetConfessionsDto, SortOrder } from "./dto/get-confessions.dto";
 import { ILike } from "typeorm";
 import sanitizeHtml from 'sanitize-html';
+import { ConfessionViewCacheService } from './confession-view-cache.service';
+import { Request } from 'express';
 
 @Injectable()
 export class ConfessionService {
-  constructor(private confessionRepo: AnonymousConfessionRepository) {}
+  constructor(
+    private confessionRepo: AnonymousConfessionRepository,
+    private viewCache: ConfessionViewCacheService
+  ) {}
 
   private sanitizeMessage(message: string): string {
     return sanitizeHtml(message, {
@@ -193,4 +198,35 @@ export class ConfessionService {
       throw new InternalServerErrorException('Failed to perform full-text search');
     }
   }
+
+   async getConfessionByIdWithViewCount(id: string, req: Request) {
+    try {
+      const confession = await this.confessionRepo.findOne({ where: { id } });
+      if (!confession) throw new NotFoundException('Confession not found');
+      
+      // Properly type the user property and handle IP with forwarded headers
+      interface AuthenticatedRequest extends Request {
+        user?: { id: string };
+      }
+      const authReq = req as AuthenticatedRequest;
+      const userOrIp = authReq.user?.id || req.headers['x-forwarded-for'] || req.ip;
+      
+      // Atomically check and mark view to prevent race conditions
+      const shouldIncrement = await this.viewCache.checkAndMarkView(id, userOrIp);
+      if (shouldIncrement) {
+        await this.confessionRepo.incrementViewCountAtomically(id);
+        // Re-fetch to get accurate view count instead of local increment
+        const updatedConfession = await this.confessionRepo.findOne({ where: { id } });
+        return updatedConfession || confession;
+      }
+      return confession;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to get confession with view count');
+    }
+  }
+
+  
 }
