@@ -6,10 +6,15 @@ import { SearchConfessionDto } from "./dto/search-confession.dto";
 import { GetConfessionsDto, SortOrder } from "./dto/get-confessions.dto";
 import { ILike } from "typeorm";
 import sanitizeHtml from 'sanitize-html';
+import { ConfessionViewCacheService } from './confession-view-cache.service';
+import { Request } from 'express';
 
 @Injectable()
 export class ConfessionService {
-  constructor(private confessionRepo: AnonymousConfessionRepository) {}
+  constructor(
+    private confessionRepo: AnonymousConfessionRepository,
+    private viewCache: ConfessionViewCacheService
+  ) {}
 
   private sanitizeMessage(message: string): string {
     return sanitizeHtml(message, {
@@ -192,5 +197,19 @@ export class ConfessionService {
       }
       throw new InternalServerErrorException('Failed to perform full-text search');
     }
+  }
+
+  async getConfessionByIdWithViewCount(id: string, req: Request) {
+    const confession = await this.confessionRepo.findOne({ where: { id } });
+    if (!confession) throw new NotFoundException('Confession not found');
+    // Identify user or IP
+    const userOrIp = (req as any).user?.id || req.ip;
+    const viewed = await this.viewCache.hasViewedRecently(id, userOrIp);
+    if (!viewed) {
+      await this.confessionRepo.incrementViewCountAtomically(id);
+      await this.viewCache.markViewed(id, userOrIp);
+      confession.view_count += 1;
+    }
+    return confession;
   }
 }

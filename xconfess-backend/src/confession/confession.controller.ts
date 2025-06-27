@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpStatus, Req } from '@nestjs/common';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
@@ -37,5 +37,10 @@ export class ConfessionController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.confessionService.remove(id);
+  }
+
+  @Get(':id')
+  async getConfessionById(@Param('id') id: string, @Req() req) {
+    return this.confessionService.getConfessionByIdWithViewCount(id, req);
   }
 }

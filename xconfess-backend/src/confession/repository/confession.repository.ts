@@ -152,4 +152,12 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
   async countTotal(): Promise<number> {
     return this.count();
   }
+
+  /**
+   * Atomically increment the view count of a confession.
+   * @param id The UUID of the confession
+   */
+  async incrementViewCountAtomically(id: string): Promise<void> {
+    await this.increment({ id }, 'view_count', 1);
+  }
 }
