@@ -11,6 +11,7 @@ import { ReactionModule } from './reaction/reaction.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
+import { MessagesModule } from './messages/messages.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import throttleConfig from './config/throttle.config';
     AuthModule,
     ConfessionModule,
     ReactionModule,
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [
