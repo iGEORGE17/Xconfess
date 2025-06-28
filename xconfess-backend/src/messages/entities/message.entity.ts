@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
 
@@ -7,10 +7,12 @@ export class Message {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User, { nullable: false })
+  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
+ @JoinColumn({ name: 'senderId' })
   sender: User;
 
-  @ManyToOne(() => AnonymousConfession, { nullable: false })
+  @ManyToOne(() => AnonymousConfession, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'confessionId' })
   confession: AnonymousConfession;
 
   @Column({ type: 'text' })
