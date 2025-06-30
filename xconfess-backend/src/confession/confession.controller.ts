@@ -4,6 +4,7 @@ import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
 import { GetConfessionsDto } from './dto/get-confessions.dto';
+import { Request } from 'express';
 
 @Controller('confessions')
 export class ConfessionController {
@@ -48,6 +49,11 @@ export class ConfessionController {
        throw new NotFoundException(`Confession with ID ${id} not found`);
      }
      throw error;
+   }
   }
+
+  @Get('trending')
+  getTrendingConfessions() {
+    return this.confessionService.getTrendingConfessions();
   }
 }

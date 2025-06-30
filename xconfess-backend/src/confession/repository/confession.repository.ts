@@ -163,4 +163,28 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       throw new Error(`Confession with ID ${id} not found`);
     }
   }
+
+  /**
+   * Fetch top trending confessions based on view count, recent reactions, and recency.
+   * Trending score = view_count * 1 + recent_reactions * 3 + 10 / (1 + hours_since_created)
+   * Only considers reactions in the last 24 hours.
+   */
+  async findTrending(limit: number = 10): Promise<AnonymousConfession[]> {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Use raw SQL for performance and flexibility
+    return this.createQueryBuilder('confession')
+      .leftJoinAndSelect('confession.reactions', 'reactions')
+      .addSelect(
+        `confession.view_count + 3 * COUNT(CASE WHEN reactions.createdAt > :oneDayAgo THEN 1 END) + 10.0 / (1 + EXTRACT(EPOCH FROM (NOW() - confession.created_at)) / 3600)`,
+        'trending_score'
+      )
+      .where('confession.created_at IS NOT NULL')
+      .groupBy('confession.id')
+      .orderBy('trending_score', 'DESC')
+      .limit(limit)
+      .setParameter('oneDayAgo', oneDayAgo.toISOString())
+      .getMany();
+  }
 }
