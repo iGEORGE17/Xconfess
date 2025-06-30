@@ -228,5 +228,15 @@ export class ConfessionService {
     }
   }
 
-  
+  /**
+   * Get the top 10 trending confessions based on view count, recent reactions, and recency.
+   */
+  async getTrendingConfessions() {
+    try {
+      const confessions = await this.confessionRepo.findTrending(10);
+      return { data: confessions };
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to fetch trending confessions');
+    }
+  }
 }
