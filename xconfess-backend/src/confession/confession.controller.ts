@@ -1,59 +1,60 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpStatus, Req, HttpCode, ParseUUIDPipe, NotFoundException } from '@nestjs/common';
+import {
+  Controller, Get, Post, Put, Delete,
+  Body, Param, Query, Req, UsePipes, ValidationPipe,
+} from '@nestjs/common';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
-import { SearchConfessionDto } from './dto/search-confession.dto';
 import { GetConfessionsDto } from './dto/get-confessions.dto';
+import { SearchConfessionDto } from './dto/search-confession.dto';
 import { Request } from 'express';
 
 @Controller('confessions')
 export class ConfessionController {
-  constructor(private readonly confessionService: ConfessionService) {}
+  constructor(private readonly service: ConfessionService) {}
 
   @Post()
-  create(@Body() createConfessionDto: CreateConfessionDto) {
-    return this.confessionService.create(createConfessionDto);
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  create(@Body() dto: CreateConfessionDto) {
+    return this.service.create(dto);
   }
 
   @Get()
-  getConfessions(@Query() getConfessionsDto: GetConfessionsDto) {
-    return this.confessionService.getConfessions(getConfessionsDto);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  findAll(@Query() dto: GetConfessionsDto) {
+    return this.service.getConfessions(dto);
   }
 
   @Get('search')
-  search(@Query() searchDto: SearchConfessionDto) {
-    return this.confessionService.search(searchDto);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  search(@Query() dto: SearchConfessionDto) {
+    return this.service.search(dto);
   }
 
   @Get('search/fulltext')
-  fullTextSearch(@Query() searchDto: SearchConfessionDto) {
-    return this.confessionService.fullTextSearch(searchDto);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  fullTextSearch(@Query() dto: SearchConfessionDto) {
+    return this.service.fullTextSearch(dto);
   }
-  
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateConfessionDto: UpdateConfessionDto) {
-    return this.confessionService.update(id, updateConfessionDto);
+
+  @Get(':id')
+  getById(@Param('id') id: string, @Req() req: Request) {
+    return this.service.getConfessionByIdWithViewCount(id, req);
   }
-  
+
+  @Get('trending/top')
+  getTrending() {
+    return this.service.getTrendingConfessions();
+  }
+
+  @Put(':id')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  update(@Param('id') id: string, @Body() dto: UpdateConfessionDto) {
+    return this.service.update(id, dto);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.confessionService.remove(id);
-  }
-
-   @HttpCode(HttpStatus.OK)
-  async getConfessionById(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
-   try {
-      return this.confessionService.getConfessionByIdWithViewCount(id, req);
-   } catch (error) {
-     if (error.message.includes('not found')) {
-       throw new NotFoundException(`Confession with ID ${id} not found`);
-     }
-     throw error;
-   }
-  }
-
-  @Get('trending')
-  getTrendingConfessions() {
-    return this.confessionService.getTrendingConfessions();
+    return this.service.remove(id);
   }
 }
