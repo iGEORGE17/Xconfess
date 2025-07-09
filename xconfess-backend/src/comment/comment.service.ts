@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Comment } from './entities/comment.entity';
@@ -10,9 +14,9 @@ import { NotificationQueue } from '../notification/notification.queue';
 export class CommentService {
   constructor(
     @InjectRepository(Comment)
-    private commentRepository: Repository<Comment>,
+    private commentRepo: Repository<Comment>,
     @InjectRepository(AnonymousConfession)
-    private confessionRepository: Repository<AnonymousConfession>,
+    private confessionRepo: Repository<AnonymousConfession>,
     private readonly notificationQueue: NotificationQueue,
   ) {}
 
@@ -22,8 +26,8 @@ export class CommentService {
     confessionId: string,
     anonymousContextId: string,
   ): Promise<Comment> {
-    const confession = await this.confessionRepository.findOne({
-      where: { id: confessionId },
+    const confession = await this.confessionRepo.findOne({
+      where: { id: confessionId, isDeleted: false },
       relations: ['user'],
     });
 
@@ -31,49 +35,48 @@ export class CommentService {
       throw new NotFoundException('Confession not found');
     }
 
-    const comment = this.commentRepository.create({
+    const comment = this.commentRepo.create({
       content,
       user,
       confession,
       anonymousContextId,
     });
 
-    const savedComment = await this.commentRepository.save(comment);
+    const saved = await this.commentRepo.save(comment);
 
-    // If the confession has an owner, send them a notification
     if (confession.user?.email) {
       await this.notificationQueue.enqueueCommentNotification({
         confession,
-        comment: savedComment,
+        comment: saved,
         recipientEmail: confession.user.email,
       });
     }
-
-    return savedComment;
+    return saved;
   }
 
   async findByConfessionId(confessionId: string): Promise<Comment[]> {
-    return this.commentRepository.find({
-      where: { confession: { id: confessionId } },
-      relations: ['user'],
+    return this.commentRepo.find({
+      where: {
+        confession: { id: confessionId },
+        isDeleted: false,
+      },
       order: { createdAt: 'DESC' },
     });
   }
 
   async delete(id: number, user: User): Promise<void> {
-    const comment = await this.commentRepository.findOne({
-      where: { id },
+    const comment = await this.commentRepo.findOne({
+      where: { id, isDeleted: false },
       relations: ['user'],
     });
 
     if (!comment) {
       throw new NotFoundException('Comment not found');
     }
-
     if (comment.user.id !== user.id) {
       throw new BadRequestException('You can only delete your own comments');
     }
 
-    await this.commentRepository.remove(comment);
+    await this.commentRepo.update(id, { isDeleted: true });
   }
-} 
+}

@@ -3,13 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommentController } from './comment.controller';
 import { CommentService } from './comment.service';
 import { Comment } from './entities/comment.entity';
-import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
+import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
+import { NotificationQueue } from '../notification/notification.queue';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Comment, AnonymousConfession])],
+  imports: [
+    TypeOrmModule.forFeature([Comment, AnonymousConfession]),
+  ],
   controllers: [CommentController],
-  providers: [CommentService],
+  providers: [CommentService, NotificationQueue],
   exports: [CommentService],
 })
 export class CommentModule implements NestModule {
@@ -18,4 +21,4 @@ export class CommentModule implements NestModule {
       .apply(AnonymousContextMiddleware)
       .forRoutes('comments');
   }
-} 
+}
