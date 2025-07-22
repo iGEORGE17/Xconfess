@@ -20,8 +20,10 @@ import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
+import { CryptoUtil } from '../common/crypto.util';
 
-export type UserResponse = Omit<User, 'password'>;
+// Add decrypted email to the response type for API output
+export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: string };
 
 @Controller('users')
 export class UserController {
@@ -47,11 +49,10 @@ export class UserController {
         registerDto.password,
         registerDto.username,
       );
-
-      // Return user without password
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = user;
-      return result;
+      // Decrypt email for response
+      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+      const email = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
+      return { ...result, email };
     } catch (error) {
       if (error instanceof ConflictException) {
         throw error;
@@ -86,10 +87,9 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   async getProfile(@GetUser() user: User): Promise<UserResponse> {
     try {
-      // Return user without password
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = user;
-      return result;
+      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+      const email = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
+      return { ...result, email };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -102,9 +102,9 @@ export class UserController {
   async deactivateAccount(@GetUser() user: User): Promise<UserResponse> {
     try {
       const updatedUser = await this.userService.deactivateAccount(user.id);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = updatedUser;
-      return result;
+      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
+      const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
+      return { ...result, email };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -117,9 +117,9 @@ export class UserController {
   async reactivateAccount(@GetUser() user: User): Promise<UserResponse> {
     try {
       const updatedUser = await this.userService.reactivateAccount(user.id);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = updatedUser;
-      return result;
+      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
+      const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
+      return { ...result, email };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -134,7 +134,9 @@ export class UserController {
     @Body() updateUserProfileDto: UpdateUserProfileDto,
   ) {
     const updatedUser = await this.userService.updateProfile(req.user.id, updateUserProfileDto);
-    return updatedUser;
+    const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
+    const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
+    return { ...result, email };
   }
 
 }

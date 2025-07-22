@@ -11,8 +11,9 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Reaction } from '../../reaction/entities/reaction.entity';
-import { User } from '../../user/entities/user.entity';
+import { AnonymousUser } from '../../user/entities/anonymous-user.entity';
 import { Gender } from '../dto/get-confessions.dto';
+import { Comment } from '../../comment/entities/comment.entity';
 
 /**
  * Entity representing an anonymous confession.
@@ -39,18 +40,21 @@ export class AnonymousConfession {
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 
-  @ManyToOne(() => User, (user) => user.confessions, {
-    nullable: true,
-    onDelete: 'SET NULL',
+  @ManyToOne(() => AnonymousUser, (anonymousUser) => anonymousUser.confessions, {
+    nullable: false,
+    onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'user_id' })
-  user: User | null;
+  @JoinColumn({ name: 'anonymous_user_id' })
+  anonymousUser: AnonymousUser;
 
   @Column({ type: 'int', default: 0 })
   view_count: number;
 
   @Column({ default: false })
   isDeleted: boolean;
+
+  @OneToMany(() => Comment, (comment) => comment.confession)
+  comments: Comment[];
 
   get content(): string {
     return this.message;

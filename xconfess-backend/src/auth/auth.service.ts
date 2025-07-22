@@ -4,10 +4,12 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import { PasswordResetService } from './password-reset.service';
+import { AnonymousUserService } from '../user/anonymous-user.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { CryptoUtil } from '../common/crypto.util';
 
 interface JwtPayload {
   email: string;
@@ -23,6 +25,7 @@ export class AuthService {
     private jwtService: JwtService,
     private emailService: EmailService,
     private passwordResetService: PasswordResetService,
+    private anonymousUserService: AnonymousUserService,
   ) {}
 
   async validateUser(
@@ -34,9 +37,10 @@ export class AuthService {
       if (!user.is_active) {
         throw new UnauthorizedException('Account is deactivated. Please reactivate your account to continue.');
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _, ...result } = user;
-      return result;
+      // Decrypt email for login response
+      const decryptedEmail = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
+      const { password: _, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+      return { ...result, email: decryptedEmail };
     }
     return null;
   }
@@ -44,12 +48,13 @@ export class AuthService {
   async login(
     email: string,
     password: string,
-  ): Promise<{ access_token: string; user: UserResponse }> {
+  ): Promise<{ access_token: string; user: UserResponse; anonymousUserId: string }> {
     const user = await this.validateUser(email, password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
+    // Create a new AnonymousUser (or reuse per 24h)
+    const anonymousUser = await this.anonymousUserService.getOrCreateForUserSession(user.id);
     const payload: JwtPayload = {
       email: user.email,
       sub: user.id.toString(),
@@ -57,6 +62,7 @@ export class AuthService {
     return {
       access_token: this.jwtService.sign(payload),
       user,
+      anonymousUserId: anonymousUser.id,
     };
   }
 
@@ -128,8 +134,8 @@ export class AuthService {
       // Find user by email or userId
       if (forgotPasswordDto.email) {
         user = await this.userService.findByEmail(forgotPasswordDto.email);
-        this.logger.log(`Password reset requested for email: ${forgotPasswordDto.email}`, {
-          email: forgotPasswordDto.email,
+        this.logger.log(`Password reset requested for email: [PROTECTED]`, {
+          email: '[PROTECTED]',
           ipAddress,
         });
       } else if (forgotPasswordDto.userId) {
@@ -162,7 +168,7 @@ export class AuthService {
 
       // Send password reset email
       await this.emailService.sendPasswordResetEmail(
-        user.email,
+        CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag),
         token,
         user.username,
       );
