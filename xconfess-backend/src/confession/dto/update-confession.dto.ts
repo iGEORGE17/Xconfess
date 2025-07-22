@@ -1,4 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateConfessionDto } from './create-confession.dto';
 
-export class UpdateConfessionDto extends PartialType(CreateConfessionDto) {}
+export class UpdateConfessionDto extends PartialType(CreateConfessionDto) {
+  message?: string;
+}

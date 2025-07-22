@@ -21,6 +21,7 @@ describe('UserController', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     confessions: [],
+    is_active: true,
   };
 
   const mockUserService = {
