@@ -6,6 +6,7 @@ import { User } from './entities/user.entity';
 import { InternalServerErrorException, ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from '../email/email.service';
+import { CryptoUtil } from '../common/crypto.util';
 
 describe('UserService', () => {
   let service: UserService;
@@ -15,7 +16,10 @@ describe('UserService', () => {
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    email: 'test@example.com',
+    emailEncrypted: '',
+    emailIv: '',
+    emailTag: '',
+    emailHash: '',
     password: 'hashedpassword',
     is_active: true,
     resetPasswordToken: null,
@@ -211,6 +215,30 @@ describe('UserService', () => {
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
     });
 
+    it('should encrypt and hash email on create', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+      mockRepository.create.mockImplementation((userData) => userData);
+      mockRepository.save.mockImplementation((userData) => userData);
+      mockEmailService.sendWelcomeEmail.mockResolvedValue(undefined);
+
+      const result = await service.create(
+        validUserData.email,
+        validUserData.password,
+        validUserData.username,
+      );
+
+      // Check that encrypted fields are present and not equal to the plain email
+      expect(result.emailEncrypted).toBeDefined();
+      expect(result.emailIv).toBeDefined();
+      expect(result.emailTag).toBeDefined();
+      expect(result.emailEncrypted).not.toBe(validUserData.email);
+      // Check that hash matches CryptoUtil.hash
+      expect(result.emailHash).toBe(CryptoUtil.hash(validUserData.email));
+      // Decrypt and check
+      const decrypted = CryptoUtil.decrypt(result.emailEncrypted, result.emailIv, result.emailTag);
+      expect(decrypted).toBe(validUserData.email);
+    });
+
     it('should successfully create a new user', async () => {
       mockRepository.findOne.mockResolvedValue(null);
       mockRepository.create.mockReturnValue(mockUser);
@@ -381,4 +409,4 @@ describe('UserService', () => {
       await expect(service.reactivateAccount(userId)).rejects.toThrow(NotFoundException);
     });
   });
-}); 
+});

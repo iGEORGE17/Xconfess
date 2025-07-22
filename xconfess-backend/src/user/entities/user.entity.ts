@@ -3,7 +3,7 @@ import { AnonymousConfession } from '../../confession/entities/confession.entity
 
 @Entity()
 @Unique(['username'])
-@Unique(['email'])
+@Unique(['emailHash'])
 export class User {
   @PrimaryGeneratedColumn()
   id: number;
@@ -14,8 +14,19 @@ export class User {
   @Column()
   password: string;
 
-  @Column()
-  email: string;
+  // Encrypted email fields
+  @Column({ name: 'email_encrypted', type: 'text' })
+  emailEncrypted: string;
+
+  @Column({ name: 'email_iv', type: 'varchar', length: 32 })
+  emailIv: string;
+
+  @Column({ name: 'email_tag', type: 'varchar', length: 32 })
+  emailTag: string;
+
+  // Searchable hash
+  @Column({ name: 'email_hash', type: 'varchar', length: 64, unique: true })
+  emailHash: string;
 
   @Column({ default: true })
   is_active: boolean;

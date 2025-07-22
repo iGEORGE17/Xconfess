@@ -12,6 +12,7 @@ import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { EmailService } from '../email/email.service';
+import { CryptoUtil } from '../common/crypto.util';
 
 
 @Injectable()
@@ -27,8 +28,9 @@ export class UserService {
 
   async findByEmail(email: string): Promise<User | null> {
     try {
-      this.logger.debug(`Finding user by email: ${email}`);
-      const user = await this.userRepository.findOne({ where: { email } });
+      this.logger.debug(`Finding user by email (hashed)`);
+      const emailHash = CryptoUtil.hash(email);
+      const user = await this.userRepository.findOne({ where: { emailHash } });
 
       if (user) {
         this.logger.debug(`User found with ID: ${user.id}`);
@@ -150,14 +152,21 @@ export class UserService {
     username: string,
   ): Promise<User> {
     try {
-      this.logger.log(`Creating new user with email: ${email}`);
+      this.logger.log(`Creating new user with email: [PROTECTED]`);
 
       // Hash the password with bcrypt
       const hashedPassword = await bcrypt.hash(password, 10);
 
+      // Encrypt and hash email
+      const { encrypted, iv, tag } = CryptoUtil.encrypt(email);
+      const emailHash = CryptoUtil.hash(email);
+
       // Create user entity
       const user = this.userRepository.create({
-        email,
+        emailEncrypted: encrypted,
+        emailIv: iv,
+        emailTag: tag,
+        emailHash,
         password: hashedPassword,
         username,
       });
@@ -168,12 +177,13 @@ export class UserService {
 
       // Send welcome email (fire and forget)
       try {
-        await this.emailService.sendWelcomeEmail(savedUser.email, savedUser.username);
-        this.logger.log(`Welcome email sent to ${savedUser.email}`);
+        const decryptedEmail = email; // already have it
+        await this.emailService.sendWelcomeEmail(decryptedEmail, savedUser.username);
+        this.logger.log(`Welcome email sent to [PROTECTED]`);
       } catch (emailError) {
         // Log but don't fail the user registration if email sending fails
         this.logger.error(
-          `Failed to send welcome email to ${savedUser.email}: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`,
+          `Failed to send welcome email: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`,
           emailError instanceof Error ? emailError.stack : ''
         );
       }
