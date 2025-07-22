@@ -122,7 +122,7 @@ export class EmailService implements OnModuleInit {
       </a>
     `;
 
-    await this.sendEmail(to, subject, html);
+    await this.sendEmail(to, subject, html, '');
   }
 
   private generateWelcomeEmailTemplate(username: string): string {

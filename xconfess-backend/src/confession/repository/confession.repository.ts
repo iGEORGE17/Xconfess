@@ -1,3 +1,4 @@
+// ...existing code...
 import { DataSource, Repository, FindOptionsWhere, ILike } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { AnonymousConfession } from '../entities/confession.entity';
@@ -52,7 +53,8 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
     confessions: AnonymousConfession[];
     total: number;
   }> {
-    const offset = (page - 1) * limit;
+    const safeLimit = typeof limit === 'number' ? limit : 10;
+    const offset = (page - 1) * safeLimit;
     
     // Sanitize search term for tsquery
     const sanitizedTerm = searchTerm
@@ -100,7 +102,8 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
     total: number;
   }> {
     // First try full-text search
-    const fullTextResult = await this.fullTextSearch(searchTerm, page, limit);
+    const safeLimit = typeof limit === 'number' ? limit : 10;
+    const fullTextResult = await this.fullTextSearch(searchTerm, page, safeLimit);
     
     // If full-text search returns results, use them
     if (fullTextResult.total > 0) {
@@ -108,14 +111,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
     }
 
     // Fallback to ILIKE search for partial matches
-    const offset = (page - 1) * limit;
+    const offset = (page - 1) * safeLimit;
     
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reactions')
       .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` })
       .orderBy('confession.created_at', 'DESC')
       .skip(offset)
-      .take(limit);
+      .take(safeLimit);
 
     const totalQuery = this.createQueryBuilder('confession')
       .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });

@@ -13,6 +13,8 @@ import * as bcrypt from 'bcrypt';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { EmailService } from '../email/email.service';
 import { CryptoUtil } from '../common/crypto.util';
+import { maskUserId } from '../utils/mask-user-id';
+ 
 
 
 @Injectable()
@@ -99,7 +101,7 @@ export class UserService {
 
   async updatePassword(userId: number, newPassword: string): Promise<void> {
     try {
-      this.logger.log(`Updating password for user ID: ${userId}`);
+      this.logger.log(`Updating password for masked user ID: ${maskUserId(userId)}`);
 
       // Hash the new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -111,13 +113,13 @@ export class UserService {
         resetPasswordExpires: null,
       });
 
-      this.logger.log(`Password updated successfully for user ID: ${userId}`);
+      this.logger.log(`Password updated successfully for masked user ID: ${maskUserId(userId)}`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : '';
 
-      this.logger.error(`Failed to update password for user ID ${userId}: ${errorMessage}`, errorStack);
+      this.logger.error(`Failed to update password for masked user ID ${maskUserId(userId)}: ${errorMessage}`, errorStack);
       throw new InternalServerErrorException(
         `Failed to update password: ${errorMessage}`,
       );
@@ -126,20 +128,20 @@ export class UserService {
 
   async setResetPasswordToken(userId: number, token: string, expiresAt: Date): Promise<void> {
     try {
-      this.logger.log(`Setting reset password token for user ID: ${userId}`);
+      this.logger.log(`Setting reset password token for masked user ID: ${maskUserId(userId)}`);
 
       await this.userRepository.update(userId, {
         resetPasswordToken: token,
         resetPasswordExpires: expiresAt,
       });
 
-      this.logger.log(`Reset password token set successfully for user ID: ${userId}`);
+      this.logger.log(`Reset password token set successfully for masked user ID: ${maskUserId(userId)}`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : '';
 
-      this.logger.error(`Failed to set reset token for user ID ${userId}: ${errorMessage}`, errorStack);
+      this.logger.error(`Failed to set reset token for masked user ID ${maskUserId(userId)}: ${errorMessage}`, errorStack);
       throw new InternalServerErrorException(
         `Failed to set reset token: ${errorMessage}`,
       );
@@ -173,7 +175,7 @@ export class UserService {
 
       // Save user to database
       const savedUser = await this.userRepository.save(user);
-      this.logger.log(`User created successfully with ID: ${savedUser.id}`);
+      this.logger.log(`User created successfully with masked user ID: ${maskUserId(savedUser.id)}`);
 
       // Send welcome email (fire and forget)
       try {
@@ -213,7 +215,7 @@ export class UserService {
 
   async deactivateAccount(userId: number): Promise<User> {
     try {
-      this.logger.log(`Deactivating account for user ID: ${userId}`);
+      this.logger.log(`Deactivating account for masked user ID: ${maskUserId(userId)}`);
       
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
@@ -223,7 +225,7 @@ export class UserService {
       user.is_active = false;
       const updatedUser = await this.userRepository.save(user);
       
-      this.logger.log(`Account deactivated successfully for user ID: ${userId}`);
+      this.logger.log(`Account deactivated successfully for masked user ID: ${maskUserId(userId)}`);
       return updatedUser;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -234,7 +236,7 @@ export class UserService {
 
   async reactivateAccount(userId: number): Promise<User> {
     try {
-      this.logger.log(`Reactivating account for user ID: ${userId}`);
+      this.logger.log(`Reactivating account for masked user ID: ${maskUserId(userId)}`);
       
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
@@ -244,7 +246,7 @@ export class UserService {
       user.is_active = true;
       const updatedUser = await this.userRepository.save(user);
       
-      this.logger.log(`Account reactivated successfully for user ID: ${userId}`);
+      this.logger.log(`Account reactivated successfully for masked user ID: ${maskUserId(userId)}`);
       return updatedUser;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
