@@ -1,3 +1,4 @@
+import { maskUserId } from '../utils/mask-user-id';
 import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
@@ -94,7 +95,7 @@ export class AuthService {
       await this.passwordResetService.markTokenAsUsed(passwordReset.id);
 
       this.logger.log(`Password reset successful`, {
-        userId: passwordReset.userId,
+        maskedUserId: maskUserId(passwordReset.userId),
         tokenId: passwordReset.id,
       });
 
@@ -133,8 +134,8 @@ export class AuthService {
         });
       } else if (forgotPasswordDto.userId) {
         user = await this.userService.findById(forgotPasswordDto.userId);
-        this.logger.log(`Password reset requested for user ID: ${forgotPasswordDto.userId}`, {
-          userId: forgotPasswordDto.userId,
+        this.logger.log(`Password reset requested for masked user ID: ${maskUserId(forgotPasswordDto.userId)}`, {
+          maskedUserId: maskUserId(forgotPasswordDto.userId),
           ipAddress,
         });
       }
@@ -167,7 +168,7 @@ export class AuthService {
       );
 
       this.logger.log(`Password reset email sent successfully`, {
-        userId: user.id,
+        maskedUserId: maskUserId(user.id),
         email: user.email,
         ipAddress,
       });
@@ -182,7 +183,7 @@ export class AuthService {
 
       this.logger.error(`Forgot password process failed: ${errorMessage}`, {
         email: forgotPasswordDto.email,
-        userId: forgotPasswordDto.userId,
+        maskedUserId: forgotPasswordDto.userId ? maskUserId(forgotPasswordDto.userId) : undefined,
         ipAddress,
         error: errorMessage,
       });

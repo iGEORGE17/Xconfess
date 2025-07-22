@@ -37,6 +37,7 @@ describe('Auth Integration Tests - Forgot Password Flow', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     confessions: [],
+    is_active: true,
   };
 
   beforeEach(async () => {
@@ -261,6 +262,7 @@ describe('AuthService Integration', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     confessions: [],
+    is_active: true,
   };
 
   beforeEach(async () => {

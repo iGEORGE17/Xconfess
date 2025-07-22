@@ -34,6 +34,7 @@ describe('AuthService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     confessions: [],
+    is_active: true,
   };
 
   const mockPasswordReset: PasswordReset = {
@@ -288,6 +289,7 @@ describe('AuthService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         confessions: [],
+        is_active: true,
       };
 
       jest.spyOn(service, 'validateUser').mockResolvedValue(mockUserResponse);

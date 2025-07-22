@@ -4,6 +4,18 @@ import { Redis } from 'ioredis';
 
 @Injectable()
 export class ConfessionViewCacheService {
+  /**
+   * Checks if the user/IP has viewed recently and marks as viewed if not.
+   * Returns true if this is a new view (should increment view count).
+   */
+  async checkAndMarkView(confessionId: string, userOrIp: string): Promise<boolean> {
+    const alreadyViewed = await this.hasViewedRecently(confessionId, userOrIp);
+    if (!alreadyViewed) {
+      await this.markViewed(confessionId, userOrIp);
+      return true;
+    }
+    return false;
+  }
   private readonly VIEW_CACHE_EXPIRY: number;
 
   constructor(

@@ -1,3 +1,4 @@
+
 import {
   Controller, Get, Post, Put, Delete,
   Body, Param, Query, Req, UsePipes, ValidationPipe,
@@ -11,6 +12,10 @@ import { Request } from 'express';
 
 @Controller('confessions')
 export class ConfessionController {
+  // For testing compatibility: expose getConfessionById
+  getConfessionById(id: string, req: Request) {
+    return this.getById(id, req);
+  }
   constructor(private readonly service: ConfessionService) {}
 
   @Post()
