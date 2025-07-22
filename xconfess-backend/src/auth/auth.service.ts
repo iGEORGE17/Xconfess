@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import { PasswordResetService } from './password-reset.service';
+import { AnonymousUserService } from '../user/anonymous-user.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
@@ -23,6 +24,7 @@ export class AuthService {
     private jwtService: JwtService,
     private emailService: EmailService,
     private passwordResetService: PasswordResetService,
+    private anonymousUserService: AnonymousUserService,
   ) {}
 
   async validateUser(
@@ -45,11 +47,13 @@ export class AuthService {
   async login(
     email: string,
     password: string,
-  ): Promise<{ access_token: string; user: UserResponse }> {
+  ): Promise<{ access_token: string; user: UserResponse; anonymousUserId: string }> {
     const user = await this.validateUser(email, password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    // Create a new AnonymousUser (or reuse per 24h)
+    const anonymousUser = await this.anonymousUserService.getOrCreateForUserSession(user.id);
     const payload: JwtPayload = {
       email: user.email,
       sub: user.id.toString(),
@@ -57,6 +61,7 @@ export class AuthService {
     return {
       access_token: this.jwtService.sign(payload),
       user,
+      anonymousUserId: anonymousUser.id,
     };
   }
 

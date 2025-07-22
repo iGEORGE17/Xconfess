@@ -1,8 +1,8 @@
 import {
   Entity, Column, PrimaryGeneratedColumn,
   CreateDateColumn, ManyToOne, JoinColumn
-} from '@nestjs/typeorm';
-import { User } from '../../user/entities/user.entity';
+} from 'typeorm';
+import { AnonymousUser } from '../../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
 
 @Entity('comments')
@@ -16,9 +16,9 @@ export class Comment {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => User, user => user.comments)
-  @JoinColumn({ name: 'userId' })
-  user: User;
+  @ManyToOne(() => AnonymousUser, anonymousUser => anonymousUser.comments)
+  @JoinColumn({ name: 'anonymous_user_id' })
+  anonymousUser: AnonymousUser;
 
   @ManyToOne(() => AnonymousConfession, c => c.comments)
   @JoinColumn({ name: 'confessionId' })

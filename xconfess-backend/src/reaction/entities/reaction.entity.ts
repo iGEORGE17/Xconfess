@@ -1,4 +1,5 @@
 import { User } from '../../user/entities/user.entity';
+import { AnonymousUser } from '../../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 
@@ -14,9 +15,9 @@ export class Reaction {
   @JoinColumn({ name: 'confession_id' })
   confession: AnonymousConfession;
 
-  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'user_id' })
-  user: User | null;
+  @ManyToOne(() => AnonymousUser, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'anonymous_user_id' })
+  anonymousUser: AnonymousUser;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

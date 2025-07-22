@@ -26,7 +26,6 @@ describe('UserService', () => {
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    confessions: [],
   };
 
   const mockRepository = {
@@ -355,7 +354,6 @@ describe('UserService', () => {
         resetPasswordExpires: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        confessions: [],
       };
 
       mockRepository.findOne.mockResolvedValue(mockUser);
@@ -389,7 +387,6 @@ describe('UserService', () => {
         resetPasswordExpires: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        confessions: [],
       };
 
       mockRepository.findOne.mockResolvedValue(mockUser);
