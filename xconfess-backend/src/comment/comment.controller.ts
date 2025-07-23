@@ -7,6 +7,8 @@ import {
   Get,
   UseGuards,
   Req,
+  Injectable,
+  ExecutionContext,
 } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,10 +16,14 @@ import { Request as ExpressRequest } from 'express';
 import { ModerationStatus } from './entities/moderation-comment.entity';
 import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 import { User } from '../user/entities/user.entity';
+import { CanActivate } from '@nestjs/common';
 
-// AdminGuard placeholder
-class AdminGuard {
-  canActivate() { return true; } // TODO: Implement real admin check
+@Injectable()
+class AdminGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    return !!request.user && !!request.user.isAdmin;
+  }
 }
 
 // Custom request type with user
