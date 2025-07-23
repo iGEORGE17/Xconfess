@@ -27,6 +27,9 @@ export class User {
   @Column({ name: 'email_hash', type: 'varchar', length: 64, unique: true })
   emailHash: string;
 
+  @Column({ default: false })
+  isAdmin: boolean;
+
   @Column({ default: true })
   is_active: boolean;
 
