@@ -6,6 +6,7 @@ import { Comment } from './entities/comment.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { NotificationQueue } from '../notification/notification.queue';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { ModerationComment, ModerationStatus } from './entities/moderation-comment.entity';
 
 describe('CommentService (soft‑delete)', () => {
   let service: CommentService;
@@ -120,6 +121,87 @@ describe('CommentService (soft‑delete)', () => {
         recipientEmail: 'a@b.com',
       });
       expect(result).toBe(fakeComment);
+    });
+  });
+});
+
+describe('CommentService (moderation)', () => {
+  let service: CommentService;
+  let moderationRepo: jest.Mocked<Repository<ModerationComment>>;
+  let commentRepo: jest.Mocked<Repository<Comment>>;
+  let confessionRepo: jest.Mocked<Repository<AnonymousConfession>>;
+  let queue: jest.Mocked<NotificationQueue>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CommentService,
+        {
+          provide: getRepositoryToken(Comment),
+          useValue: { find: jest.fn(), findOne: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(AnonymousConfession),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ModerationComment),
+          useValue: { findOne: jest.fn(), create: jest.fn(), save: jest.fn() },
+        },
+        { provide: NotificationQueue, useValue: { enqueueCommentNotification: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(CommentService);
+    moderationRepo = module.get(getRepositoryToken(ModerationComment));
+    commentRepo = module.get(getRepositoryToken(Comment));
+    confessionRepo = module.get(getRepositoryToken(AnonymousConfession));
+    queue = module.get(NotificationQueue);
+  });
+
+  describe('moderateComment()', () => {
+    const moderator = { id: 1 } as any;
+    const comment = { id: 10 } as any;
+    it('approves a pending comment', async () => {
+      const moderation = { comment, status: ModerationStatus.PENDING, save: jest.fn() } as any;
+      moderationRepo.findOne.mockResolvedValue(moderation);
+      moderationRepo.save.mockResolvedValue({ ...moderation, status: ModerationStatus.APPROVED });
+      const result = await service.moderateComment(10, ModerationStatus.APPROVED, moderator);
+      expect(result.success).toBe(true);
+      expect(moderationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: ModerationStatus.APPROVED, moderatedBy: moderator }));
+    });
+    it('rejects a pending comment', async () => {
+      const moderation = { comment, status: ModerationStatus.PENDING, save: jest.fn() } as any;
+      moderationRepo.findOne.mockResolvedValue(moderation);
+      moderationRepo.save.mockResolvedValue({ ...moderation, status: ModerationStatus.REJECTED });
+      const result = await service.moderateComment(10, ModerationStatus.REJECTED, moderator);
+      expect(result.success).toBe(true);
+      expect(moderationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: ModerationStatus.REJECTED, moderatedBy: moderator }));
+    });
+    it('throws if moderation entry not found', async () => {
+      moderationRepo.findOne.mockResolvedValue(null);
+      await expect(service.moderateComment(99, ModerationStatus.APPROVED, moderator)).rejects.toThrow();
+    });
+    it('throws if already moderated', async () => {
+      const moderation = { comment, status: ModerationStatus.APPROVED } as any;
+      moderationRepo.findOne.mockResolvedValue(moderation);
+      await expect(service.moderateComment(10, ModerationStatus.REJECTED, moderator)).rejects.toThrow();
+    });
+  });
+
+  describe('create() moderation entry', () => {
+    it('creates a moderation entry when a comment is created', async () => {
+      const confession = { id: 'c1', anonymousUser: { id: 'anon1' } } as any;
+      const comment = { id: 101, content: 'hey', anonymousUser: { id: 'anon1' }, confession } as any;
+      confessionRepo.findOne.mockResolvedValue(confession);
+      commentRepo.create.mockReturnValue(comment);
+      commentRepo.save.mockResolvedValue(comment);
+      const moderationObj = { id: 1, comment, commentId: comment.id, status: ModerationStatus.PENDING, createdAt: new Date() } as ModerationComment;
+      moderationRepo.create.mockReturnValue(moderationObj);
+      moderationRepo.save.mockResolvedValue(moderationObj);
+      await service.create('hey', { id: 'anon1' } as any, 'c1', 'anonCtx');
+      expect(moderationRepo.create).toHaveBeenCalledWith(expect.objectContaining({ comment, status: ModerationStatus.PENDING, commentId: comment.id }));
+      expect(moderationRepo.save).toHaveBeenCalled();
     });
   });
 });

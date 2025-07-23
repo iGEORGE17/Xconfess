@@ -6,10 +6,14 @@ import { Comment } from './entities/comment.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
 import { NotificationQueue } from '../notification/notification.queue';
+import { ModerationComment } from './entities/moderation-comment.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Comment, AnonymousConfession]),
+    TypeOrmModule.forFeature([
+      Comment,
+      ModerationComment,
+    ]),
   ],
   controllers: [CommentController],
   providers: [CommentService, NotificationQueue],
