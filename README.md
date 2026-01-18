@@ -451,7 +451,6 @@ xconfess/
 
 - 💬 **Telegram**: [xConfess Community](https://t.me/xconfess_Community)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/Godsmiracle001/Xconfess/issues)
-- 📧 **Email**: godsmiracle001@example.com
 - 🌐 **Website**: Coming Soon
 
 ### Get Help
