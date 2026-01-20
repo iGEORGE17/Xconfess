@@ -449,7 +449,7 @@ xconfess/
 
 ### Join the Conversation
 
--     **Discord** : [https://discord.gg/5qVnXvzd)
+- 💬 **Discord**: [xConfess Community](https://discord.gg/5qVnXvzd)
 - 💬 **Telegram**: [xConfess Community](https://t.me/xconfess_Community)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/Godsmiracle001/Xconfess/issues)
 - 🌐 **Website**: Coming Soon
