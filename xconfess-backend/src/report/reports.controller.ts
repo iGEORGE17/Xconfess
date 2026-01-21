@@ -9,20 +9,18 @@ import {
 import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto/create-report.dto';
 
-@Controller('confession')
+@Controller('confessions')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  @Post(':id/report')
-  async reportConfession(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateReportDto,
-    @Req() req: any,
-  ) {
-    const reporterId = req.user?.id ?? null;
+@Post(':id/report')
+async reportConfession(
+  @Param('id') id: string,   // ✅ MUST be string (UUID)
+  @Req() req: any,
+  @Body() dto: CreateReportDto,
+) {
+  const reporterId = req.user?.id ?? null;
+  return this.reportsService.createReport(id, reporterId, dto);
+}
 
-    await this.reportsService.createReport(id, reporterId, dto);
-
-    return { success: true };
-  }
 }

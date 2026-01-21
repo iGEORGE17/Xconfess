@@ -12,8 +12,9 @@ export class Report {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  confessionId: number;
+  @Column({ type: 'uuid' })
+  confessionId: string;
+
 
   @Column({ nullable: true })
   reporterId?: number;
@@ -24,6 +25,7 @@ export class Report {
   @Column({ nullable: true })
   details?: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
+ @CreateDateColumn({ name: 'created_at' })
+ created_at: Date;
+
 }
