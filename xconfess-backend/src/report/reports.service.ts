@@ -24,8 +24,7 @@ export class ReportsService {
     reporterId: number | null,
     dto: CreateReportDto,
   ): Promise<Report> {
-    const since = new Date();
-    since.setHours(since.getHours() - 24);
+   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     return this.reportRepository.manager.transaction(async (manager) => {
       // 1️⃣ Ensure confession exists
