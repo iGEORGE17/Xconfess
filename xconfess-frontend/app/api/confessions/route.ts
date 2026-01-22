@@ -1,27 +1,102 @@
 export async function GET(request: Request) {
-  // Read query parameters
   const { searchParams } = new URL(request.url);
   const page = parseInt(searchParams.get('page') ?? '1') || 1;
+  const limit = parseInt(searchParams.get('limit') ?? '10') || 10;
+  const sort = searchParams.get('sort') ?? 'newest';
+  const gender = searchParams.get('gender');
 
-  // Example: mock data
-  const confessionsPerPage = 5;
-  const allConfessions = [
-    { id: "1", content: "I love coding.", createdAt: new Date().toISOString(), reactions: { like: 5, love: 3 } },
-    { id: "2", content: "I secretly watch cartoons.", createdAt: new Date().toISOString(), reactions: { like: 8, love: 12 } },
-    { id: "3", content: "I talk to my plants.", createdAt: new Date().toISOString(), reactions: { like: 2, love: 7 } },
-    { id: "4", content: "I enjoy midnight walks.", createdAt: new Date().toISOString(), reactions: { like: 10, love: 4 } },
-    { id: "5", content: "I write poems no one reads.", createdAt: new Date().toISOString(), reactions: { like: 3, love: 6 } },
-    { id: "6", content: "I skip breakfast sometimes.", createdAt: new Date().toISOString(), reactions: { like: 4, love: 2 } },
-  ];
-
-  const start = (page - 1) * confessionsPerPage;
-  const pagedConfessions = allConfessions.slice(start, start + confessionsPerPage);
-
-  return new Response(JSON.stringify({
-    page,
-    confessions: pagedConfessions
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
+  // Build query parameters for backend
+  const backendParams = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    sort: sort,
   });
+
+  if (gender) {
+    backendParams.append('gender', gender);
+  }
+
+  try {
+    const backendUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/confessions?${backendParams}`;
+
+    const response = await fetch(backendUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      next: {
+        revalidate: 30, // Cache for 30 seconds
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Backend returned ${response.status}: ${response.statusText}`);
+      
+      // Return fallback data for demo purposes
+      const confessionsPerPage = limit;
+      const allConfessions = [
+        { id: "1", content: "I love coding.", createdAt: new Date().toISOString(), reactions: { like: 5, love: 3 }, commentCount: 2, viewCount: 45 },
+        { id: "2", content: "I secretly watch cartoons.", createdAt: new Date().toISOString(), reactions: { like: 8, love: 12 }, commentCount: 5, viewCount: 123 },
+        { id: "3", content: "I talk to my plants.", createdAt: new Date().toISOString(), reactions: { like: 2, love: 7 }, commentCount: 1, viewCount: 32 },
+        { id: "4", content: "I enjoy midnight walks.", createdAt: new Date().toISOString(), reactions: { like: 10, love: 4 }, commentCount: 3, viewCount: 67 },
+        { id: "5", content: "I write poems no one reads.", createdAt: new Date().toISOString(), reactions: { like: 3, love: 6 }, commentCount: 0, viewCount: 18 },
+        { id: "6", content: "I skip breakfast sometimes.", createdAt: new Date().toISOString(), reactions: { like: 4, love: 2 }, commentCount: 2, viewCount: 42 },
+        { id: "7", content: "I have imposter syndrome.", createdAt: new Date(Date.now() - 3600000).toISOString(), reactions: { like: 15, love: 20 }, commentCount: 8, viewCount: 156 },
+        { id: "8", content: "I talk to myself in the car.", createdAt: new Date(Date.now() - 7200000).toISOString(), reactions: { like: 9, love: 11 }, commentCount: 4, viewCount: 89 },
+      ];
+
+      const start = (page - 1) * confessionsPerPage;
+      const pagedConfessions = allConfessions.slice(start, start + confessionsPerPage);
+      const hasMore = start + confessionsPerPage < allConfessions.length;
+
+      return new Response(JSON.stringify({
+        confessions: pagedConfessions,
+        hasMore,
+        total: allConfessions.length,
+        page,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const data = await response.json();
+
+    return new Response(JSON.stringify({
+      confessions: data.data || data.confessions || [],
+      hasMore: data.hasMore !== false,
+      total: data.total,
+      page: data.page || page,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error fetching confessions:', error);
+
+    // Fallback demo data
+    const confessionsPerPage = limit;
+    const allConfessions = [
+      { id: "1", content: "I love coding.", createdAt: new Date().toISOString(), reactions: { like: 5, love: 3 }, commentCount: 2, viewCount: 45 },
+      { id: "2", content: "I secretly watch cartoons.", createdAt: new Date().toISOString(), reactions: { like: 8, love: 12 }, commentCount: 5, viewCount: 123 },
+      { id: "3", content: "I talk to my plants.", createdAt: new Date().toISOString(), reactions: { like: 2, love: 7 }, commentCount: 1, viewCount: 32 },
+      { id: "4", content: "I enjoy midnight walks.", createdAt: new Date().toISOString(), reactions: { like: 10, love: 4 }, commentCount: 3, viewCount: 67 },
+      { id: "5", content: "I write poems no one reads.", createdAt: new Date().toISOString(), reactions: { like: 3, love: 6 }, commentCount: 0, viewCount: 18 },
+      { id: "6", content: "I skip breakfast sometimes.", createdAt: new Date().toISOString(), reactions: { like: 4, love: 2 }, commentCount: 2, viewCount: 42 },
+    ];
+
+    const start = (page - 1) * confessionsPerPage;
+    const pagedConfessions = allConfessions.slice(start, start + confessionsPerPage);
+    const hasMore = start + confessionsPerPage < allConfessions.length;
+
+    return new Response(JSON.stringify({
+      confessions: pagedConfessions,
+      hasMore,
+      total: allConfessions.length,
+      page,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }

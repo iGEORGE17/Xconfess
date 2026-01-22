@@ -1,35 +1,29 @@
-"use client";
-import { useEffect, useRef, useState } from "react";
-import { Confession } from "../types/confession";
+import { useEffect, useState } from "react";
 
-export const useInfiniteConfessions = () => {
+interface Confession {
+  id: string;
+  content: string;
+  createdAt: string;
+  reactions: { like: number; love: number };
+}
+
+export const useConfessions = () => {
   const [data, setData] = useState<Confession[]>([]);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const observerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchConfessions = async () => {
       try {
         setLoading(true);
-        setError(null);
+        setError(null); // Reset error before fetching
         const res = await fetch(`/api/confessions?page=${page}`);
-
-        if (!res.ok) {
-          throw new Error(`Failed to fetch confessions: ${res.statusText}`);
-        }
-
-        const result = await res.json();
-
-        if (result.confessions.length === 0) setHasMore(false);
-        setData(prev => [...prev, ...result.confessions]);
+        if (!res.ok) throw new Error("Failed to fetch");
+        const json = await res.json();
+        setData(json.confessions || []);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
-        setError(errorMessage);
-        console.error("Fetch confessions error:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
@@ -38,18 +32,5 @@ export const useInfiniteConfessions = () => {
     fetchConfessions();
   }, [page]);
 
-  useEffect(() => {
-    if (!observerRef.current || !hasMore) return;
-
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !loading) {
-        setPage(p => p + 1);
-      }
-    });
-
-    observer.observe(observerRef.current);
-    return () => observer.disconnect();
-  }, [loading, hasMore]);
-
-  return { data, loading, hasMore, observerRef, error };
+  return { data, loading, error, setPage };
 };
