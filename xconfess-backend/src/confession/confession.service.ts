@@ -10,12 +10,20 @@ import { UpdateConfessionDto } from './dto/update-confession.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
 import { GetConfessionsDto, SortOrder } from './dto/get-confessions.dto';
 import sanitizeHtml from 'sanitize-html';
-import { encryptConfession, decryptConfession } from '../utils/confession-encryption';
+import {
+  encryptConfession,
+  decryptConfession,
+} from '../utils/confession-encryption';
 import { ConfessionViewCacheService } from './confession-view-cache.service';
 import { Request } from 'express';
-import { AiModerationService, ModerationStatus } from '../moderation/ai-moderation.service';
+import {
+  AiModerationService,
+  ModerationStatus,
+} from '../moderation/ai-moderation.service';
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppLogger } from 'src/logger/logger.service';
+import { maskUserId } from 'src/utils/mask-user-id';
 
 @Injectable()
 export class ConfessionService {
@@ -25,6 +33,7 @@ export class ConfessionService {
     private readonly aiModerationService: AiModerationService,
     private readonly moderationRepoService: ModerationRepositoryService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly logger: AppLogger,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -41,7 +50,8 @@ export class ConfessionService {
 
     try {
       // Step 1: Moderate the content BEFORE encryption
-      const moderationResult = await this.aiModerationService.moderateContent(msg);
+      const moderationResult =
+        await this.aiModerationService.moderateContent(msg);
 
       // Step 2: Encrypt and save the confession
       const encryptedMsg = encryptConfession(msg);
@@ -95,7 +105,8 @@ export class ConfessionService {
   async getConfessions(dto: GetConfessionsDto) {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 10;
-    if (limit < 1 || limit > 100) throw new BadRequestException('limit must be 1–100');
+    if (limit < 1 || limit > 100)
+      throw new BadRequestException('limit must be 1–100');
 
     const skip = (page - 1) * limit;
     const qb = this.confessionRepo
@@ -151,8 +162,9 @@ export class ConfessionService {
       if (!sanitized) throw new BadRequestException('Invalid content');
 
       // Re-moderate updated content
-      const moderationResult = await this.aiModerationService.moderateContent(sanitized);
-      
+      const moderationResult =
+        await this.aiModerationService.moderateContent(sanitized);
+
       dto.message = encryptConfession(sanitized);
       await this.confessionRepo.update(id, {
         ...dto,
@@ -191,9 +203,15 @@ export class ConfessionService {
   }
 
   async search(dto: SearchConfessionDto) {
-    if (!dto.q.trim()) throw new BadRequestException('Search term cannot be empty');
-    const limit = typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
-    const result = await this.confessionRepo.hybridSearch(dto.q.trim(), dto.page, limit);
+    if (!dto.q.trim())
+      throw new BadRequestException('Search term cannot be empty');
+    const limit =
+      typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const result = await this.confessionRepo.hybridSearch(
+      dto.q.trim(),
+      dto.page,
+      limit,
+    );
     return {
       data: result?.confessions || [],
       meta: {
@@ -207,9 +225,15 @@ export class ConfessionService {
   }
 
   async fullTextSearch(dto: SearchConfessionDto) {
-    if (!dto.q.trim()) throw new BadRequestException('Search term cannot be empty');
-    const limit = typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
-    const result = await this.confessionRepo.fullTextSearch(dto.q.trim(), dto.page, limit);
+    if (!dto.q.trim())
+      throw new BadRequestException('Search term cannot be empty');
+    const limit =
+      typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const result = await this.confessionRepo.fullTextSearch(
+      dto.q.trim(),
+      dto.page,
+      limit,
+    );
     return {
       data: result?.confessions || [],
       meta: {
@@ -232,7 +256,8 @@ export class ConfessionService {
     type AuthenticatedRequest = Request & { user?: { id?: string } };
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user?.id;
-    let userOrIp: string = userId ?? String(req.headers['x-forwarded-for'] ?? req.ip);
+    let userOrIp: string =
+      userId ?? String(req.headers['x-forwarded-for'] ?? req.ip);
     if (Array.isArray(userOrIp)) {
       userOrIp = userOrIp[0] ?? req.ip;
     }
@@ -274,9 +299,15 @@ export class ConfessionService {
 
     const updated = await this.confessionRepo.save(confession);
 
-    const logs = await this.moderationRepoService.getLogsByConfession(confessionId);
+    const logs =
+      await this.moderationRepoService.getLogsByConfession(confessionId);
     if (logs.length > 0) {
-      await this.moderationRepoService.updateReview(logs[0].id, status, moderatorId, notes);
+      await this.moderationRepoService.updateReview(
+        logs[0].id,
+        status,
+        moderatorId,
+        notes,
+      );
     }
 
     return updated;
@@ -295,4 +326,56 @@ export class ConfessionService {
     });
 
     return { data, total, page, limit };
-  }}
+  }
+
+  async createConfession(userId: string, data: any) {
+    // Option 1: Use the logger's built-in method
+    this.logger.logWithUser(
+      'Creating confession',
+      userId,
+      'ConfessionsService',
+    );
+
+    try {
+      // Your logic here
+      const confession = await this.saveConfession(data);
+
+      this.logger.logWithUser(
+        'Confession created successfully',
+        userId,
+        'ConfessionsService',
+      );
+
+      return confession;
+    } catch (error) {
+      // Option 2: Use maskUserId helper for custom messages
+      this.logger.error(
+        `Failed to create confession for ${maskUserId(userId)}: ${error.message}`,
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  async getUserConfessions(userId: string) {
+    // Option 3: Mask in object logging
+    this.logger.log(
+      { action: 'fetch_confessions', userId: maskUserId(userId) },
+      'ConfessionsService',
+    );
+
+    return this.findByUser(userId);
+  }
+
+  // Private methods (examples)
+  private async saveConfession(data: any) {
+    // Implementation
+    return data;
+  }
+
+  private async findByUser(userId: string) {
+    // Implementation
+    return [];
+  }
+}
