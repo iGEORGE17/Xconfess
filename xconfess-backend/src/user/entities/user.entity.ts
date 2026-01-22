@@ -1,5 +1,10 @@
 import { Entity, PrimaryGeneratedColumn, Column, Unique, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 @Entity()
 @Unique(['username'])
 @Unique(['emailHash'])
@@ -27,8 +32,8 @@ export class User {
   @Column({ name: 'email_hash', type: 'varchar', length: 64, unique: true })
   emailHash: string;
 
-  @Column({ default: false })
-  isAdmin: boolean;
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  role: UserRole;
 
   @Column({ default: true })
   is_active: boolean;
