@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { EmailService } from '../email/email.service';
@@ -252,6 +252,37 @@ export class UserService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to reactivate account: ${errorMessage}`);
       throw error instanceof NotFoundException ? error : new InternalServerErrorException(`Failed to reactivate account: ${errorMessage}`);
+    }
+  }
+
+  async setUserRole(userId: number, role: UserRole): Promise<User> {
+    try {
+      this.logger.log(`Setting role to ${role} for masked user ID: ${maskUserId(userId)}`);
+      
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      user.role = role;
+      const updatedUser = await this.userRepository.save(user);
+      
+      this.logger.log(`Role set to ${role} successfully for masked user ID: ${maskUserId(userId)}`);
+      return updatedUser;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to set user role: ${errorMessage}`);
+      throw error instanceof NotFoundException ? error : new InternalServerErrorException(`Failed to set user role: ${errorMessage}`);
+    }
+  }
+
+  async saveUser(user: User): Promise<User> {
+    try {
+      return await this.userRepository.save(user);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to save user: ${errorMessage}`);
+      throw new InternalServerErrorException(`Failed to save user: ${errorMessage}`);
     }
   }
 }
