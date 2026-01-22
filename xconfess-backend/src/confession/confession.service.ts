@@ -24,9 +24,12 @@ import { ModerationRepositoryService } from '../moderation/moderation-repository
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppLogger } from 'src/logger/logger.service';
 import { maskUserId } from 'src/utils/mask-user-id';
+import { EncryptionService } from 'src/encryption/encryption.service';
+import { ConfessionResponseDto } from './dto/confession-response.dto';
 
 @Injectable()
 export class ConfessionService {
+  private readonly ENCRYPTED_FIELDS = ['title', 'body'];
   constructor(
     private confessionRepo: AnonymousConfessionRepository,
     private viewCache: ConfessionViewCacheService,
@@ -34,6 +37,8 @@ export class ConfessionService {
     private readonly moderationRepoService: ModerationRepositoryService,
     private readonly eventEmitter: EventEmitter2,
     private readonly logger: AppLogger,
+
+    private encryptionService: EncryptionService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -377,5 +382,68 @@ export class ConfessionService {
   private async findByUser(userId: string) {
     // Implementation
     return [];
+  }
+
+  async findAll(): Promise<ConfessionResponseDto[]> {
+    try {
+      const confessions = await this.confessionRepo.find({
+        order: { createdAt: 'DESC' },
+      });
+
+      // Decrypt all confessions
+      return confessions.map((confession) => this.toResponseDto(confession));
+    } catch (error) {
+      this.logger.error(
+        'Failed to fetch confessions',
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  async findOne(id: string): Promise<ConfessionResponseDto> {
+    try {
+      const confession = await this.confessionRepo.findOne({
+        where: { id },
+      });
+
+      if (!confession) {
+        throw new NotFoundException(`Confession with ID ${id} not found`);
+      }
+
+      return this.toResponseDto(confession);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      this.logger.error(
+        'Failed to fetch confession',
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Converts encrypted entity to decrypted response DTO
+   */
+  private toResponseDto(
+    confession: ConfessionResponseDto,
+  ): ConfessionResponseDto {
+    const decrypted = this.encryptionService.decryptFields(
+      confession,
+      this.ENCRYPTED_FIELDS,
+    );
+
+    return new ConfessionResponseDto({
+      id: decrypted.id,
+      title: decrypted.title,
+      body: decrypted.body,
+      createdAt: decrypted.createdAt,
+      updatedAt: decrypted.updatedAt,
+    });
   }
 }
