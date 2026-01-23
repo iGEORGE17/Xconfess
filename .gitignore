@@ -11,3 +11,5 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+target/
+test_snapshots/
