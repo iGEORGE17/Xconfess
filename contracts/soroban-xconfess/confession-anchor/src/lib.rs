@@ -74,7 +74,6 @@ impl ConfessionAnchor {
     }
 
     /// Verify whether a confession hash has been anchored.
-    ///
     /// Returns `Some(timestamp)` if present, or `None` otherwise.
     pub fn verify_confession(env: Env, hash: BytesN<32>) -> Option<u64> {
         let storage = get_confession_store(&env);
