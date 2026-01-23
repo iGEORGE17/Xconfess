@@ -9,12 +9,14 @@ import { ConfessionViewCacheService } from './confession-view-cache.service';
 import { ReactionModule } from '../reaction/reaction.module';
 import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
 import { ModerationModule } from '../moderation/moderation.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AnonymousConfession]),
     forwardRef(() => ReactionModule),
     ModerationModule,
+    UserModule,
   ],
   controllers: [ConfessionController],
   providers: [

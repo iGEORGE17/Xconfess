@@ -4,7 +4,7 @@ import { EmailService } from '../email/email.service';
 import { NotificationQueue } from './notification.queue';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Comment } from '../comment/entities/comment.entity';
-import { User } from '../user/entities/user.entity';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 
 describe('NotificationQueue', () => {
   let service: NotificationQueue;
@@ -25,43 +25,33 @@ describe('NotificationQueue', () => {
     sendCommentNotification: jest.fn(),
   };
 
+  const mockAnonymousUser: AnonymousUser = { id: 'anon-1', createdAt: new Date() } as AnonymousUser;
+
   const mockConfession: AnonymousConfession = {
     id: '123',
     message: 'Test confession',
     created_at: new Date(),
-    user: {
-      id: 1,
-      email: 'test@example.com',
-      username: 'testuser',
-      password: 'hashedpassword',
-      is_active: true,
-      resetPasswordToken: null,
-      resetPasswordExpires: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      confessions: [],
-    },
+    anonymousUser: mockAnonymousUser,
   } as AnonymousConfession;
 
   const mockComment: Comment = {
     id: 1,
     content: 'Test comment',
-    user: {
-      id: 2,
-      email: 'commenter@example.com',
-      username: 'commenter',
-      password: 'hashedpassword',
-      is_active: true,
-      resetPasswordToken: null,
-      resetPasswordExpires: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      confessions: [],
-    },
+    anonymousUser: mockAnonymousUser,
     confession: mockConfession,
     anonymousContextId: 'anon_123',
     createdAt: new Date(),
-    updatedAt: new Date(),
+    isDeleted: false,
+  };
+
+  const mockLongComment: Comment = {
+    id: 1,
+    content: 'This is a very long comment that should be truncated to create a preview. It contains more than 100 characters to test the truncation functionality.',
+    anonymousUser: mockAnonymousUser,
+    confession: mockConfession,
+    anonymousContextId: 'anon_123',
+    createdAt: new Date(),
+    isDeleted: false,
   };
 
   beforeEach(async () => {
@@ -95,7 +85,7 @@ describe('NotificationQueue', () => {
     const payload = {
       confession: mockConfession,
       comment: mockComment,
-      recipientEmail: mockConfession.user.email,
+      recipientEmail: 'test@example.com',
     };
 
     await service.enqueueCommentNotification(payload);
@@ -104,7 +94,7 @@ describe('NotificationQueue', () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith({
-      to: mockConfession.user.email,
+      to: 'test@example.com',
       confessionId: mockConfession.id,
       commentPreview: expect.any(String),
     });
@@ -119,7 +109,7 @@ describe('NotificationQueue', () => {
     const payload = {
       confession: mockConfession,
       comment: longComment,
-      recipientEmail: mockConfession.user.email,
+      recipientEmail: 'test@example.com',
     };
 
     await service.enqueueCommentNotification(payload);
@@ -128,9 +118,9 @@ describe('NotificationQueue', () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith({
-      to: mockConfession.user.email,
+      to: 'test@example.com',
       confessionId: mockConfession.id,
       commentPreview: expect.stringMatching(/^This is a very long comment.*\.\.\.$/),
     });
   });
-}); 
+});

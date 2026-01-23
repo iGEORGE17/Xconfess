@@ -11,6 +11,8 @@ import { PasswordReset } from './entities/password-reset.entity';
 import { Repository } from 'typeorm';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { AnonymousUserService } from '../user/anonymous-user.service';
+import { CryptoUtil } from '../common/crypto.util';
 
 // Mock bcrypt module
 jest.mock('bcrypt', () => ({
@@ -30,13 +32,16 @@ describe('Auth Integration Tests - Forgot Password Flow', () => {
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    email: 'test@example.com',
+    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
+    emailIv: CryptoUtil.encrypt('test@example.com').iv,
+    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    confessions: [],
+    isAdmin: false,
     is_active: true,
   };
 
@@ -49,6 +54,10 @@ describe('Auth Integration Tests - Forgot Password Flow', () => {
         PasswordResetService,
         EmailService,
         JwtService,
+        {
+          provide: AnonymousUserService,
+          useValue: { getOrCreateForUserSession: jest.fn().mockResolvedValue({ id: 'anon-1' }) },
+        },
         {
           provide: getRepositoryToken(User),
           useValue: {
@@ -255,13 +264,16 @@ describe('AuthService Integration', () => {
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    email: 'test@example.com',
+    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
+    emailIv: CryptoUtil.encrypt('test@example.com').iv,
+    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    confessions: [],
+    isAdmin: false,
     is_active: true,
   };
 
@@ -270,6 +282,10 @@ describe('AuthService Integration', () => {
       providers: [
         AuthService,
         UserService,
+        {
+          provide: AnonymousUserService,
+          useValue: { getOrCreateForUserSession: jest.fn().mockResolvedValue({ id: 'anon-1' }) },
+        },
         {
           provide: JwtService,
           useValue: {
@@ -319,12 +335,11 @@ describe('AuthService Integration', () => {
       expect(result.user).toEqual({
         id: mockUser.id,
         username: mockUser.username,
-        email: mockUser.email,
+        email: 'test@example.com',
         resetPasswordToken: mockUser.resetPasswordToken,
         resetPasswordExpires: mockUser.resetPasswordExpires,
         createdAt: mockUser.createdAt,
         updatedAt: mockUser.updatedAt,
-        confessions: mockUser.confessions,
       });
     });
 
@@ -349,7 +364,7 @@ describe('AuthService Integration', () => {
       expect(result).toEqual({ message: 'If the user exists, a password reset email has been sent.' });
       expect(passwordResetService.createResetToken).toHaveBeenCalledWith(mockUser.id);
       expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
-        mockUser.email,
+        'test@example.com',
         'reset-token',
         mockUser.username,
       );

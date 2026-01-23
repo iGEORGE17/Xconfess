@@ -8,6 +8,9 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { User } from '../user/entities/user.entity';
 import { PasswordReset } from './entities/password-reset.entity';
 import * as bcrypt from 'bcrypt';
+import { AnonymousUserService } from '../user/anonymous-user.service';
+import { CryptoUtil } from '../common/crypto.util';
+import { UserResponse } from '../user/user.controller';
 
 // Mock bcrypt
 jest.mock('bcrypt');
@@ -27,13 +30,16 @@ describe('AuthService', () => {
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    email: 'test@example.com',
+    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
+    emailIv: CryptoUtil.encrypt('test@example.com').iv,
+    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,
     resetPasswordExpires: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    confessions: [],
+    isAdmin: false,
     is_active: true,
   };
 
@@ -73,6 +79,10 @@ describe('AuthService', () => {
     sign: jest.fn(),
   };
 
+  const mockAnonymousUserService = {
+    getOrCreateForUserSession: jest.fn().mockResolvedValue({ id: 'anon-1' }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -92,6 +102,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: AnonymousUserService,
+          useValue: mockAnonymousUserService,
         },
       ],
     }).compile();
@@ -265,6 +279,8 @@ describe('AuthService', () => {
         resetPasswordExpires: null,
         createdAt: mockUser.createdAt,
         updatedAt: mockUser.updatedAt,
+        isAdmin: false,
+        is_active: true,
       });
     });
 
@@ -280,7 +296,7 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('should validate user with correct credentials', async () => {
-      const mockUserResponse = {
+      const mockUserResponse: UserResponse = {
         id: 1,
         username: 'testuser',
         email: 'test@example.com',
@@ -288,7 +304,7 @@ describe('AuthService', () => {
         resetPasswordExpires: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        confessions: [],
+        isAdmin: false,
         is_active: true,
       };
 

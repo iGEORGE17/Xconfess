@@ -16,6 +16,7 @@ import { Request } from 'express';
 import { AiModerationService, ModerationStatus } from '../moderation/ai-moderation.service';
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AnonymousUserService } from '../user/anonymous-user.service';
 
 @Injectable()
 export class ConfessionService {
@@ -25,6 +26,7 @@ export class ConfessionService {
     private readonly aiModerationService: AiModerationService,
     private readonly moderationRepoService: ModerationRepositoryService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly anonymousUserService: AnonymousUserService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -43,11 +45,15 @@ export class ConfessionService {
       // Step 1: Moderate the content BEFORE encryption
       const moderationResult = await this.aiModerationService.moderateContent(msg);
 
+      // Step 1.5: Create an AnonymousUser to associate with this confession
+      const anonymousUser = await this.anonymousUserService.create();
+
       // Step 2: Encrypt and save the confession
       const encryptedMsg = encryptConfession(msg);
       const conf = this.confessionRepo.create({
         message: encryptedMsg,
         gender: dto.gender,
+        anonymousUser,
         moderationScore: moderationResult.score,
         moderationFlags: moderationResult.flags as any,
         moderationStatus: moderationResult.status as any,

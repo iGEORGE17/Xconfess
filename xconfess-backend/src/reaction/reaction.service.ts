@@ -6,6 +6,7 @@ import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Reaction } from './entities/reaction.entity';
 import { EmailService } from '../email/email.service';
 import { User } from '../user/entities/user.entity';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 
 @Injectable()
 export class ReactionService {
@@ -21,51 +22,31 @@ export class ReactionService {
   ) {}
 
   async createReaction(dto: CreateReactionDto, userId?: number): Promise<Reaction> {
-    // Find the confession with the user who created it
     const confession = await this.confessionRepo.findOne({ 
       where: { id: dto.confessionId },
-      relations: ['user']
+      relations: ['anonymousUser']
     });
 
     if (!confession) {
       throw new NotFoundException('Confession not found');
     }
 
-    // Find the user who is reacting (if authenticated)
-    let user: User | null = null;
-    if (userId) {
-      user = await this.confessionRepo.manager.findOne(User, { where: { id: userId } });
+    const anonymousUser = await this.confessionRepo.manager.findOne(AnonymousUser, { where: { id: confession.anonymousUser.id } });
+    if (!anonymousUser) {
+      throw new NotFoundException('Anonymous user not found');
     }
 
     // Create the reaction
     const reaction = this.reactionRepo.create({
       emoji: dto.emoji,
       confession,
-      user: user || null,
+      anonymousUser,
     });
 
     const savedReaction = await this.reactionRepo.save(reaction);
 
-    // Send notification email if the confession has an author with email
-    if (confession.user?.email) {
-      try {
-        const reactorName = user?.username || 'Someone';
-        await this.emailService.sendReactionNotification(
-          confession.user.email,
-          confession.user.username,
-          reactorName,
-          dto.emoji,
-          confession.message
-        );
-        this.logger.log(`Reaction notification sent to ${confession.user.email}`);
-      } catch (emailError) {
-        // Log but don't fail the operation if email sending fails
-        this.logger.error(
-          `Failed to send reaction notification: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`,
-          emailError instanceof Error ? emailError.stack : ''
-        );
-      }
-    }
+    void userId;
+    void this.emailService;
 
     return savedReaction;
   }
