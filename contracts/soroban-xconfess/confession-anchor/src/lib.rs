@@ -65,7 +65,7 @@ impl ConfessionAnchor {
         // Emit ConfessionAnchored event:
         // topics: ("confession_anchor", hash)
         // data: (timestamp, anchor_height)
-        // Note: symbol_short! is limited to 9 characters, so we use a
+        // Note: symbol_short is limited to 9 characters, so we use a
         // dynamically constructed Symbol here.
         let event_topic = Symbol::new(&env, "confession_anchor");
         env.events().publish((event_topic, hash.clone()), (timestamp, anchor_height));
