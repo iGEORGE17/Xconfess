@@ -36,7 +36,6 @@ pub struct ConfessionAnchor;
 #[contractimpl]
 impl ConfessionAnchor {
     /// Anchor a new confession hash on-chain.
-    ///
     /// - `hash`: 32-byte hash of the confession content.
     /// - `timestamp`: client-provided timestamp (e.g., ms since epoch).
     ///
