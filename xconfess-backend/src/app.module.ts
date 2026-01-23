@@ -15,6 +15,7 @@ import { MessagesModule } from './messages/messages.module';
 import { ReportModule } from './report/reports.module';
 
 import { RateLimitGuard } from './auth/guard/rate-limit.guard';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { RateLimitGuard } from './auth/guard/rate-limit.guard';
     ReactionModule,
     MessagesModule,
     ReportModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [
