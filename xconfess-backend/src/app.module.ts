@@ -13,6 +13,9 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
 import { MessagesModule } from './messages/messages.module';
+import { ReportModule } from './report/reports.module';
+
+import { RateLimitGuard } from './auth/guard/rate-limit.guard';
 
 @Module({
   imports: [
@@ -25,10 +28,12 @@ import { MessagesModule } from './messages/messages.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        throttlers: [{
-          ttl: config.get<number>('throttle.ttl') || 900,
-          limit: config.get<number>('throttle.limit') || 100,
-        }],
+        throttlers: [
+          {
+            ttl: config.get<number>('throttle.ttl') || 900,
+            limit: config.get<number>('throttle.limit') || 100,
+          },
+        ],
       }),
     }),
     TypeOrmModule.forRootAsync({
@@ -42,6 +47,7 @@ import { MessagesModule } from './messages/messages.module';
     ConfessionDraftModule,
     ReactionModule,
     MessagesModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [
@@ -49,6 +55,10 @@ import { MessagesModule } from './messages/messages.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
     },
   ],
 })
