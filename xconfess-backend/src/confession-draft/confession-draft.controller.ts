@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  UnauthorizedException,
   Param,
   Patch,
   Post,
@@ -26,7 +27,9 @@ export class ConfessionDraftController {
   private getUserId(req: RequestWithUser): number {
     const raw = req.user?.userId ?? req.user?.id;
     const parsed = typeof raw === 'string' ? parseInt(raw, 10) : raw;
-    if (!parsed || Number.isNaN(parsed)) return 0;
+    if (!parsed || Number.isNaN(parsed)) {
+      throw new UnauthorizedException('Invalid authentication context');
+    }
     return parsed;
   }
 

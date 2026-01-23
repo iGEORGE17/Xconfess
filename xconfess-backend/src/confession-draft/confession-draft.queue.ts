@@ -1,12 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { ConfessionDraftService } from './confession-draft.service';
 
 @Injectable()
-export class ConfessionDraftQueue {
+export class ConfessionDraftQueue implements OnModuleDestroy {
   private readonly queue: Queue;
   private readonly worker: Worker;
+  private readonly logger = new Logger(ConfessionDraftQueue.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -49,15 +50,35 @@ export class ConfessionDraftQueue {
       { connection: redisConfig },
     );
 
-    void this.queue.add(
-      'publish-due',
-      {},
-      {
-        repeat: { pattern: '* * * * *' },
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-    );
+    this.worker.on('error', (err) => {
+      const trace = err instanceof Error ? err.stack : String(err);
+      this.logger.error('ConfessionDraftQueue worker error', trace);
+    });
+
+    this.worker.on('failed', (job, err) => {
+      const trace = err instanceof Error ? err.stack : String(err);
+      this.logger.error(
+        `ConfessionDraftQueue job failed: name=${job?.name} id=${job?.id} data=${JSON.stringify(job?.data ?? {})}`,
+        trace,
+      );
+    });
+
+    (async () => {
+      try {
+        await this.queue.add(
+          'publish-due',
+          {},
+          {
+            repeat: { pattern: '* * * * *' },
+            removeOnComplete: true,
+            removeOnFail: false,
+          },
+        );
+      } catch (err) {
+        const trace = err instanceof Error ? err.stack : String(err);
+        this.logger.error('Failed to schedule publish-due recurring job', trace);
+      }
+    })();
   }
 
   async onModuleDestroy() {

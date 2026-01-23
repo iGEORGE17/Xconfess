@@ -29,12 +29,14 @@ describe('Auth Integration Tests - Forgot Password Flow', () => {
   let userRepository: Repository<User>;
   let passwordResetRepository: Repository<PasswordReset>;
 
+  const encrypted = CryptoUtil.encrypt('test@example.com');
+
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
-    emailIv: CryptoUtil.encrypt('test@example.com').iv,
-    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailEncrypted: encrypted.encrypted,
+    emailIv: encrypted.iv,
+    emailTag: encrypted.tag,
     emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,
@@ -261,12 +263,14 @@ describe('AuthService Integration', () => {
   let passwordResetService: PasswordResetService;
   let userRepository: Repository<User>;
 
+  const encrypted = CryptoUtil.encrypt('test@example.com');
+
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
-    emailIv: CryptoUtil.encrypt('test@example.com').iv,
-    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailEncrypted: encrypted.encrypted,
+    emailIv: encrypted.iv,
+    emailTag: encrypted.tag,
     emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,

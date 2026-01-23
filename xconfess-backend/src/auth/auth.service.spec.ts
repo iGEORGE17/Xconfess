@@ -27,12 +27,14 @@ describe('AuthService', () => {
   let passwordResetService: PasswordResetService;
   let jwtService: JwtService;
 
+  const enc = CryptoUtil.encrypt('test@example.com');
+
   const mockUser: User = {
     id: 1,
     username: 'testuser',
-    emailEncrypted: CryptoUtil.encrypt('test@example.com').encrypted,
-    emailIv: CryptoUtil.encrypt('test@example.com').iv,
-    emailTag: CryptoUtil.encrypt('test@example.com').tag,
+    emailEncrypted: enc.encrypted,
+    emailIv: enc.iv,
+    emailTag: enc.tag,
     emailHash: CryptoUtil.hash('test@example.com'),
     password: 'hashedpassword',
     resetPasswordToken: null,

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsISO8601, IsTimeZone, MaxLength } from 'class-validator';
 
 export class CreateConfessionDraftDto {
   @IsString()
@@ -7,10 +7,10 @@ export class CreateConfessionDraftDto {
   content: string;
 
   @IsOptional()
-  @IsString()
+  @IsISO8601({}, { message: 'scheduledFor must be a valid ISO 8601 date' })
   scheduledFor?: string;
 
   @IsOptional()
-  @IsString()
+  @IsTimeZone({ message: 'timezone must be a valid IANA timezone' })
   timezone?: string;
 }

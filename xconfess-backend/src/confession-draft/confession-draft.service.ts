@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, LessThan, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { ConfessionDraft, ConfessionDraftStatus } from './entities/confession-draft.entity';
 import { encryptConfession, decryptConfession } from '../utils/confession-encryption';
 import { ConfessionService } from '../confession/confession.service';
@@ -154,24 +154,27 @@ export class ConfessionDraftService {
   }
 
   async publishNow(userId: number, id: string) {
-    const draft = await this.draftRepo.findOne({ where: { id } });
-    if (!draft) throw new NotFoundException('Draft not found');
-    if (draft.userId !== userId) throw new ForbiddenException();
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ConfessionDraft);
+      const draft = await repo.findOne({ where: { id } });
+      if (!draft) throw new NotFoundException('Draft not found');
+      if (draft.userId !== userId) throw new ForbiddenException();
 
-    if (draft.status === ConfessionDraftStatus.POSTED) {
-      throw new BadRequestException('Draft already posted');
-    }
+      if (draft.status === ConfessionDraftStatus.POSTED) {
+        throw new BadRequestException('Draft already posted');
+      }
 
-    const message = decryptConfession(draft.content);
-    const confession = await this.confessionService.create({ message } as any);
+      const message = decryptConfession(draft.content);
+      const confession = await this.confessionService.create({ message } as any, manager);
 
-    draft.status = ConfessionDraftStatus.POSTED;
-    draft.scheduledFor = null;
-    draft.publishAttempts = 0;
-    draft.lastPublishError = null;
-    await this.draftRepo.save(draft);
+      draft.status = ConfessionDraftStatus.POSTED;
+      draft.scheduledFor = null;
+      draft.publishAttempts = 0;
+      draft.lastPublishError = null;
+      const savedDraft = await repo.save(draft);
 
-    return { confession, draft: this.sanitizeForResponse(draft) };
+      return { confession, draft: this.sanitizeForResponse(savedDraft) };
+    });
   }
 
   async convertPostedToDraft(userId: number, id: string) {
@@ -201,16 +204,14 @@ export class ConfessionDraftService {
     const due = await this.draftRepo.find({
       where: {
         status: ConfessionDraftStatus.SCHEDULED,
+        scheduledFor: LessThanOrEqual(new Date()),
+        publishAttempts: LessThan(MAX_PUBLISH_ATTEMPTS),
       },
       order: { scheduledFor: 'ASC' },
       take: 200,
     });
 
-    const now = Date.now();
-    return due
-      .filter((d) => !!d.scheduledFor && d.scheduledFor.getTime() <= now)
-      .filter((d) => d.publishAttempts < MAX_PUBLISH_ATTEMPTS)
-      .map((d) => d.id);
+    return due.map((d) => d.id);
   }
 
   async publishScheduledDraftById(draftId: string): Promise<void> {
@@ -233,7 +234,7 @@ export class ConfessionDraftService {
 
       try {
         const message = decryptConfession(draft.content);
-        await this.confessionService.create({ message } as any);
+        await this.confessionService.create({ message } as any, manager);
 
         draft.status = ConfessionDraftStatus.POSTED;
         draft.scheduledFor = null;

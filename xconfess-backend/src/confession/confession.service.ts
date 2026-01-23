@@ -17,6 +17,9 @@ import { AiModerationService, ModerationStatus } from '../moderation/ai-moderati
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AnonymousUserService } from '../user/anonymous-user.service';
+import { EntityManager, Repository } from 'typeorm';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
+import { AnonymousConfession } from './entities/confession.entity';
 
 @Injectable()
 export class ConfessionService {
@@ -37,7 +40,7 @@ export class ConfessionService {
     }).trim();
   }
 
-  async create(dto: CreateConfessionDto) {
+  async create(dto: CreateConfessionDto, manager?: EntityManager) {
     const msg = this.sanitizeMessage(dto.message);
     if (!msg) throw new BadRequestException('Invalid confession content');
 
@@ -46,11 +49,17 @@ export class ConfessionService {
       const moderationResult = await this.aiModerationService.moderateContent(msg);
 
       // Step 1.5: Create an AnonymousUser to associate with this confession
-      const anonymousUser = await this.anonymousUserService.create();
+      const anonymousUser = manager
+        ? await manager.getRepository(AnonymousUser).save(manager.getRepository(AnonymousUser).create())
+        : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
       const encryptedMsg = encryptConfession(msg);
-      const conf = this.confessionRepo.create({
+      const confessionRepo: Repository<AnonymousConfession> = manager
+        ? manager.getRepository(AnonymousConfession)
+        : (this.confessionRepo as unknown as Repository<AnonymousConfession>);
+
+      const conf = confessionRepo.create({
         message: encryptedMsg,
         gender: dto.gender,
         anonymousUser,
@@ -62,7 +71,7 @@ export class ConfessionService {
         moderationDetails: moderationResult.details,
       });
 
-      const savedConfession = await this.confessionRepo.save(conf);
+      const savedConfession = await confessionRepo.save(conf);
 
       // Step 3: Log moderation decision
       await this.moderationRepoService.createLog(
@@ -71,6 +80,7 @@ export class ConfessionService {
         savedConfession.id,
         undefined,
         'openai',
+        manager,
       );
 
       // Step 4: Handle high-severity content

@@ -72,7 +72,7 @@ describe('ConfessionService - View Count Logic', () => {
     expect(cache.checkAndMarkView).toHaveBeenCalledWith('1', expect.any(String));
   });
 
- it('should handle cache service failures gracefully', async () => {
+ it('should propagate cache service failures', async () => {
    const base = { id: '1', message: 'iv:deadbeef', view_count: 0 };
    (repo.findOne as jest.Mock).mockResolvedValue(base);
    (cache.checkAndMarkView as jest.Mock).mockRejectedValue(new Error('Redis error'));

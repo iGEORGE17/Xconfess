@@ -1,12 +1,9 @@
-import { Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateReactionDto } from './dto/create-reaction.dto';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Reaction } from './entities/reaction.entity';
-import { EmailService } from '../email/email.service';
-import { User } from '../user/entities/user.entity';
-import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 
 @Injectable()
 export class ReactionService {
@@ -17,11 +14,9 @@ export class ReactionService {
     private reactionRepo: Repository<Reaction>,
     @InjectRepository(AnonymousConfession)
     private confessionRepo: Repository<AnonymousConfession>,
-    @Inject(forwardRef(() => EmailService))
-    private emailService: EmailService,
   ) {}
 
-  async createReaction(dto: CreateReactionDto, userId?: number): Promise<Reaction> {
+  async createReaction(dto: CreateReactionDto): Promise<Reaction> {
     const confession = await this.confessionRepo.findOne({ 
       where: { id: dto.confessionId },
       relations: ['anonymousUser']
@@ -31,7 +26,7 @@ export class ReactionService {
       throw new NotFoundException('Confession not found');
     }
 
-    const anonymousUser = await this.confessionRepo.manager.findOne(AnonymousUser, { where: { id: confession.anonymousUser.id } });
+    const anonymousUser = confession.anonymousUser;
     if (!anonymousUser) {
       throw new NotFoundException('Anonymous user not found');
     }
@@ -44,9 +39,6 @@ export class ReactionService {
     });
 
     const savedReaction = await this.reactionRepo.save(reaction);
-
-    void userId;
-    void this.emailService;
 
     return savedReaction;
   }

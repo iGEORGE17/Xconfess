@@ -31,7 +31,8 @@ export class UserService {
   async findByEmail(email: string): Promise<User | null> {
     try {
       this.logger.debug(`Finding user by email (hashed)`);
-      const emailHash = CryptoUtil.hash(email);
+      const normalizedEmail = email.trim().toLowerCase();
+      const emailHash = CryptoUtil.hash(normalizedEmail);
       const user = await this.userRepository.findOne({ where: { emailHash } });
 
       if (user) {
@@ -156,12 +157,14 @@ export class UserService {
     try {
       this.logger.log(`Creating new user with email: [PROTECTED]`);
 
+      const normalizedEmail = email.trim().toLowerCase();
+
       // Hash the password with bcrypt
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Encrypt and hash email
-      const { encrypted, iv, tag } = CryptoUtil.encrypt(email);
-      const emailHash = CryptoUtil.hash(email);
+      const { encrypted, iv, tag } = CryptoUtil.encrypt(normalizedEmail);
+      const emailHash = CryptoUtil.hash(normalizedEmail);
 
       // Create user entity
       const user = this.userRepository.create({
@@ -179,7 +182,7 @@ export class UserService {
 
       // Send welcome email (fire and forget)
       try {
-        const decryptedEmail = email; // already have it
+        const decryptedEmail = normalizedEmail; // already have it
         await this.emailService.sendWelcomeEmail(decryptedEmail, savedUser.username);
         this.logger.log(`Welcome email sent to [PROTECTED]`);
       } catch (emailError) {

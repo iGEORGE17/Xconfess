@@ -10,6 +10,8 @@ describe('ConfessionDraftService', () => {
   let repo: jest.Mocked<Repository<ConfessionDraft>>;
 
   beforeEach(async () => {
+    process.env.CONFESSION_AES_KEY = '12345678901234567890123456789012';
+
     repo = {
       count: jest.fn(),
       create: jest.fn(),
@@ -34,8 +36,6 @@ describe('ConfessionDraftService', () => {
     }).compile();
 
     service = module.get(ConfessionDraftService);
-
-    process.env.CONFESSION_AES_KEY = '12345678901234567890123456789012';
   });
 
   it('createDraft encrypts content and returns decrypted content', async () => {

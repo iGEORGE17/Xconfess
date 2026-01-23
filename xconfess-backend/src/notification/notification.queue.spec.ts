@@ -10,6 +10,15 @@ describe('NotificationQueue', () => {
   let service: NotificationQueue;
   let emailService: EmailService;
 
+  async function waitForMock(mock: jest.Mock, timeout = 5000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      if (mock.mock.calls.length > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('Timeout waiting for mock to be called');
+  }
+
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue: any) => {
       const config = {
@@ -90,8 +99,7 @@ describe('NotificationQueue', () => {
 
     await service.enqueueCommentNotification(payload);
 
-    // Wait for the worker to process the job
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await waitForMock(mockEmailService.sendCommentNotification);
 
     expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith({
       to: 'test@example.com',
@@ -101,21 +109,15 @@ describe('NotificationQueue', () => {
   });
 
   it('should create an anonymized preview of the comment', async () => {
-    const longComment = {
-      ...mockComment,
-      content: 'This is a very long comment that should be truncated to create a preview. It contains more than 100 characters to test the truncation functionality.',
-    };
-
     const payload = {
       confession: mockConfession,
-      comment: longComment,
+      comment: mockLongComment,
       recipientEmail: 'test@example.com',
     };
 
     await service.enqueueCommentNotification(payload);
 
-    // Wait for the worker to process the job
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await waitForMock(mockEmailService.sendCommentNotification);
 
     expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith({
       to: 'test@example.com',

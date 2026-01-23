@@ -1,15 +1,12 @@
-import { Controller, Post, Body, UseGuards, Request, ForbiddenException, NotFoundException, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, ForbiddenException, NotFoundException, Get, Query, ParseUUIDPipe } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto, ReplyMessageDto } from './dto/message.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { NotificationQueue } from '../notification/notification.queue';
-import { ViewMessagesDto } from './dto/view-messages.dto';
 
 @Controller('messages')
 export class MessagesController {
   constructor(
     private readonly messagesService: MessagesService,
-    private readonly notificationQueue: NotificationQueue,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -34,7 +31,7 @@ export class MessagesController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getMessages(@Query('confession_id') confession_id: string, @Request() req) {
+  async getMessages(@Query('confession_id', new ParseUUIDPipe()) confession_id: string, @Request() req) {
     const messages = await this.messagesService.findForConfessionAuthor(confession_id, req.user);
     // Hide sender info for anonymity
     return {

@@ -6,6 +6,11 @@ import { CreateMessageDto, ReplyMessageDto } from './dto/message.dto';
 import { User } from '../user/entities/user.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 
+interface SenderContext {
+  userId?: number | string;
+  id?: number | string;
+}
+
 @Injectable()
 export class MessagesService {
   constructor(
@@ -15,11 +20,15 @@ export class MessagesService {
     private readonly confessionRepository: Repository<AnonymousConfession>,
   ) {}
 
-  async create(createMessageDto: CreateMessageDto, sender: any): Promise<Message> {
-    const confession = await this.confessionRepository.findOne({ where: { id: createMessageDto.confession_id }, relations: ['anonymousUser'] });
+  async create(createMessageDto: CreateMessageDto, sender: SenderContext): Promise<Message> {
+    const confession = await this.confessionRepository.findOne({ where: { id: createMessageDto.confession_id } });
     if (!confession) throw new NotFoundException('Confession not found');
 
-    const senderId = (sender as any)?.userId ?? (sender as any)?.id;
+    const senderIdRaw = sender?.userId ?? sender?.id;
+    const senderId = typeof senderIdRaw === 'string' ? parseInt(senderIdRaw, 10) : senderIdRaw;
+    if (!senderId || Number.isNaN(senderId)) {
+      throw new BadRequestException('Invalid sender id');
+    }
     const senderUser = senderId
       ? await this.confessionRepository.manager.findOne(User, { where: { id: senderId } })
       : null;
@@ -38,7 +47,7 @@ export class MessagesService {
     if (!confessionId || confessionId.trim() === '') {
       throw new BadRequestException('Invalid confession ID');
     }
-    const confession = await this.confessionRepository.findOne({ where: { id: confessionId }, relations: ['anonymousUser'] });
+    const confession = await this.confessionRepository.findOne({ where: { id: confessionId } });
     if (!confession) throw new NotFoundException('Confession not found');
      // Consider adding pagination for large message lists
     return this.messageRepository.find({ 

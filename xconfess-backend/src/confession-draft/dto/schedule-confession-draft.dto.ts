@@ -1,11 +1,11 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsOptional, IsTimeZone } from 'class-validator';
 
 export class ScheduleConfessionDraftDto {
-  @IsString()
+  @IsDateString()
   @IsNotEmpty()
   scheduledFor: string;
 
   @IsOptional()
-  @IsString()
+  @IsTimeZone()
   timezone?: string;
 }
