@@ -38,7 +38,6 @@ impl ConfessionAnchor {
     /// Anchor a new confession hash on-chain.
     /// - `hash`: 32-byte hash of the confession content.
     /// - `timestamp`: client-provided timestamp (e.g., ms since epoch).
-    ///
     /// Returns a `Symbol` status:
     /// - "anchored" when stored successfully.
     /// - "exists" if the hash was already anchored (no-op).
