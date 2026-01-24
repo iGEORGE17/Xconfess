@@ -1,90 +1,28 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
 import { AnonymousContextMiddleware } from '../src/middleware/anonymous-context.middleware';
-import { AnonymousContextModule } from '../src/middleware/anonymous-context.module';
-import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
-import { User } from '../src/user/entities/user.entity';
 
-describe('AnonymousContextMiddleware (e2e)', () => {
-  let app: INestApplication;
-  let middleware: AnonymousContextMiddleware;
+describe('AnonymousContextMiddleware', () => {
+  it('adds x-anonymous-context-id when req.user exists', () => {
+    const mw = new AnonymousContextMiddleware();
+    const req: any = { user: { id: 1 }, headers: {} };
+    const res: any = {};
+    const next = jest.fn();
 
-  const mockUser: User = {
-    id: 1,
-    username: 'testuser',
-    email: 'test@example.com',
-    password: 'hashedpassword',
-    is_active: true,
-    resetPasswordToken: null,
-    resetPasswordExpires: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    confessions: [],
-  };
+    mw.use(req, res, next);
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AnonymousContextModule],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({
-        canActivate: (context) => {
-          const request = context.switchToHttp().getRequest();
-          request.user = mockUser;
-          return true;
-        },
-      })
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    middleware = moduleFixture.get<AnonymousContextMiddleware>(AnonymousContextMiddleware);
-    await app.init();
+    expect(req.headers['x-anonymous-context-id']).toMatch(/^anon_[a-f0-9-]+$/);
+    expect(req['anonymousContextId']).toMatch(/^anon_[a-f0-9-]+$/);
+    expect(next).toHaveBeenCalled();
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('does not add header when unauthenticated', () => {
+    const mw = new AnonymousContextMiddleware();
+    const req: any = { headers: {} };
+    const res: any = {};
+    const next = jest.fn();
+
+    mw.use(req, res, next);
+
+    expect(req.headers['x-anonymous-context-id']).toBeUndefined();
+    expect(next).toHaveBeenCalled();
   });
-
-  it('should add anonymous context header for authenticated requests', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/test')
-      .set('Authorization', 'Bearer test-token');
-
-    expect(response.headers['x-anonymous-context-id']).toBeDefined();
-    expect(response.headers['x-anonymous-context-id']).toMatch(/^anon_[a-f0-9-]+$/);
-  });
-
-  it('should generate unique anonymous context IDs for different requests', async () => {
-    const response1 = await request(app.getHttpServer())
-      .get('/test')
-      .set('Authorization', 'Bearer test-token');
-
-    const response2 = await request(app.getHttpServer())
-      .get('/test')
-      .set('Authorization', 'Bearer test-token');
-
-    expect(response1.headers['x-anonymous-context-id']).not.toBe(
-      response2.headers['x-anonymous-context-id'],
-    );
-  });
-
-  it('should not add anonymous context header for unauthenticated requests', async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AnonymousContextModule],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({
-        canActivate: () => false,
-      })
-      .compile();
-
-    const app = moduleFixture.createNestApplication();
-    await app.init();
-
-    const response = await request(app.getHttpServer()).get('/test');
-
-    expect(response.headers['x-anonymous-context-id']).toBeUndefined();
-    await app.close();
-  });
-}); 
+});

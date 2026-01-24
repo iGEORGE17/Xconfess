@@ -12,6 +12,9 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
 import { MessagesModule } from './messages/messages.module';
+import { AdminModule } from './admin/admin.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ReportModule } from './report/report.module';
 
 @Module({
   imports: [
@@ -35,11 +38,14 @@ import { MessagesModule } from './messages/messages.module';
       inject: [ConfigService],
       useFactory: getTypeOrmConfig,
     }),
+    EventEmitterModule.forRoot(),
     UserModule,
     AuthModule,
     ConfessionModule,
     ReactionModule,
     MessagesModule,
+    AdminModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,10 +1,10 @@
 import * as crypto from 'crypto';
 
 const algorithm = 'aes-256-cbc';
-const key = process.env.CONFESSION_AES_KEY;
 const ivLength = 16;
 
 export function encryptConfession(text: string): string {
+  const key = process.env.CONFESSION_AES_KEY;
   if (!key || key.length !== 32) throw new Error('Invalid AES key');
   const iv = crypto.randomBytes(ivLength);
   const cipher = crypto.createCipheriv(algorithm, Buffer.from(key), iv);
@@ -14,6 +14,7 @@ export function encryptConfession(text: string): string {
 }
 
 export function decryptConfession(encrypted: string): string {
+  const key = process.env.CONFESSION_AES_KEY;
   if (!key || key.length !== 32) throw new Error('Invalid AES key');
   const [ivHex, encryptedText] = encrypted.split(':');
   const iv = Buffer.from(ivHex, 'hex');

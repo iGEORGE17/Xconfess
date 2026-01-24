@@ -9,7 +9,8 @@ export class AnonymousContextMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction) {
     // Only add anonymous context for authenticated users
-    if (req.user) {
+    const authReq = req as Request & { user?: any };
+    if (authReq.user) {
       // Generate a unique anonymous context ID
       const anonymousContextId = this.generateAnonymousContextId();
       

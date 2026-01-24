@@ -5,6 +5,9 @@ import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.f
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Match required endpoint prefix: /api/...
+  app.setGlobalPrefix('api');
   
   // Enable validation pipes
   app.useGlobalPipes(new ValidationPipe({
