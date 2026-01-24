@@ -23,16 +23,13 @@ import {
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AnonymousUserService } from '../user/anonymous-user.service';
-<<<<<<< HEAD
 import { EntityManager, Repository } from 'typeorm';
 import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from './entities/confession.entity';
-=======
 import { AppLogger } from 'src/logger/logger.service';
 import { maskUserId } from 'src/utils/mask-user-id';
 import { EncryptionService } from 'src/encryption/encryption.service';
 import { ConfessionResponseDto } from './dto/confession-response.dto';
->>>>>>> cb346db3fdf4b06f193f7008c4402253912bd33f
 
 @Injectable()
 export class ConfessionService {
@@ -68,7 +65,9 @@ export class ConfessionService {
 
       // Step 1.5: Create an AnonymousUser to associate with this confession
       const anonymousUser = manager
-        ? await manager.getRepository(AnonymousUser).save(manager.getRepository(AnonymousUser).create())
+        ? await manager
+            .getRepository(AnonymousUser)
+            .save(manager.getRepository(AnonymousUser).create())
         : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
