@@ -3,7 +3,7 @@ import { AppService } from './app.service';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
-@ApiTags('App') /
+@ApiTags('App') 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
