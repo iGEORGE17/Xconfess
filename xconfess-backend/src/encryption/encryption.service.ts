@@ -2,12 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16;
+
 @Injectable()
 export class EncryptionService {
-  private readonly algorithm = 'aes-256-gcm';
   private readonly key: Buffer;
-  private readonly ivLength = 16;
-  private readonly authTagLength = 16;
 
   constructor(private configService: ConfigService) {
     const keyString = this.configService.get<string>('ENCRYPTION_KEY');
@@ -16,7 +16,6 @@ export class EncryptionService {
       throw new Error('ENCRYPTION_KEY must be set in environment variables');
     }
 
-    // Ensure key is 32 bytes for AES-256
     this.key = Buffer.from(keyString, 'hex');
 
     if (this.key.length !== 32) {
@@ -24,94 +23,60 @@ export class EncryptionService {
     }
   }
 
-  /**
-   * Encrypts text using AES-256-GCM
-   * @param text - Plain text to encrypt
-   * @returns Encrypted string with IV and auth tag prepended
-   */
   encrypt(text: string): string {
     if (!text) return text;
 
-    try {
-      const iv = randomBytes(this.ivLength);
-      const cipher = createCipheriv(this.algorithm, this.key, iv);
+    const iv = randomBytes(IV_LENGTH);
+    const cipher = createCipheriv(ALGORITHM, this.key, iv);
 
-      let encrypted = cipher.update(text, 'utf8', 'hex');
-      encrypted += cipher.final('hex');
+    const encrypted = cipher.update(text, 'utf8', 'hex') + cipher.final('hex');
+    const authTag = cipher.getAuthTag();
 
-      const authTag = cipher.getAuthTag();
-
-      // Format: iv:authTag:encryptedData
-      return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
-    } catch (error) {
-      throw new Error(`Encryption failed: ${error.message}`);
-    }
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
   }
 
-  /**
-   * Decrypts text encrypted with encrypt()
-   * @param encryptedText - Encrypted string with IV and auth tag
-   * @returns Decrypted plain text
-   */
   decrypt(encryptedText: string): string {
     if (!encryptedText) return encryptedText;
 
-    try {
-      const parts = encryptedText.split(':');
+    const [ivHex, authTagHex, encrypted] = encryptedText.split(':');
 
-      if (parts.length !== 3) {
-        throw new Error('Invalid encrypted data format');
-      }
-
-      const [ivHex, authTagHex, encrypted] = parts;
-      const iv = Buffer.from(ivHex, 'hex');
-      const authTag = Buffer.from(authTagHex, 'hex');
-
-      const decipher = createDecipheriv(this.algorithm, this.key, iv);
-      decipher.setAuthTag(authTag);
-
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-
-      return decrypted;
-    } catch (error) {
-      throw new Error(`Decryption failed: ${error.message}`);
+    if (!ivHex || !authTagHex || !encrypted) {
+      throw new Error('Invalid encrypted data format');
     }
+
+    const decipher = createDecipheriv(
+      ALGORITHM,
+      this.key,
+      Buffer.from(ivHex, 'hex'),
+    );
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+
+    return decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8');
   }
 
-  /**
-   * Encrypts an object's specified fields
-   * @param obj - Object to encrypt
-   * @param fields - Array of field names to encrypt
-   * @returns Object with encrypted fields
-   */
-  encryptFields<T extends Record<string, any>>(obj: T, fields: string[]): T {
-    const encrypted = { ...obj };
+  encryptFields<T extends Record<string, unknown>>(obj: T, fields: string[]): T {
+    const result = { ...obj };
 
-    fields.forEach((field) => {
-      if (field in encrypted && typeof encrypted[field] === 'string') {
-        encrypted[field] = this.encrypt(encrypted[field]);
+    for (const field of fields) {
+      const value = result[field];
+      if (typeof value === 'string') {
+        (result as Record<string, unknown>)[field] = this.encrypt(value);
       }
-    });
+    }
 
-    return encrypted;
+    return result;
   }
 
-  /**
-   * Decrypts an object's specified fields
-   * @param obj - Object with encrypted fields
-   * @param fields - Array of field names to decrypt
-   * @returns Object with decrypted fields
-   */
-  decryptFields<T extends Record<string, any>>(obj: T, fields: string[]): T {
-    const decrypted = { ...obj };
+  decryptFields<T extends Record<string, unknown>>(obj: T, fields: string[]): T {
+    const result = { ...obj };
 
-    fields.forEach((field) => {
-      if (field in decrypted && typeof decrypted[field] === 'string') {
-        decrypted[field] = this.decrypt(decrypted[field]);
+    for (const field of fields) {
+      const value = result[field];
+      if (typeof value === 'string') {
+        (result as Record<string, unknown>)[field] = this.decrypt(value);
       }
-    });
+    }
 
-    return decrypted;
+    return result;
   }
 }
