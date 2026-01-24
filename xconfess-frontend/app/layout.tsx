@@ -1,6 +1,11 @@
+
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
+import { OnboardingFlow } from "@/app/components/onboarding/OnboardingFlow";
+import { HelpButton } from "@/app/components/onboarding/HelpButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +33,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+
+        {/* Onboarding system */}
+        <OnboardingFlow />
+        <HelpButton />
       </body>
     </html>
   );

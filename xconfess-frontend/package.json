@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@reactour/tour": "^3.8.0",
     "@tanstack/react-query": "^5.90.19",
     "axios": "^1.13.2",
     "date-fns": "^4.1.0",
@@ -18,6 +19,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
+    "react-joyride": "^2.9.3",
     "socket.io-client": "^4.8.3",
     "zod": "^4.3.5",
     "zustand": "^5.0.10"
@@ -27,6 +29,7 @@
     "@types/node": "^20.19.30",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
+    "@types/react-joyride": "^2.0.2",
     "eslint": "^9",
     "eslint-config-next": "^16.1.4",
     "prettier": "^3.8.0",
