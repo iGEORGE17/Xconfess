@@ -1,7 +1,7 @@
 // src/moderation/moderation-repository.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ModerationLog } from './entities/moderation-log.entity';
 import { ModerationResult, ModerationStatus } from './ai-moderation.service';
 
@@ -20,8 +20,10 @@ export class ModerationRepositoryService {
     confessionId?: string,
     userId?: string,
     apiProvider?: string,
+    manager?: EntityManager,
   ): Promise<ModerationLog> {
-    const log = this.moderationLogRepo.create({
+    const repo = manager ? manager.getRepository(ModerationLog) : this.moderationLogRepo;
+    const log = repo.create({
       confessionId,
       userId,
       content: content.substring(0, 5000),
@@ -34,7 +36,7 @@ export class ModerationRepositoryService {
       apiProvider: apiProvider || 'fallback',
     });
 
-    return await this.moderationLogRepo.save(log);
+    return await repo.save(log);
   }
 
   async updateReview(

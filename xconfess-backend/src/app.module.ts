@@ -7,6 +7,7 @@ import { getTypeOrmConfig } from './config/database.config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfessionModule } from './confession/confession.module';
+import { ConfessionDraftModule } from './confession-draft/confession-draft.module';
 import { ReactionModule } from './reaction/reaction.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -44,6 +45,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     UserModule,
     AuthModule,
     ConfessionModule,
+    ConfessionDraftModule,
     ReactionModule,
     MessagesModule,
     ReportModule,
