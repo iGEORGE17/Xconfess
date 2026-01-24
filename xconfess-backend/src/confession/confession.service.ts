@@ -33,7 +33,6 @@ import { ConfessionResponseDto } from './dto/confession-response.dto';
 
 @Injectable()
 export class ConfessionService {
-  private readonly ENCRYPTED_FIELDS = ['title', 'body'];
   constructor(
     private confessionRepo: AnonymousConfessionRepository,
     private viewCache: ConfessionViewCacheService,
@@ -405,10 +404,10 @@ export class ConfessionService {
   async findAll(): Promise<ConfessionResponseDto[]> {
     try {
       const confessions = await this.confessionRepo.find({
-        order: { createdAt: 'DESC' },
+        order: { created_at: 'DESC' },
       });
 
-      // Decrypt all confessions
+      // Decrypt all confessions and convert to DTO
       return confessions.map((confession) => this.toResponseDto(confession));
     } catch (error) {
       this.logger.error(
@@ -445,23 +444,16 @@ export class ConfessionService {
     }
   }
 
-  /**
-   * Converts encrypted entity to decrypted response DTO
-   */
   private toResponseDto(
-    confession: ConfessionResponseDto,
+    confession: AnonymousConfession,
   ): ConfessionResponseDto {
-    const decrypted = this.encryptionService.decryptFields(
-      confession,
-      this.ENCRYPTED_FIELDS,
-    );
-
+    const decryptedMessage = decryptConfession(confession.message);
+    
     return new ConfessionResponseDto({
-      id: decrypted.id,
-      title: decrypted.title,
-      body: decrypted.body,
-      createdAt: decrypted.createdAt,
-      updatedAt: decrypted.updatedAt,
+      id: String(confession.id),
+      body: String(decryptedMessage),
+      createdAt: confession.created_at,
+      updatedAt: confession.created_at,
     });
   }
 }
