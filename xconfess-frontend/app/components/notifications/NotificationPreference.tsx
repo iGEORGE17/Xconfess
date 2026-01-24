@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Bell, Mail, Smartphone } from "lucide-react";
-import { NotificationPreferences as Preferences } from "@/types/notifications";
+import { ArrowLeft, Save, Bell, Mail } from "lucide-react";
+import { NotificationPreferences as Preferences } from "@/app/types/notifications";
 
 interface NotificationPreferencesProps {
   onClose: () => void;
@@ -81,7 +81,7 @@ export function NotificationPreferences({
   };
 
   const handleToggle = (key: keyof Preferences) => {
-    setPreferences((prev) => ({
+    setPreferences((prev: Preferences) => ({
       ...prev,
       [key]: !prev[key],
     }));
@@ -146,7 +146,7 @@ export function NotificationPreferences({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-purple-600">
+      <div className="p-4 border-b border-gray-200 bg-linear-to-r from-blue-500 to-purple-600">
         <div className="flex items-center gap-3 mb-2">
           <button
             onClick={onClose}
@@ -174,7 +174,7 @@ export function NotificationPreferences({
           <div className="space-y-3">
             {notificationTypes.map((type) => (
               <label
-                key={type.key}
+                key={type.key as string}
                 className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
               >
                 <input
@@ -206,7 +206,7 @@ export function NotificationPreferences({
               const Icon = method.icon;
               return (
                 <label
-                  key={method.key}
+                  key={method.key as string}
                   className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
                 >
                   <input
@@ -234,7 +234,7 @@ export function NotificationPreferences({
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-xs text-blue-800">
             <strong>Note:</strong> Browser notifications require permission.
-            Click "Allow" when prompted to enable push notifications.
+            Click &quot;Allow&quot; when prompted to enable push notifications.
           </p>
         </div>
       </div>

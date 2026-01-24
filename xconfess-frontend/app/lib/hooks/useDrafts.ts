@@ -16,19 +16,19 @@ const STORAGE_KEY = "xconfess-drafts";
 const MAX_DRAFTS = 10;
 
 export function useDrafts() {
-  const [drafts, setDrafts] = useState<Draft[]>([]);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Draft[];
-        setDrafts(parsed);
+  const [drafts, setDrafts] = useState<Draft[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          return JSON.parse(stored) as Draft[];
+        }
+      } catch (error) {
+        console.error("Failed to load drafts:", error);
       }
-    } catch (error) {
-      console.error("Failed to load drafts:", error);
     }
-  }, []);
+    return [];
+  });
 
   const saveDrafts = useCallback((newDrafts: Draft[]) => {
     try {
@@ -56,10 +56,10 @@ export function useDrafts() {
         saveDrafts(updated);
         return updated;
       });
-      
+
       return newDraft.id;
     },
-    [saveDrafts]
+    [saveDrafts],
   );
 
   const updateDraft = useCallback(
@@ -75,13 +75,13 @@ export function useDrafts() {
                   (updates.title?.length || draft.title?.length || 0) +
                   (updates.body?.length || draft.body.length),
               }
-            : draft
+            : draft,
         );
         saveDrafts(updated);
         return updated;
       });
     },
-    [saveDrafts]
+    [saveDrafts],
   );
 
   const deleteDraft = useCallback(
@@ -92,7 +92,7 @@ export function useDrafts() {
         return updated;
       });
     },
-    [saveDrafts]
+    [saveDrafts],
   );
 
   const clearDrafts = useCallback(() => {
@@ -104,7 +104,7 @@ export function useDrafts() {
     (id: string): Draft | undefined => {
       return drafts.find((d) => d.id === id);
     },
-    [drafts]
+    [drafts],
   );
 
   return {

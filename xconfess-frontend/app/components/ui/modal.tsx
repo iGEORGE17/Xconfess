@@ -40,14 +40,16 @@ export const Modal: React.FC<ModalProps> = ({
 
     const findFocusableElements = (container: HTMLElement): HTMLElement[] => {
       const focusableSelectors = [
-        'a[href]',
-        'button:not([disabled])',
-        'textarea:not([disabled])',
-        'input:not([disabled])',
-        'select:not([disabled])',
+        "a[href]",
+        "button:not([disabled])",
+        "textarea:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
         '[tabindex]:not([tabindex="-1"])',
-      ].join(', ');
-      return Array.from(container.querySelectorAll(focusableSelectors)) as HTMLElement[];
+      ].join(", ");
+      return Array.from(
+        container.querySelectorAll(focusableSelectors),
+      ) as HTMLElement[];
     };
 
     const focusFirstElement = () => {
@@ -64,7 +66,7 @@ export const Modal: React.FC<ModalProps> = ({
     const timeoutId = setTimeout(focusFirstElement, 0);
 
     const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || !modalRef.current) return;
+      if (e.key !== "Tab" || !modalRef.current) return;
 
       const focusableElements = findFocusableElements(modalRef.current);
       if (focusableElements.length === 0) return;
@@ -85,11 +87,12 @@ export const Modal: React.FC<ModalProps> = ({
       }
     };
 
-    modalRef.current?.addEventListener('keydown', handleTabKey);
+    const modalElement = modalRef.current;
+    modalElement?.addEventListener("keydown", handleTabKey);
 
     return () => {
       clearTimeout(timeoutId);
-      modalRef.current?.removeEventListener('keydown', handleTabKey);
+      modalElement?.removeEventListener("keydown", handleTabKey);
       if (previousActiveElementRef.current) {
         previousActiveElementRef.current.focus();
       }
@@ -130,7 +133,7 @@ export const Modal: React.FC<ModalProps> = ({
           "relative z-50 w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl",
           "max-h-[90vh] overflow-y-auto",
           "outline-none",
-          className
+          className,
         )}
       >
         {title && (
