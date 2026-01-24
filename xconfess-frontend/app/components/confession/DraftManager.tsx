@@ -6,6 +6,7 @@ import { Button } from "@/app/components/ui/button";
 import { Modal } from "@/app/components/ui/modal";
 import { Trash2, Clock, FileText } from "lucide-react";
 import { formatDate } from "@/app/lib/utils/formatDate";
+import { Gender } from "@/app/lib/utils/validation";
 
 interface DraftManagerProps {
   currentDraft: {
@@ -22,15 +23,28 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
   onLoadDraft,
   autoSaveInterval = 30000, // 30 seconds
 }) => {
-  const { drafts, saveDraft, updateDraft, deleteDraft, clearDrafts, loadDraft } = useDrafts();
+  const {
+    drafts,
+    saveDraft,
+    updateDraft,
+    deleteDraft,
+    clearDrafts,
+    loadDraft,
+  } = useDrafts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef<string>("");
 
   useEffect(() => {
+    if (currentDraftId && !loadDraft(currentDraftId)) {
+      setCurrentDraftId(null);
+    }
+  }, [drafts, currentDraftId, loadDraft]);
+
+  useEffect(() => {
     const currentContent = JSON.stringify(currentDraft);
-    
+
     if (currentContent === lastSavedRef.current) {
       return;
     }
@@ -44,12 +58,17 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         const draftToSave = {
           title: currentDraft.title,
           body: currentDraft.body,
-          gender: currentDraft.gender,
+          gender: currentDraft.gender as Gender | undefined,
         };
 
-        if (currentDraftId) {
+        const existingDraft = currentDraftId ? loadDraft(currentDraftId) : null;
+        
+        if (existingDraft && currentDraftId) {
           updateDraft(currentDraftId, draftToSave);
         } else {
+          if (currentDraftId) {
+            setCurrentDraftId(null);
+          }
           const newDraftId = saveDraft(draftToSave);
           setCurrentDraftId(newDraftId);
         }
@@ -62,7 +81,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [currentDraft, autoSaveInterval, currentDraftId, saveDraft, updateDraft]);
+  }, [currentDraft, autoSaveInterval, currentDraftId, saveDraft, updateDraft, loadDraft]);
 
   const handleLoadDraft = (draft: Draft) => {
     onLoadDraft(draft);
@@ -104,7 +123,8 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         <div className="space-y-4">
           {drafts.length === 0 ? (
             <p className="text-center text-zinc-400 py-8">
-              No saved drafts yet. Your drafts will be auto-saved every 30 seconds.
+              No saved drafts yet. Your drafts will be auto-saved every 30
+              seconds.
             </p>
           ) : (
             <>
@@ -159,6 +179,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
                   onClick={() => {
                     if (confirm("Are you sure you want to clear all drafts?")) {
                       clearDrafts();
+                      setCurrentDraftId(null);
                     }
                   }}
                 >

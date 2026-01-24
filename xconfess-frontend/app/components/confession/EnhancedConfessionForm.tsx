@@ -140,12 +140,13 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         });
       }
 
+      setTitle("");
+      setBody("");
+      setGender(undefined);
+      setEnableStellarAnchor(false);
+      setStellarTxHash(null);
+
       setTimeout(() => {
-        setTitle("");
-        setBody("");
-        setGender(undefined);
-        setEnableStellarAnchor(false);
-        setStellarTxHash(null);
         setSubmitSuccess(false);
         setIsPreviewMode(false);
       }, 2000);

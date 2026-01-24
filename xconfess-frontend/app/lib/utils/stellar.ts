@@ -124,6 +124,38 @@ export async function anchorConfession(
       StellarSDK.TransactionBuilder.fromXDR(signedTx, network)
     );
 
+    const status = submitResponse.status as string;
+    
+    if (status === "ERROR") {
+      const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || "Unknown error";
+      throw new Error(`Transaction submission error: ${errorDetails}`);
+    }
+    
+    if (status === "DUPLICATE") {
+      const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || "Transaction already submitted";
+      throw new Error(`Duplicate transaction: ${errorDetails}`);
+    }
+    
+    if (status === "TRY_AGAIN_LATER") {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      throw new Error("Transaction submission temporarily unavailable, please try again");
+    }
+    
+    if (status === "PENDING") {
+      if (!submitResponse.hash) {
+        throw new Error("Transaction submitted but no hash returned");
+      }
+    } else if (status !== "SUCCESS" && status !== "ACCEPTED") {
+      if (!submitResponse.hash) {
+        const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || `Unexpected status: ${status}`;
+        throw new Error(`Transaction submission failed: ${errorDetails}`);
+      }
+    }
+
+    if (!submitResponse.hash) {
+      throw new Error("Transaction submitted but no hash returned for polling");
+    }
+
     let txResponse;
     const maxAttempts = 10;
     for (let i = 0; i < maxAttempts; i++) {

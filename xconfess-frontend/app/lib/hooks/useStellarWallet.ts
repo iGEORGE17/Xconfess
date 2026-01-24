@@ -81,6 +81,10 @@ export function useStellarWallet() {
   const anchor = useCallback(
     async (content: string): Promise<{ success: boolean; txHash?: string; error?: string }> => {
       if (!state.isConnected || !state.publicKey) {
+        setState((prev) => ({
+          ...prev,
+          error: "Wallet not connected",
+        }));
         return {
           success: false,
           error: "Wallet not connected",
