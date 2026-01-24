@@ -65,7 +65,9 @@ export class ConfessionService {
 
       // Step 1.5: Create an AnonymousUser to associate with this confession
       const anonymousUser = manager
-        ? await manager.getRepository(AnonymousUser).save(manager.getRepository(AnonymousUser).create())
+        ? await manager
+            .getRepository(AnonymousUser)
+            .save(manager.getRepository(AnonymousUser).create())
         : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
