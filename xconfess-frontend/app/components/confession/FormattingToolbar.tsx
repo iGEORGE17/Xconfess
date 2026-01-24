@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Bold, Italic, Link, Smile } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Modal } from "@/app/components/ui/modal";
@@ -11,7 +11,6 @@ import {
   insertLink,
   insertEmoji,
 } from "@/app/lib/utils/markdown";
-import EmojiPicker from "emoji-picker-react";
 
 interface FormattingToolbarProps {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
@@ -19,8 +18,22 @@ interface FormattingToolbarProps {
 }
 
 const COMMON_EMOJIS = [
-  "😀", "😂", "❤️", "😢", "🤯", "😊", "😍", "🤔",
-  "👍", "👎", "🔥", "💯", "✨", "🎉", "🙏", "💪",
+  "😀",
+  "😂",
+  "❤️",
+  "😢",
+  "🤯",
+  "😊",
+  "😍",
+  "🤔",
+  "👍",
+  "👎",
+  "🔥",
+  "💯",
+  "✨",
+  "🎉",
+  "🙏",
+  "💪",
 ];
 
 export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
@@ -30,12 +43,6 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-
-  const handleFormat = (formatFn: () => void) => {
-    if (textareaRef.current) {
-      formatFn();
-    }
-  };
 
   const handleBold = () => {
     if (textareaRef.current) {
@@ -61,7 +68,10 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
 
   const handleInsertLink = () => {
     if (textareaRef.current) {
-      const { newText, cursorPos } = insertLink(textareaRef.current, linkUrl || undefined);
+      const { newText, cursorPos } = insertLink(
+        textareaRef.current,
+        linkUrl || undefined,
+      );
       if (onTextChange) {
         onTextChange(newText, cursorPos);
       }
@@ -161,7 +171,10 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
       >
         <div className="space-y-4">
           <div>
-            <label htmlFor="link-url" className="block text-sm font-medium text-zinc-300 mb-2">
+            <label
+              htmlFor="link-url"
+              className="block text-sm font-medium text-zinc-300 mb-2"
+            >
               URL
             </label>
             <Input
@@ -188,7 +201,9 @@ export const FormattingToolbar: React.FC<FormattingToolbarProps> = ({
             >
               Cancel
             </Button>
-            <Button type="button" onClick={handleInsertLink}>Insert Link</Button>
+            <Button type="button" onClick={handleInsertLink}>
+              Insert Link
+            </Button>
           </div>
         </div>
       </Modal>

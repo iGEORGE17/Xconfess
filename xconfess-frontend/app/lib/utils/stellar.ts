@@ -23,8 +23,9 @@ export function getStellarServer(): StellarSDK.Horizon.Server {
 
 export async function isFreighterAvailable(): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  
+
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const freighter = (window as any).freighterApi;
     return !!freighter;
   } catch {
@@ -36,6 +37,7 @@ export async function getPublicKey(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const freighter = (window as any).freighterApi;
     if (!freighter) return null;
 
@@ -49,7 +51,7 @@ export async function getPublicKey(): Promise<string | null> {
 
 export async function anchorConfession(
   confessionHash: string,
-  timestamp: number
+  timestamp: number,
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
     const contractId = process.env.NEXT_PUBLIC_STELLAR_CONTRACT_ID;
@@ -60,6 +62,7 @@ export async function anchorConfession(
       };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const freighter = (window as any).freighterApi;
     if (!freighter) {
       return {
@@ -78,12 +81,13 @@ export async function anchorConfession(
 
     const network = getStellarNetwork();
     const horizonServer = getStellarServer();
-    
-    const sorobanRpcUrl = process.env.NEXT_PUBLIC_STELLAR_SOROBAN_RPC_URL || 
-      (network === StellarSDK.Networks.PUBLIC 
+
+    const sorobanRpcUrl =
+      process.env.NEXT_PUBLIC_STELLAR_SOROBAN_RPC_URL ||
+      (network === StellarSDK.Networks.PUBLIC
         ? "https://soroban-rpc.mainnet.stellar.org"
         : "https://soroban-rpc-testnet.stellar.org");
-    const sorobanServer = new StellarSDK.SorobanRpc.Server(sorobanRpcUrl);
+    const sorobanServer = new StellarSDK.rpc.Server(sorobanRpcUrl);
 
     const account = await horizonServer.loadAccount(publicKey);
     const contract = new StellarSDK.Contract(contractId);
@@ -98,56 +102,72 @@ export async function anchorConfession(
     if (hashArray.length !== 32) {
       throw new Error("Invalid hash length");
     }
-    
+
+    // @ts-ignore
     const hashBytes = StellarSDK.xdr.ScVal.scvBytes(hashArray);
     const timestampVal = StellarSDK.xdr.ScVal.scvU64(
-      StellarSDK.xdr.UInt64.fromString(timestamp.toString())
+      StellarSDK.xdr.Uint64.fromString(timestamp.toString()),
     );
 
     const transaction = new StellarSDK.TransactionBuilder(account, {
       fee: StellarSDK.BASE_FEE,
       networkPassphrase: network,
     })
-      .addOperation(
-        contract.call("anchor_confession", hashBytes, timestampVal)
-      )
+      .addOperation(contract.call("anchor_confession", hashBytes, timestampVal))
       .setTimeout(30)
       .build();
 
     const preparedTx = await sorobanServer.prepareTransaction(transaction);
     const signedTx = await freighter.signTransaction(
       preparedTx.toXDR(),
-      network
+      network,
     );
 
     const submitResponse = await sorobanServer.sendTransaction(
-      StellarSDK.TransactionBuilder.fromXDR(signedTx, network)
+      StellarSDK.TransactionBuilder.fromXDR(signedTx, network),
     );
 
     const status = submitResponse.status as string;
-    
+
     if (status === "ERROR") {
-      const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || "Unknown error";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const errorDetails =
+        submitResponse.errorResultXdr ||
+        submitResponse.errorResult ||
+        (submitResponse as any).details ||
+        "Unknown error";
       throw new Error(`Transaction submission error: ${errorDetails}`);
     }
-    
+
     if (status === "DUPLICATE") {
-      const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || "Transaction already submitted";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const errorDetails =
+        submitResponse.errorResultXdr ||
+        submitResponse.errorResult ||
+        (submitResponse as any).details ||
+        "Transaction already submitted";
       throw new Error(`Duplicate transaction: ${errorDetails}`);
     }
-    
+
     if (status === "TRY_AGAIN_LATER") {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      throw new Error("Transaction submission temporarily unavailable, please try again");
+      throw new Error(
+        "Transaction submission temporarily unavailable, please try again",
+      );
     }
-    
+
     if (status === "PENDING") {
       if (!submitResponse.hash) {
         throw new Error("Transaction submitted but no hash returned");
       }
     } else if (status !== "SUCCESS" && status !== "ACCEPTED") {
       if (!submitResponse.hash) {
-        const errorDetails = submitResponse.errorResultXdr || submitResponse.errorResult || (submitResponse as any).details || `Unexpected status: ${status}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errorDetails =
+          submitResponse.errorResultXdr ||
+          submitResponse.errorResult ||
+          (submitResponse as any).details ||
+          `Unexpected status: ${status}`;
         throw new Error(`Transaction submission failed: ${errorDetails}`);
       }
     }
@@ -161,11 +181,13 @@ export async function anchorConfession(
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       const result = await sorobanServer.getTransaction(submitResponse.hash);
-      
-      if (result.status === StellarSDK.SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
+
+      if (result.status === StellarSDK.rpc.Api.GetTransactionStatus.SUCCESS) {
         txResponse = result;
         break;
-      } else if (result.status === StellarSDK.SorobanRpc.Api.GetTransactionStatus.FAILED) {
+      } else if (
+        result.status === StellarSDK.rpc.Api.GetTransactionStatus.FAILED
+      ) {
         throw new Error(`Transaction failed: ${result.resultXdr}`);
       }
     }
@@ -178,6 +200,7 @@ export async function anchorConfession(
       success: true,
       txHash: submitResponse.hash,
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error("Failed to anchor confession:", error);
     return {
