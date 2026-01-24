@@ -1,7 +1,10 @@
 {
   "name": "xconfess",
   "private": true,
-  "workspaces": ["xconfess-backend", "xconfess-frontend"],
+  "workspaces": [
+    "xconfess-backend",
+    "xconfess-frontend"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=xconfess-backend\" \"npm run dev --workspace=xconfess-frontend\"",
     "dev:backend": "npm run dev --workspace=xconfess-backend",
@@ -10,6 +13,7 @@
   "dependencies": {
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/common": "^11.1.5",
+    "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/testing": "^11.1.5",
     "express": "^5.1.0",
@@ -21,9 +25,9 @@
     "@types/express": "^5.0.3",
     "@types/jest": "^30.0.0",
     "@types/sanitize-html": "^2.16.0",
+    "concurrently": "^8.2.2",
     "jest": "^30.0.5",
     "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
-    "concurrently": "^8.2.2"
+    "ts-node": "^10.9.2"
   }
 }
