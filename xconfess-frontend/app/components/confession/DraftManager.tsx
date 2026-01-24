@@ -22,27 +22,23 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
   onLoadDraft,
   autoSaveInterval = 30000, // 30 seconds
 }) => {
-  const { drafts, saveDraft, deleteDraft, clearDrafts, loadDraft } = useDrafts();
+  const { drafts, saveDraft, updateDraft, deleteDraft, clearDrafts, loadDraft } = useDrafts();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedRef = useRef<string>("");
 
-  // Auto-save functionality
   useEffect(() => {
     const currentContent = JSON.stringify(currentDraft);
     
-    // Only auto-save if content has changed
     if (currentContent === lastSavedRef.current) {
       return;
     }
 
-    // Clear existing timer
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
 
-    // Set new timer
     autoSaveTimerRef.current = setTimeout(() => {
       if (currentDraft.body.trim().length > 0) {
         const draftToSave = {
@@ -52,15 +48,10 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         };
 
         if (currentDraftId) {
-          // Update existing draft
-          const existing = loadDraft(currentDraftId);
-          if (existing) {
-            saveDraft(draftToSave);
-            setCurrentDraftId(existing.id);
-          }
+          updateDraft(currentDraftId, draftToSave);
         } else {
-          // Create new draft
-          saveDraft(draftToSave);
+          const newDraftId = saveDraft(draftToSave);
+          setCurrentDraftId(newDraftId);
         }
         lastSavedRef.current = currentContent;
       }
@@ -71,7 +62,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [currentDraft, autoSaveInterval, currentDraftId, saveDraft, loadDraft]);
+  }, [currentDraft, autoSaveInterval, currentDraftId, saveDraft, updateDraft]);
 
   const handleLoadDraft = (draft: Draft) => {
     onLoadDraft(draft);

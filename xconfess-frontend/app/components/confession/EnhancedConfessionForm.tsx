@@ -38,7 +38,6 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { anchor } = useStellarWallet();
 
-  // Real-time validation
   useEffect(() => {
     const validationErrors = validateConfessionForm({
       title,
@@ -49,26 +48,20 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
     setErrors(validationErrors);
   }, [title, body, gender, enableStellarAnchor]);
 
-  // Load draft handler
   const handleLoadDraft = (draft: Draft) => {
     setTitle(draft.title || "");
     setBody(draft.body);
     setGender(draft.gender);
-    // Focus textarea after loading
     setTimeout(() => {
       textareaRef.current?.focus();
     }, 0);
   };
 
-  // Handle text change from formatting toolbar
   const handleTextChange = (newText: string, cursorPos: number) => {
     setBody(newText);
-    // Set cursor position after state update
-    // Use requestAnimationFrame to ensure DOM is updated
     requestAnimationFrame(() => {
       setTimeout(() => {
         if (textareaRef.current) {
-          // Ensure cursor position is within bounds
           const maxPos = textareaRef.current.value.length;
           const safeCursorPos = Math.min(cursorPos, maxPos);
           textareaRef.current.setSelectionRange(safeCursorPos, safeCursorPos);
@@ -78,13 +71,11 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
     });
   };
 
-  // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
     setSubmitSuccess(false);
 
-    // Validate form
     const validationErrors = validateConfessionForm({
       title,
       body,
@@ -102,7 +93,6 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
     try {
       let txHash: string | undefined;
 
-      // Anchor on Stellar if enabled
       if (enableStellarAnchor) {
         const anchorResult = await anchor(body);
         if (anchorResult.success && anchorResult.txHash) {
@@ -117,7 +107,6 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         }
       }
 
-      // Submit to backend
       const response = await fetch("/api/confessions", {
         method: "POST",
         headers: {
@@ -126,7 +115,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         body: JSON.stringify({
           title: title || undefined,
           body,
-          message: body, // Backend expects 'message' field
+          message: body,
           gender,
           stellarTxHash: txHash,
         }),
@@ -139,10 +128,8 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         );
       }
 
-      // Success
       setSubmitSuccess(true);
       
-      // Call onSubmit callback if provided
       if (onSubmit) {
         onSubmit({
           title,
@@ -153,7 +140,6 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         });
       }
 
-      // Reset form after short delay
       setTimeout(() => {
         setTitle("");
         setBody("");
@@ -204,9 +190,9 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                   {errors.title}
                 </p>
               ) : (
-                <div id="title-counter" />
+                <div />
               )}
-              <CharacterCounter current={title.length} max={200} />
+              <CharacterCounter current={title.length} max={200} id="title-counter" />
             </div>
           </div>
 
@@ -280,9 +266,9 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                       {errors.body}
                     </p>
                   ) : (
-                    <div id="body-counter" />
+                    <div />
                   )}
-                  <CharacterCounter current={body.length} max={5000} />
+                  <CharacterCounter current={body.length} max={5000} id="body-counter" />
                 </div>
               </>
             )}
@@ -358,6 +344,9 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                 setEnableStellarAnchor(false);
                 setErrors({});
                 setSubmitError(null);
+                setSubmitSuccess(false);
+                setStellarTxHash(null);
+                setIsPreviewMode(false);
               }}
               disabled={isSubmitting}
             >

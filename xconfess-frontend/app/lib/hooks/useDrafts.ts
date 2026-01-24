@@ -18,7 +18,6 @@ const MAX_DRAFTS = 10;
 export function useDrafts() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
 
-  // Load drafts from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -31,10 +30,8 @@ export function useDrafts() {
     }
   }, []);
 
-  // Save drafts to localStorage
   const saveDrafts = useCallback((newDrafts: Draft[]) => {
     try {
-      // Sort by savedAt (newest first) and limit to MAX_DRAFTS
       const sorted = [...newDrafts]
         .sort((a, b) => b.savedAt - a.savedAt)
         .slice(0, MAX_DRAFTS);
@@ -45,9 +42,8 @@ export function useDrafts() {
     }
   }, []);
 
-  // Save a draft
   const saveDraft = useCallback(
-    (draft: Omit<Draft, "id" | "savedAt" | "characterCount">) => {
+    (draft: Omit<Draft, "id" | "savedAt" | "characterCount">): string => {
       const newDraft: Draft = {
         ...draft,
         id: crypto.randomUUID(),
@@ -60,11 +56,12 @@ export function useDrafts() {
         saveDrafts(updated);
         return updated;
       });
+      
+      return newDraft.id;
     },
     [saveDrafts]
   );
 
-  // Update existing draft
   const updateDraft = useCallback(
     (id: string, updates: Partial<Omit<Draft, "id" | "savedAt">>) => {
       setDrafts((prev) => {
@@ -87,7 +84,6 @@ export function useDrafts() {
     [saveDrafts]
   );
 
-  // Delete a draft
   const deleteDraft = useCallback(
     (id: string) => {
       setDrafts((prev) => {
@@ -99,13 +95,11 @@ export function useDrafts() {
     [saveDrafts]
   );
 
-  // Clear all drafts
   const clearDrafts = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setDrafts([]);
   }, []);
 
-  // Load a draft by ID
   const loadDraft = useCallback(
     (id: string): Draft | undefined => {
       return drafts.find((d) => d.id === id);

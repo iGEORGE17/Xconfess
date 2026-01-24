@@ -1,9 +1,10 @@
+const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { title, message, body: bodyContent, gender, stellarTxHash } = body;
 
-    // Validate required fields
     if (!message && !bodyContent) {
       return new Response(
         JSON.stringify({ message: "Confession content is required" }),
@@ -14,11 +15,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use bodyContent if provided, otherwise use message
     const confessionContent = bodyContent || message;
-
-    // Prepare request to backend
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/confessions`;
+    const backendUrl = `${BASE_API_URL}/confessions`;
     
     const backendBody: any = {
       message: confessionContent,
@@ -39,8 +37,9 @@ export async function POST(request: Request) {
       });
 
       if (!response.ok) {
-        // If backend is not available or returns error, return demo success for testing
-        if (response.status === 403 || response.status === 404 || response.status >= 500) {
+        const isDemoMode = process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true";
+        
+        if (isDemoMode && (response.status === 403 || response.status === 404 || response.status >= 500)) {
           console.warn("Backend unavailable, returning demo response for testing");
           return new Response(
             JSON.stringify({
@@ -55,7 +54,10 @@ export async function POST(request: Request) {
             }),
             {
               status: 201,
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                "X-Demo-Mode": "true",
+              },
             }
           );
         }
@@ -79,8 +81,9 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
       });
     } catch (fetchError: any) {
-      // If backend is completely unreachable, return demo success for testing
-      if (fetchError.message?.includes("fetch failed") || fetchError.code === "ECONNREFUSED") {
+      const isDemoMode = process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true";
+      
+      if (isDemoMode && (fetchError.message?.includes("fetch failed") || fetchError.code === "ECONNREFUSED")) {
         console.warn("Backend unreachable, returning demo response for testing");
         return new Response(
           JSON.stringify({
@@ -95,11 +98,23 @@ export async function POST(request: Request) {
           }),
           {
             status: 201,
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "X-Demo-Mode": "true",
+            },
           }
         );
       }
-      throw fetchError;
+      
+      return new Response(
+        JSON.stringify({
+          message: "Backend service unavailable",
+        }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
   } catch (error: any) {
     console.error("Error creating confession:", error);
@@ -122,7 +137,6 @@ export async function GET(request: Request) {
   const sort = searchParams.get('sort') ?? 'newest';
   const gender = searchParams.get('gender');
 
-  // Build query parameters for backend
   const backendParams = new URLSearchParams({
     page: page.toString(),
     limit: limit.toString(),
@@ -134,7 +148,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const backendUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/confessions?${backendParams}`;
+    const backendUrl = `${BASE_API_URL}/confessions?${backendParams}`;
 
     const response = await fetch(backendUrl, {
       method: 'GET',

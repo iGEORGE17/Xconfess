@@ -33,7 +33,6 @@ import { ConfessionResponseDto } from './dto/confession-response.dto';
 
 @Injectable()
 export class ConfessionService {
-  private readonly ENCRYPTED_FIELDS = ['title', 'body'];
   constructor(
     private confessionRepo: AnonymousConfessionRepository,
     private viewCache: ConfessionViewCacheService,
@@ -445,27 +444,16 @@ export class ConfessionService {
     }
   }
 
-  /**
-   * Converts encrypted entity to decrypted response DTO
-   * Note: The entity only has 'message' field, not 'title'/'body'
-   * This method maps message to body and uses empty string for title
-   */
   private toResponseDto(
     confession: AnonymousConfession,
   ): ConfessionResponseDto {
-    // Decrypt the message field
     const decryptedMessage = decryptConfession(confession.message);
     
-    // The entity structure doesn't match the DTO exactly
-    // Entity has: id, message, created_at
-    // DTO expects: id, title, body, createdAt, updatedAt
-    // We'll map message to body and use empty title
     return new ConfessionResponseDto({
       id: String(confession.id),
-      title: '', // Entity doesn't have title field - would need to add to entity
-      body: String(decryptedMessage), // Use message as body
+      body: String(decryptedMessage),
       createdAt: confession.created_at,
-      updatedAt: confession.created_at, // Entity doesn't have updatedAt field
+      updatedAt: confession.created_at,
     });
   }
 }

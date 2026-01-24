@@ -7,18 +7,21 @@ interface CharacterCounterProps {
   current: number;
   max: number;
   className?: string;
+  id?: string;
 }
 
 export const CharacterCounter: React.FC<CharacterCounterProps> = ({
   current,
   max,
   className,
+  id,
 }) => {
   const warning = getCharacterCountWarning(current, max);
   const remaining = max - current;
 
   return (
     <div
+      id={id}
       className={cn(
         "text-xs transition-colors",
         {

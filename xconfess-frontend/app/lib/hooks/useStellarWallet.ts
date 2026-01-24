@@ -25,7 +25,6 @@ export function useStellarWallet() {
     error: null,
   });
 
-  // Check wallet availability on mount
   useEffect(() => {
     const checkWallet = async () => {
       const available = await isFreighterAvailable();
@@ -39,7 +38,6 @@ export function useStellarWallet() {
     checkWallet();
   }, []);
 
-  // Connect wallet
   const connect = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
@@ -80,7 +78,6 @@ export function useStellarWallet() {
     }
   }, []);
 
-  // Anchor confession
   const anchor = useCallback(
     async (content: string): Promise<{ success: boolean; txHash?: string; error?: string }> => {
       if (!state.isConnected || !state.publicKey) {

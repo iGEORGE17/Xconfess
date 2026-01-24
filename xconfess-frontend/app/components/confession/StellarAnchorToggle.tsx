@@ -25,7 +25,6 @@ export const StellarAnchorToggle: React.FC<StellarAnchorToggleProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
-    // Auto-connect if wallet is available but not connected
     if (isAvailable && !isConnected && !isLoading && !error) {
       // Don't auto-connect, let user decide
     }

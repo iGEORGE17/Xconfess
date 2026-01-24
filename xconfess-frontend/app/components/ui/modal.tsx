@@ -20,14 +20,79 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   className,
 }) => {
+  const modalRef = React.useRef<HTMLDivElement>(null);
+  const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
+
   React.useEffect(() => {
     if (isOpen) {
+      const previousOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
+      return () => {
+        document.body.style.overflow = previousOverflow;
+      };
     }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    previousActiveElementRef.current = document.activeElement as HTMLElement;
+
+    const findFocusableElements = (container: HTMLElement): HTMLElement[] => {
+      const focusableSelectors = [
+        'a[href]',
+        'button:not([disabled])',
+        'textarea:not([disabled])',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(', ');
+      return Array.from(container.querySelectorAll(focusableSelectors)) as HTMLElement[];
+    };
+
+    const focusFirstElement = () => {
+      if (modalRef.current) {
+        const focusableElements = findFocusableElements(modalRef.current);
+        if (focusableElements.length > 0) {
+          focusableElements[0].focus();
+        } else {
+          modalRef.current.focus();
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(focusFirstElement, 0);
+
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !modalRef.current) return;
+
+      const focusableElements = findFocusableElements(modalRef.current);
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    modalRef.current?.addEventListener('keydown', handleTabKey);
+
     return () => {
-      document.body.style.overflow = "";
+      clearTimeout(timeoutId);
+      modalRef.current?.removeEventListener('keydown', handleTabKey);
+      if (previousActiveElementRef.current) {
+        previousActiveElementRef.current.focus();
+      }
     };
   }, [isOpen]);
 
@@ -59,9 +124,12 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Content */}
       <div
+        ref={modalRef}
+        tabIndex={-1}
         className={cn(
           "relative z-50 w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl",
           "max-h-[90vh] overflow-y-auto",
+          "outline-none",
           className
         )}
       >

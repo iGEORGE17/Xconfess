@@ -1,18 +1,12 @@
 import * as StellarSDK from "@stellar/stellar-sdk";
 import CryptoJS from "crypto-js";
 
-/**
- * Hash confession content for anchoring on Stellar
- * Returns a 32-byte hash as hex string
- */
 export function hashConfession(content: string, timestamp?: number): string {
-  const data = content + (timestamp || Date.now());
-  return CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex);
+  const ts = timestamp || Date.now();
+  const payload = JSON.stringify({ content, timestamp: ts });
+  return CryptoJS.SHA256(payload).toString(CryptoJS.enc.Hex);
 }
 
-/**
- * Get Stellar network configuration
- */
 export function getStellarNetwork(): StellarSDK.Networks {
   const network = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
   return network === "mainnet"
@@ -20,9 +14,6 @@ export function getStellarNetwork(): StellarSDK.Networks {
     : StellarSDK.Networks.TESTNET;
 }
 
-/**
- * Get Stellar server instance
- */
 export function getStellarServer(): StellarSDK.Horizon.Server {
   const horizonUrl =
     process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL ||
@@ -30,14 +21,10 @@ export function getStellarServer(): StellarSDK.Horizon.Server {
   return new StellarSDK.Horizon.Server(horizonUrl);
 }
 
-/**
- * Check if Freighter wallet is available
- */
 export async function isFreighterAvailable(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   
   try {
-    // Check for Freighter extension
     const freighter = (window as any).freighterApi;
     return !!freighter;
   } catch {
@@ -45,9 +32,6 @@ export async function isFreighterAvailable(): Promise<boolean> {
   }
 }
 
-/**
- * Get public key from Freighter wallet
- */
 export async function getPublicKey(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
@@ -63,9 +47,6 @@ export async function getPublicKey(): Promise<string | null> {
   }
 }
 
-/**
- * Anchor confession on Stellar using Soroban contract
- */
 export async function anchorConfession(
   confessionHash: string,
   timestamp: number
@@ -96,35 +77,33 @@ export async function anchorConfession(
     }
 
     const network = getStellarNetwork();
-    const server = getStellarServer();
+    const horizonServer = getStellarServer();
+    
+    const sorobanRpcUrl = process.env.NEXT_PUBLIC_STELLAR_SOROBAN_RPC_URL || 
+      (network === StellarSDK.Networks.PUBLIC 
+        ? "https://soroban-rpc.mainnet.stellar.org"
+        : "https://soroban-rpc-testnet.stellar.org");
+    const sorobanServer = new StellarSDK.SorobanRpc.Server(sorobanRpcUrl);
 
-    // Get account
-    const account = await server.loadAccount(publicKey);
-
-    // Create contract instance
+    const account = await horizonServer.loadAccount(publicKey);
     const contract = new StellarSDK.Contract(contractId);
 
-    // Prepare contract call
-    // Convert hex string to Buffer (32 bytes for SHA-256)
-    const hashBuffer = Buffer.from(confessionHash, "hex");
-    if (hashBuffer.length !== 32) {
+    const hexToUint8Array = (hex: string): Uint8Array => {
+      const matches = hex.match(/.{1,2}/g);
+      if (!matches) throw new Error("Invalid hex string");
+      return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
+    };
+
+    const hashArray = hexToUint8Array(confessionHash);
+    if (hashArray.length !== 32) {
       throw new Error("Invalid hash length");
     }
     
-    // Create ScVal for hash bytes (BytesN<32>)
-    // Convert Buffer to Uint8Array for ScBytes
-    const hashArray = new Uint8Array(hashBuffer);
-    const hashBytes = StellarSDK.xdr.ScVal.scvBytes(
-      StellarSDK.xdr.ScBytes.fromXDR(hashArray)
-    );
-    
-    // Create ScVal for timestamp (u64)
+    const hashBytes = StellarSDK.xdr.ScVal.scvBytes(hashArray);
     const timestampVal = StellarSDK.xdr.ScVal.scvU64(
       StellarSDK.xdr.UInt64.fromString(timestamp.toString())
     );
 
-    // Build transaction with contract invocation
-    // Note: Contract.call() API may vary by SDK version - adjust if needed
     const transaction = new StellarSDK.TransactionBuilder(account, {
       fee: StellarSDK.BASE_FEE,
       networkPassphrase: network,
@@ -135,20 +114,37 @@ export async function anchorConfession(
       .setTimeout(30)
       .build();
 
-    // Sign transaction with Freighter
+    const preparedTx = await sorobanServer.prepareTransaction(transaction);
     const signedTx = await freighter.signTransaction(
-      transaction.toXDR(),
+      preparedTx.toXDR(),
       network
     );
 
-    // Submit transaction
-    const txResponse = await server.submitTransaction(
+    const submitResponse = await sorobanServer.sendTransaction(
       StellarSDK.TransactionBuilder.fromXDR(signedTx, network)
     );
 
+    let txResponse;
+    const maxAttempts = 10;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const result = await sorobanServer.getTransaction(submitResponse.hash);
+      
+      if (result.status === StellarSDK.SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
+        txResponse = result;
+        break;
+      } else if (result.status === StellarSDK.SorobanRpc.Api.GetTransactionStatus.FAILED) {
+        throw new Error(`Transaction failed: ${result.resultXdr}`);
+      }
+    }
+
+    if (!txResponse) {
+      throw new Error("Transaction timeout - could not confirm transaction");
+    }
+
     return {
       success: true,
-      txHash: txResponse.hash,
+      txHash: submitResponse.hash,
     };
   } catch (error: any) {
     console.error("Failed to anchor confession:", error);
