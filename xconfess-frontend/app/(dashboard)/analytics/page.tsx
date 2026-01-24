@@ -59,7 +59,10 @@ export default function AnalyticsPage() {
                 setLoading(true);
                 setError(null);
 
-                const response = await fetch(`/api/analytics?period=${period}`);
+                const token = localStorage.getItem('accessToken');
+                const response = await fetch(`/api/analytics?period=${period}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch analytics data');

@@ -12,8 +12,8 @@ interface Confession {
         love?: number;
         funny?: number;
         sad?: number;
-    };
-    viewCount: number;
+    } | number; // Added number support for consolidated reaction count
+    viewCount?: number;
     createdAt: string;
 }
 
@@ -60,6 +60,7 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
     };
 
     const getTotalReactions = (reactions: Confession['reactions']) => {
+        if (typeof reactions === 'number') return reactions;
         return Object.values(reactions).reduce((sum, val) => sum + (val || 0), 0);
     };
 
@@ -79,9 +80,9 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
                         <div className="flex items-start gap-3">
                             {/* Rank Badge */}
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${index === 0 ? 'bg-gradient-to-br from-yellow-500 to-orange-500 text-white' :
-                                    index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-500 text-white' :
-                                        index === 2 ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white' :
-                                            'bg-zinc-700/50 text-zinc-400'
+                                index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-500 text-white' :
+                                    index === 2 ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white' :
+                                        'bg-zinc-700/50 text-zinc-400'
                                 }`}>
                                 {index + 1}
                             </div>
@@ -111,10 +112,12 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
                                         <Heart className="w-4 h-4 fill-rose-400" />
                                         <span className="font-medium">{getTotalReactions(confession.reactions)}</span>
                                     </div>
-                                    <div className="flex items-center gap-1.5 text-blue-400">
-                                        <Eye className="w-4 h-4" />
-                                        <span className="font-medium">{confession.viewCount.toLocaleString()}</span>
-                                    </div>
+                                    {confession.viewCount !== undefined && (
+                                        <div className="flex items-center gap-1.5 text-blue-400">
+                                            <Eye className="w-4 h-4" />
+                                            <span className="font-medium">{confession.viewCount.toLocaleString()}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
