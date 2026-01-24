@@ -1,6 +1,6 @@
 export class ConfessionResponseDto {
   id: string;
-  title: string;
+  title?: string; // Optional since entity doesn't have this field
   body: string;
   createdAt: Date;
   updatedAt: Date;
