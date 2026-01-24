@@ -23,16 +23,13 @@ import {
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AnonymousUserService } from '../user/anonymous-user.service';
-<<<<<<< HEAD
 import { EntityManager, Repository } from 'typeorm';
 import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from './entities/confession.entity';
-=======
 import { AppLogger } from 'src/logger/logger.service';
 import { maskUserId } from 'src/utils/mask-user-id';
 import { EncryptionService } from 'src/encryption/encryption.service';
 import { ConfessionResponseDto } from './dto/confession-response.dto';
->>>>>>> cb346db3fdf4b06f193f7008c4402253912bd33f
 
 @Injectable()
 export class ConfessionService {
@@ -406,10 +403,10 @@ export class ConfessionService {
   async findAll(): Promise<ConfessionResponseDto[]> {
     try {
       const confessions = await this.confessionRepo.find({
-        order: { createdAt: 'DESC' },
+        order: { created_at: 'DESC' },
       });
 
-      // Decrypt all confessions
+      // Decrypt all confessions and convert to DTO
       return confessions.map((confession) => this.toResponseDto(confession));
     } catch (error) {
       this.logger.error(
@@ -448,21 +445,25 @@ export class ConfessionService {
 
   /**
    * Converts encrypted entity to decrypted response DTO
+   * Note: The entity only has 'message' field, not 'title'/'body'
+   * This method maps message to body and uses empty string for title
    */
   private toResponseDto(
-    confession: ConfessionResponseDto,
+    confession: AnonymousConfession,
   ): ConfessionResponseDto {
-    const decrypted = this.encryptionService.decryptFields(
-      confession,
-      this.ENCRYPTED_FIELDS,
-    );
-
+    // Decrypt the message field
+    const decryptedMessage = decryptConfession(confession.message);
+    
+    // The entity structure doesn't match the DTO exactly
+    // Entity has: id, message, created_at
+    // DTO expects: id, title, body, createdAt, updatedAt
+    // We'll map message to body and use empty title
     return new ConfessionResponseDto({
-      id: decrypted.id,
-      title: decrypted.title,
-      body: decrypted.body,
-      createdAt: decrypted.createdAt,
-      updatedAt: decrypted.updatedAt,
+      id: String(confession.id),
+      title: '', // Entity doesn't have title field - would need to add to entity
+      body: String(decryptedMessage), // Use message as body
+      createdAt: confession.created_at,
+      updatedAt: confession.created_at, // Entity doesn't have updatedAt field
     });
   }
 }
