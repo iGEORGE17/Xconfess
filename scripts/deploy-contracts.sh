@@ -38,10 +38,10 @@ print_header() {
 # Configuration
 NETWORK="testnet"
 IDENTITY="deployer"
-DEPLOYMENTS_FILE="contracts/deployments.json"
+DEPLOYMENTS_FILE="xconfess-contracts/deployments.json"
 
 # Check if running from project root
-if [ ! -d "contracts/soroban-xconfess" ]; then
+if [ ! -d "xconfess-contracts/" ]; then
     print_error "Error: Must run from project root directory"
     echo "Current directory: $(pwd)"
     echo "Please cd to the xConfess root directory"
@@ -105,7 +105,7 @@ print_success "Account is funded"
 declare -A CONTRACTS
 CONTRACTS["confession-anchor"]="confession_anchor"
 # Add more contracts as they're developed
-# CONTRACTS["reputation-badges"]="reputation_badges"
+CONTRACTS["reputation-badges"]="reputation_badges"
 # CONTRACTS["anonymous-tipping"]="anonymous_tipping"
 
 # Track deployment results
@@ -163,8 +163,8 @@ with open('$DEPLOYMENTS_FILE', 'w') as f:
 # Deploy each contract
 for contract_name in "${!CONTRACTS[@]}"; do
     wasm_name="${CONTRACTS[$contract_name]}"
-    CONTRACT_DIR="contracts/soroban-xconfess/$contract_name"
-    WASM_FILE="$CONTRACT_DIR/target/wasm32-unknown-unknown/release/$wasm_name.wasm"
+    CONTRACT_DIR="xconfess-contracts"
+    WASM_FILE="$CONTRACT_DIR/target/wasm32v1-none/release/$wasm_name.wasm"
     
     if [ ! -f "$WASM_FILE" ]; then
         print_warning "WASM file not found: $WASM_FILE"
@@ -188,7 +188,7 @@ for contract_name in "${!CONTRACTS[@]}"; do
     CONTRACT_ID=$(stellar contract deploy \
         --wasm "$WASM_FILE" \
         --source "$IDENTITY" \
-        --network "$NETWORK" \
+        --network 'testnet' \
         2>&1)
     
     if [ $? -eq 0 ]; then
