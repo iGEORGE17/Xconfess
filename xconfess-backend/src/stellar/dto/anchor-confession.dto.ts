@@ -1,9 +1,9 @@
-import { IsNotEmpty, IsString, IsOptional, Matches, Length } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, Matches, MaxLength } from 'class-validator';
 
 export class AnchorConfessionDto {
   @IsNotEmpty()
   @IsString()
-  @Length(64, 64)
+  @MaxLength(128)
   @Matches(/^[a-fA-F0-9]{64}$/, {
     message: 'Invalid Stellar transaction hash format',
   })
@@ -11,9 +11,6 @@ export class AnchorConfessionDto {
 
   @IsOptional()
   @IsString()
-  @Length(64, 64)
-  @Matches(/^[a-fA-F0-9]{64}$/, {
-    message: 'Invalid Stellar hash format',
-  })
+  @MaxLength(64)
   stellarHash?: string;
 }

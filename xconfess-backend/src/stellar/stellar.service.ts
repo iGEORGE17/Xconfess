@@ -28,10 +28,11 @@ export class StellarService {
 
   /**
    * Generate SHA-256 hash of confession content for anchoring
-   * Uses only the content to ensure deterministic hashes
    */
-  hashConfession(content: string): string {
-    return crypto.createHash('sha256').update(content).digest('hex');
+  hashConfession(content: string, timestamp?: number): string {
+    const ts = timestamp || Date.now();
+    const payload = JSON.stringify({ content, timestamp: ts });
+    return crypto.createHash('sha256').update(payload).digest('hex');
   }
 
   /**
@@ -93,12 +94,13 @@ export class StellarService {
   processAnchorData(
     confessionContent: string,
     txHash: string,
+    timestamp?: number,
   ): AnchorData | null {
     if (!this.isValidTxHash(txHash)) {
       return null;
     }
 
-    const stellarHash = this.hashConfession(confessionContent);
+    const stellarHash = this.hashConfession(confessionContent, timestamp);
 
     return {
       stellarTxHash: txHash,

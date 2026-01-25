@@ -1,12 +1,9 @@
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import * as fs from 'fs';
 
-// Load .env file - try project root first, then fallback to __dirname
-const envPath = path.resolve(process.cwd(), '.env');
-const fallbackEnvPath = path.resolve(__dirname, '.env');
-dotenv.config({ path: fs.existsSync(envPath) ? envPath : fallbackEnvPath });
+// Load .env file from the backend directory
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 if (!process.env.DB_HOST || !process.env.DB_PORT || !process.env.DB_USERNAME || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
   throw new Error('Missing required database environment variables');

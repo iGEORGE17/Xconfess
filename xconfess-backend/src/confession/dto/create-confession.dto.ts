@@ -4,7 +4,6 @@ import {
   IsOptional,
   IsEnum,
   MaxLength,
-  Matches,
 } from 'class-validator';
 import { Gender } from './get-confessions.dto';
 
@@ -27,12 +26,4 @@ export class CreateConfessionDto {
   @IsNotEmpty()
   @MaxLength(5000)
   body: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[a-fA-F0-9]{64}$/, {
-    message: 'Invalid Stellar transaction hash format',
-  })
-  stellarTxHash?: string;
 }
