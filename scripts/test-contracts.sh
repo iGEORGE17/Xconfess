@@ -138,8 +138,11 @@ if grep -q "\[workspace\]" Cargo.toml; then
     fi
 else
     # Not a workspace, test individually (original logic)
-    print_info "Testing contracts individually"
-    # ... existing individual test code ...
+    print_error "This project is not configured as a Cargo workspace!"
+    echo "Expected a [workspace] section in xconfess-contracts/Cargo.toml"
+    echo "Individual contract testing is not implemented for non-workspace setups."
+    cd "$PROJECT_ROOT"
+    exit 1
 fi
 
 echo ""
