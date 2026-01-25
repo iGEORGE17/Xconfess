@@ -8,6 +8,7 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, 
 pub enum Error {
     BadgeAlreadyOwned = 1,
     BadgeNotFound = 2,
+    BadgeTypeAlreadyOwned = 3,
 }
 
 #[contracttype]
@@ -178,6 +179,17 @@ impl ReputationBadges {
 
         let from = badge.owner.clone();
 
+        // Check if recipient already owns this badge type
+        let to_ownership_key = StorageKey::TypeOwnership(to.clone(), badge.badge_type.clone());
+        if env
+            .storage()
+            .persistent()
+            .get::<StorageKey, bool>(&to_ownership_key)
+            .is_some()
+        {
+            return Err(Error::BadgeTypeAlreadyOwned);
+        }
+
         // Remove from old owner's badge list
         let from_badges_key = StorageKey::UserBadges(from.clone());
         let from_badges: Vec<u64> = env
@@ -214,7 +226,6 @@ impl ReputationBadges {
         env.storage().persistent().set(&to_badges_key, &to_badges);
 
         // Set type ownership for new owner
-        let to_ownership_key = StorageKey::TypeOwnership(to.clone(), badge.badge_type.clone());
         env.storage().persistent().set(&to_ownership_key, &true);
 
         // Update badge owner
