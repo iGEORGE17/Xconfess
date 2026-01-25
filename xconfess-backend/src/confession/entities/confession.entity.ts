@@ -77,16 +77,16 @@ export class AnonymousConfession {
 
   // Stellar blockchain anchoring fields
   @Column({ name: 'stellar_tx_hash', nullable: true })
-  stellarTxHash: string;
+  stellarTxHash: string | null;
 
   @Column({ name: 'stellar_hash', nullable: true })
-  stellarHash: string;
+  stellarHash: string | null;
 
   @Column({ name: 'is_anchored', default: false })
   isAnchored: boolean;
 
   @Column({ name: 'anchored_at', type: 'timestamp', nullable: true })
-  anchoredAt: Date;
+  anchoredAt: Date | null;
 
   get content(): string {
     return this.message;

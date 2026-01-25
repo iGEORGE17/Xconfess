@@ -199,6 +199,8 @@ export async function GET(request: Request) {
           reactions: { like: 5, love: 3 },
           commentCount: 2,
           viewCount: 45,
+          isAnchored: true,
+          stellarTxHash: "abc123def456789012345678901234567890123456789012345678901234",
         },
         {
           id: "2",
@@ -207,6 +209,8 @@ export async function GET(request: Request) {
           reactions: { like: 8, love: 12 },
           commentCount: 5,
           viewCount: 123,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "3",
@@ -215,6 +219,8 @@ export async function GET(request: Request) {
           reactions: { like: 2, love: 7 },
           commentCount: 1,
           viewCount: 32,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "4",
@@ -223,6 +229,8 @@ export async function GET(request: Request) {
           reactions: { like: 10, love: 4 },
           commentCount: 3,
           viewCount: 67,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "5",
@@ -231,6 +239,8 @@ export async function GET(request: Request) {
           reactions: { like: 3, love: 6 },
           commentCount: 0,
           viewCount: 18,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "6",
@@ -239,6 +249,8 @@ export async function GET(request: Request) {
           reactions: { like: 4, love: 2 },
           commentCount: 2,
           viewCount: 42,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "7",
@@ -247,6 +259,8 @@ export async function GET(request: Request) {
           reactions: { like: 15, love: 20 },
           commentCount: 8,
           viewCount: 156,
+          isAnchored: false,
+          stellarTxHash: null,
         },
         {
           id: "8",
@@ -255,6 +269,8 @@ export async function GET(request: Request) {
           reactions: { like: 9, love: 11 },
           commentCount: 4,
           viewCount: 89,
+          isAnchored: false,
+          stellarTxHash: null,
         },
       ];
 
@@ -281,12 +297,26 @@ export async function GET(request: Request) {
 
     const data = await response.json();
 
+    // Transform backend data to include Stellar fields
+    const confessions = (data.data || data.confessions || []).map(
+      (confession: Record<string, unknown>) => ({
+        id: confession.id,
+        content: confession.message || confession.content,
+        createdAt: confession.created_at || confession.createdAt,
+        reactions: confession.reactions || { like: 0, love: 0 },
+        commentCount: confession.commentCount || 0,
+        viewCount: confession.view_count || confession.viewCount || 0,
+        isAnchored: confession.isAnchored || false,
+        stellarTxHash: confession.stellarTxHash || null,
+      })
+    );
+
     return new Response(
       JSON.stringify({
-        confessions: data.data || data.confessions || [],
+        confessions,
         hasMore: data.hasMore !== false,
-        total: data.total,
-        page: data.page || page,
+        total: data.meta?.total || data.total,
+        page: data.meta?.page || data.page || page,
       }),
       {
         status: 200,
@@ -306,6 +336,8 @@ export async function GET(request: Request) {
         reactions: { like: 5, love: 3 },
         commentCount: 2,
         viewCount: 45,
+        isAnchored: true,
+        stellarTxHash: "abc123def456789012345678901234567890123456789012345678901234",
       },
       {
         id: "2",
@@ -314,6 +346,8 @@ export async function GET(request: Request) {
         reactions: { like: 8, love: 12 },
         commentCount: 5,
         viewCount: 123,
+        isAnchored: false,
+        stellarTxHash: null,
       },
       {
         id: "3",
@@ -322,6 +356,8 @@ export async function GET(request: Request) {
         reactions: { like: 2, love: 7 },
         commentCount: 1,
         viewCount: 32,
+        isAnchored: false,
+        stellarTxHash: null,
       },
       {
         id: "4",
@@ -330,6 +366,8 @@ export async function GET(request: Request) {
         reactions: { like: 10, love: 4 },
         commentCount: 3,
         viewCount: 67,
+        isAnchored: false,
+        stellarTxHash: null,
       },
       {
         id: "5",
@@ -338,6 +376,8 @@ export async function GET(request: Request) {
         reactions: { like: 3, love: 6 },
         commentCount: 0,
         viewCount: 18,
+        isAnchored: false,
+        stellarTxHash: null,
       },
       {
         id: "6",
@@ -346,6 +386,8 @@ export async function GET(request: Request) {
         reactions: { like: 4, love: 2 },
         commentCount: 2,
         viewCount: 42,
+        isAnchored: false,
+        stellarTxHash: null,
       },
     ];
 

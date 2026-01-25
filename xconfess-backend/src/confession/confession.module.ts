@@ -14,6 +14,8 @@ import { UserModule } from '../user/user.module';
 import { StellarModule } from '../stellar/stellar.module';
 // In-memory mock Redis for development without Redis server
 const REDIS_TOKEN = 'default_IORedisModuleConnectionToken';
+const isProduction = process.env.NODE_ENV === 'production';
+
 class MockRedis {
   private store = new Map<string, { value: string; expiry?: number }>();
 
@@ -44,6 +46,11 @@ class MockRedis {
   }
 }
 
+// Only use MockRedis in non-production environments
+const redisProvider = !isProduction
+  ? { provide: REDIS_TOKEN, useValue: new MockRedis() }
+  : null;
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([AnonymousConfession]),
@@ -59,8 +66,8 @@ class MockRedis {
     AnonymousConfessionRepository,
     ConfessionViewCacheService,
     { provide: 'VIEW_CACHE_EXPIRY', useValue: 60 * 60 },
-    // Mock Redis provider for development without Redis server
-    { provide: REDIS_TOKEN, useValue: new MockRedis() },
+    // Mock Redis provider for development without Redis server (production uses real Redis)
+    ...(redisProvider ? [redisProvider] : []),
   ],
   exports: [AnonymousConfessionRepository, ConfessionService],
 })

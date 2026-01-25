@@ -33,10 +33,16 @@ export async function POST(
     const backendUrl = `${BASE_API_URL}/confessions/${id}/anchor`;
 
     try {
+      // Forward authentication headers from the incoming request
+      const authHeader = request.headers.get("Authorization");
+      const cookie = request.headers.get("Cookie");
+
       const response = await fetch(backendUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(authHeader && { Authorization: authHeader }),
+          ...(cookie && { Cookie: cookie }),
         },
         body: JSON.stringify({ stellarTxHash }),
       });
