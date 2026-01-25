@@ -9,22 +9,22 @@ import {
   RegisterData,
 } from '../types/auth';
 
-
-//  Auth Context
-
+/**
+ * Auth Context
+ */
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-
-//  Auth Provider Props
-
+/**
+ * Auth Provider Props
+ */
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-
-//  Auth Provider Component
-//  Manages global authentication state and provides auth methods
-
+/**
+ * Auth Provider Component
+ * Manages global authentication state and provides auth methods
+ */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -34,16 +34,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   });
 
  
-  //   Check authentication status on mount
-
-  useEffect(() => {
-    
-    checkAuth();
-  }, []);
-
  
-  //   Check if user is authenticated by validating token with backend
- 
+
+   /**
+   * Check if user is authenticated by validating token with backend
+   */
   const checkAuth = async (): Promise<void> => {
     const token = localStorage.getItem('access_token');
 
@@ -78,6 +73,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+   //   Check authentication status on mount
+
+  useEffect(() => {
+    // Wrap async call in IIFE to avoid synchronous setState in effect
+    (async () => {
+      await checkAuth();
+    })();
+  }, []);
  
   //  Login user with credentials
   

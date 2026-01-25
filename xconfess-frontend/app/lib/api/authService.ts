@@ -9,9 +9,9 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-
-//  Axios instance for API calls
-
+/**
+ * Axios instance for API calls
+ */
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
@@ -19,9 +19,9 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-
-//   Request interceptor to add JWT token to headers
-
+/**
+ * Request interceptor to add JWT token to headers
+ */
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -33,9 +33,9 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-
-  // Response interceptor to handle 401 errors (token expiration)
- 
+/**
+ * Response interceptor to handle 401 errors (token expiration)
+ */
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -53,14 +53,15 @@ apiClient.interceptors.response.use(
   }
 );
 
-
-  // Authentication API service
- 
+/**
+ * Authentication API service
+ */
 export const authApi = {
-  
-    // Login user and get JWT token
-  
-  
+  /**
+   * Login user and get JWT token
+   * @param credentials - Email and password
+   * @returns Login response with token and user data
+   */
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     try {
       const response = await apiClient.post<LoginResponse>('/users/login', credentials);
@@ -73,9 +74,11 @@ export const authApi = {
     }
   },
 
-
-  // Register new user
- 
+  /**
+   * Register new user
+   * @param data - Registration data (email, password, username)
+   * @returns Registered user data
+   */
   async register(data: RegisterData): Promise<RegisterResponse> {
     try {
       const response = await apiClient.post<RegisterResponse>('/users/register', data);
@@ -88,11 +91,11 @@ export const authApi = {
     }
   },
 
-  
-  //   Get current authenticated user
-  //   Calls /users/profile to verify token validity
-  //  @returns Current user data
-  
+  /**
+   * Get current authenticated user
+   * Calls /users/profile to verify token validity
+   * @returns Current user data
+   */
   async getCurrentUser(): Promise<User> {
     try {
       const response = await apiClient.get<User>('/users/profile');
@@ -105,9 +108,9 @@ export const authApi = {
     }
   },
 
-
-  //  Logout user (client-side only, clears token)
-
+  /**
+   * Logout user (client-side only, clears token)
+   */
   logout(): void {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
