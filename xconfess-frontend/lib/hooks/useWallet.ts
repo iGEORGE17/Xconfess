@@ -65,7 +65,7 @@ export const useWallet = (): UseWalletReturn => {
           ...prev,
           isLoading: false,
           error: 'Freighter wallet is not installed',
-        });
+        }));
         return;
       }
 
