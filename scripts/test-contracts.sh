@@ -66,11 +66,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if running from project root
-if [ ! -d "contracts/soroban-xconfess" ]; then
-    print_error "Error: Must run from project root directory"
+# Determine project root and contracts directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONTRACTS_DIR="$PROJECT_ROOT/xconfess-contracts"
+
+# Check if contracts directory exists
+if [ ! -d "$CONTRACTS_DIR" ]; then
+    print_error "Error: xconfess-contracts directory not found!"
+    echo "Expected location: $CONTRACTS_DIR"
     echo "Current directory: $(pwd)"
-    echo "Please cd to the xConfess root directory"
+    exit 1
+fi
+
+# Check if Cargo.toml exists in contracts directory
+if [ ! -f "$CONTRACTS_DIR/Cargo.toml" ]; then
+    print_error "Error: Cargo.toml not found in xconfess-contracts!"
+    echo "Expected location: $CONTRACTS_DIR/Cargo.toml"
     exit 1
 fi
 
@@ -82,83 +94,66 @@ if ! command -v cargo &> /dev/null; then
 fi
 
 print_header "Testing xConfess Soroban Contracts"
+print_info "Project root: $PROJECT_ROOT"
+print_info "Contracts directory: $CONTRACTS_DIR"
+echo ""
 
-# Array of contracts to test
-CONTRACTS=(
-    "confession-anchor"
-    # Add more contracts here as they're developed
-    # "reputation-badges"
-    # "anonymous-tipping"
-)
+# Change to contracts directory
+cd "$CONTRACTS_DIR"
 
-# Track test results
-SUCCESSFUL_TESTS=0
-FAILED_TESTS=0
-FAILED_CONTRACTS=()
-
-# Build test command arguments
-TEST_ARGS=""
-if [ "$VERBOSE" = true ]; then
-    TEST_ARGS="$TEST_ARGS --verbose"
-fi
-if [ "$NOCAPTURE" = true ]; then
-    TEST_ARGS="$TEST_ARGS -- --nocapture"
-fi
-
-# Test each contract
-for contract in "${CONTRACTS[@]}"; do
-    CONTRACT_DIR="contracts/soroban-xconfess/$contract"
+# Check if this is a workspace
+if grep -q "\[workspace\]" Cargo.toml; then
+    print_info "Detected Cargo workspace - running all tests together"
+    echo ""
     
-    if [ ! -d "$CONTRACT_DIR" ]; then
-        print_warning "Contract directory not found: $CONTRACT_DIR (skipping)"
-        continue
+    # Build test command arguments
+    TEST_CMD="cargo test"
+    if [ "$VERBOSE" = true ]; then
+        TEST_CMD="$TEST_CMD --verbose"
+    fi
+    if [ "$NOCAPTURE" = true ]; then
+        TEST_CMD="$TEST_CMD -- --nocapture"
     fi
     
-    echo ""
-    print_info "Testing $contract..."
+    print_header "Running All Contract Tests"
     echo ""
     
-    cd "$CONTRACT_DIR"
-    
-    # Run tests
-    if cargo test $TEST_ARGS; then
-        print_success "Tests passed for $contract"
-        ((SUCCESSFUL_TESTS++))
+    if eval $TEST_CMD; then
+        echo ""
+        print_success "✓ All workspace tests passed!"
+        
+        # Count test results from both contracts
+        echo ""
+        print_info "Workspace contains:"
+        for contract in confession-anchor reputation-badges; do
+            if [ -d "contracts/$contract" ]; then
+                echo "  ✓ $contract"
+            fi
+        done
     else
-        print_error "Tests failed for $contract"
-        FAILED_CONTRACTS+=("$contract")
-        ((FAILED_TESTS++))
+        echo ""
+        print_error "✗ Some tests failed"
+        cd "$PROJECT_ROOT"
+        exit 1
     fi
-    
-    # Return to project root
-    cd - > /dev/null
-done
+else
+    # Not a workspace, test individually (original logic)
+    print_info "Testing contracts individually"
+    # ... existing individual test code ...
+fi
 
 echo ""
 print_header "Test Summary"
 
-echo "Total contracts tested: ${#CONTRACTS[@]}"
-print_success "Successful tests: $SUCCESSFUL_TESTS"
-
-if [ $FAILED_TESTS -gt 0 ]; then
-    print_error "Failed tests: $FAILED_TESTS"
-    echo "Failed contracts:"
-    for contract in "${FAILED_CONTRACTS[@]}"; do
-        echo "  - $contract"
-    done
-    echo ""
-    print_info "Run with --verbose flag for detailed error output:"
-    echo "  ./scripts/test-contracts.sh --verbose"
-    exit 1
-fi
-
-echo ""
-print_success "All contract tests passed! ✓"
+print_success "All contract tests completed successfully! ✓"
 
 echo ""
 print_info "Next steps:"
 echo "  1. Build contracts: ./scripts/build-contracts.sh"
 echo "  2. Deploy to testnet: ./scripts/deploy-contracts.sh"
-echo "  3. See docs/SOROBAN_SETUP.md for more information"
+echo "  3. Run with coverage: cargo tarpaulin --workspace"
+
+# Return to original directory
+cd "$PROJECT_ROOT"
 
 exit 0

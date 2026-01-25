@@ -35,11 +35,23 @@ print_header() {
     echo -e "${BLUE}========================================${NC}"
 }
 
-# Check if running from project root
-if [ ! -d "contracts/soroban-xconfess" ]; then
-    print_error "Error: Must run from project root directory"
+# Determine project root and contracts directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONTRACTS_DIR="$PROJECT_ROOT/xconfess-contracts"
+
+# Check if contracts directory exists
+if [ ! -d "$CONTRACTS_DIR" ]; then
+    print_error "Error: xconfess-contracts directory not found!"
+    echo "Expected location: $CONTRACTS_DIR"
     echo "Current directory: $(pwd)"
-    echo "Please cd to the xConfess root directory"
+    exit 1
+fi
+
+# Check if Cargo.toml exists in contracts directory
+if [ ! -f "$CONTRACTS_DIR/Cargo.toml" ]; then
+    print_error "Error: Cargo.toml not found in xconfess-contracts!"
+    echo "Expected location: $CONTRACTS_DIR/Cargo.toml"
     exit 1
 fi
 
@@ -52,22 +64,18 @@ if ! command -v stellar &> /dev/null; then
     exit 1
 fi
 
-# Check if wasm32 target is installed
-if ! rustup target list | grep -q "wasm32-unknown-unknown (installed)"; then
-    print_warning "wasm32-unknown-unknown target not installed"
-    print_info "Installing wasm32-unknown-unknown target..."
-    rustup target add wasm32-unknown-unknown
-    print_success "Target installed successfully"
-fi
-
 print_header "Building xConfess Soroban Contracts"
+print_info "Project root: $PROJECT_ROOT"
+print_info "Contracts directory: $CONTRACTS_DIR"
+echo ""
+
+# Change to contracts directory
+cd "$CONTRACTS_DIR"
 
 # Array of contracts to build
 CONTRACTS=(
     "confession-anchor"
-    # Add more contracts here as they're developed
-    # "reputation-badges"
-    # "anonymous-tipping"
+    "reputation-badges"
 )
 
 # Track build results
@@ -75,47 +83,22 @@ SUCCESSFUL_BUILDS=0
 FAILED_BUILDS=0
 FAILED_CONTRACTS=()
 
-# Build each contract
-for contract in "${CONTRACTS[@]}"; do
-    CONTRACT_DIR="contracts/soroban-xconfess/$contract"
-    
-    if [ ! -d "$CONTRACT_DIR" ]; then
-        print_warning "Contract directory not found: $CONTRACT_DIR (skipping)"
-        continue
-    fi
-    
+# Build all contracts using stellar contract build
+print_info "Running stellar contract build..."
+echo ""
+
+if stellar contract build; then
+    print_success "Build command completed"
     echo ""
-    print_info "Building $contract..."
-    
-    cd "$CONTRACT_DIR"
-    
-    # Build using stellar CLI
-    if stellar contract build; then
-        print_success "Built $contract successfully"
-        
-        # Display WASM file info
-        WASM_FILE="target/wasm32-unknown-unknown/release/${contract//-/_}.wasm"
-        if [ -f "$WASM_FILE" ]; then
-            WASM_SIZE=$(ls -lh "$WASM_FILE" | awk '{print $5}')
-            print_info "WASM file: $WASM_FILE ($WASM_SIZE)"
-        fi
-        
-        ((SUCCESSFUL_BUILDS++))
-    else
-        print_error "Failed to build $contract"
-        FAILED_CONTRACTS+=("$contract")
-        ((FAILED_BUILDS++))
-    fi
-    
-    # Return to project root
-    cd - > /dev/null
-done
+else
+    print_error "Build failed!"
+    exit 1
+fi
 
 echo ""
 print_header "Build Summary"
 
 echo "Total contracts: ${#CONTRACTS[@]}"
-print_success "Successful builds: $SUCCESSFUL_BUILDS"
 
 if [ $FAILED_BUILDS -gt 0 ]; then
     print_error "Failed builds: $FAILED_BUILDS"
@@ -129,20 +112,50 @@ fi
 echo ""
 print_success "All contracts built successfully! 🎉"
 
-# Optional: Display WASM file locations
+# Display all WASM files in the release directory
 echo ""
-print_info "WASM files are located at:"
-for contract in "${CONTRACTS[@]}"; do
-    WASM_FILE="contracts/soroban-xconfess/$contract/target/wasm32-unknown-unknown/release/${contract//-/_}.wasm"
-    if [ -f "$WASM_FILE" ]; then
-        echo "  - $WASM_FILE"
-    fi
-done
+print_header "WASM Files in Release Directory"
+RELEASE_DIR="$CONTRACTS_DIR/target/wasm32v1-none/release"
+print_info "Location: $RELEASE_DIR"
+echo ""
 
+if [ -d "$RELEASE_DIR" ]; then
+    WASM_COUNT=$(find "$RELEASE_DIR" -maxdepth 1 -name "*.wasm" -type f | wc -l)
+    
+    if [ $WASM_COUNT -gt 0 ]; then
+        printf "%-30s %-10s %-s\n" "CONTRACT" "SIZE" "HASH"
+        echo "--------------------------------------------------------------------------------"
+        
+        for wasm_file in "$RELEASE_DIR"/*.wasm; do
+            if [ -f "$wasm_file" ]; then
+                FILENAME=$(basename "$wasm_file")
+                CONTRACT_NAME="${FILENAME%.wasm}"
+                SIZE=$(ls -lh "$wasm_file" | awk '{print $5}')
+                BYTES=$(stat -f%z "$wasm_file" 2>/dev/null || stat -c%s "$wasm_file" 2>/dev/null)
+                HASH=$(sha256sum "$wasm_file" | awk '{print $1}')
+                
+                printf "%-30s %-10s %s\n" "$CONTRACT_NAME" "$SIZE" "$HASH"
+                echo "  📍 $wasm_file"
+                echo ""
+            fi
+        done
+        
+        print_success "Total WASM files found: $WASM_COUNT"
+    else
+        print_warning "No WASM files found in release directory"
+    fi
+else
+    print_error "Release directory not found: $RELEASE_DIR"
+fi
+
+# Display centralized WASM location
 echo ""
 print_info "Next steps:"
-echo "  1. Run tests: ./scripts/test-contracts.sh"
+echo "  1. Run tests: cd xconfess-contracts && cargo test"
 echo "  2. Deploy to testnet: ./scripts/deploy-contracts.sh"
-echo "  3. See docs/SOROBAN_SETUP.md for more information"
+echo "  3. Optimize WASMs: stellar contract optimize --wasm target/wasm32v1-none/release/*.wasm"
+
+# Return to original directory
+cd "$PROJECT_ROOT"
 
 exit 0
