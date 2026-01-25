@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import { useAuth } from '@/app/lib/hooks/useAuth';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -16,20 +17,20 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Redirect if already authenticated
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      router.push('/dashboard'); // Redirect to dashboard if already logged in
+    if (isAuthenticated && !authLoading) {
+      router.push('/dashboard');
     }
 
     if (searchParams.get('registered') === 'true') {
       setSuccessMessage('Account created successfully! Please log in.');
     }
-  }, [router, searchParams]);
+  }, [isAuthenticated, authLoading, router, searchParams]);
 
   const {
     register,
@@ -40,33 +41,21 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
-    setError('');
+    setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-        }),
+      await login({
+        email: data.email,
+        password: data.password,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-
-      const { access_token } = await response.json();
-      localStorage.setItem('token', access_token);
 
       // Redirect to dashboard after successful login
       router.push('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      // Error is already handled in auth context
+      console.error('Login error:', err);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -81,9 +70,9 @@ export default function LoginPage() {
           </div>
         )}
 
-        {error && (
+        {authError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            {authError}
           </div>
         )}
 
@@ -116,10 +105,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting || authLoading}
             className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
-            {isLoading ? 'Logging in...' : 'Login'}
+            {isSubmitting ? 'Logging in...' : 'Login'}
           </button>
         </form>
 

@@ -1,10 +1,11 @@
 # Environment variables
 .env
 # Node modules
-node_modules/
-**/node_modules/
+xconfess-frontend/node_modules/
+xconfess-backend/node_modules/
 # Environment variables
 .env
+.env.local
 # Logs
 *.log
 # Build output
@@ -14,3 +15,5 @@ dist/
 Thumbs.db
 target/
 test_snapshots/
+node_modules
+node_modules/
