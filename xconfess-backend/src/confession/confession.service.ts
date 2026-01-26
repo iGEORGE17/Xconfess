@@ -10,12 +10,28 @@ import { UpdateConfessionDto } from './dto/update-confession.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
 import { GetConfessionsDto, SortOrder } from './dto/get-confessions.dto';
 import sanitizeHtml from 'sanitize-html';
-import { encryptConfession, decryptConfession } from '../utils/confession-encryption';
+import {
+  encryptConfession,
+  decryptConfession,
+} from '../utils/confession-encryption';
 import { ConfessionViewCacheService } from './confession-view-cache.service';
 import { Request } from 'express';
-import { AiModerationService, ModerationStatus } from '../moderation/ai-moderation.service';
+import {
+  AiModerationService,
+  ModerationStatus,
+} from '../moderation/ai-moderation.service';
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AnonymousUserService } from '../user/anonymous-user.service';
+import { EntityManager, Repository } from 'typeorm';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
+import { AnonymousConfession } from './entities/confession.entity';
+import { AppLogger } from 'src/logger/logger.service';
+import { maskUserId } from 'src/utils/mask-user-id';
+import { EncryptionService } from 'src/encryption/encryption.service';
+import { ConfessionResponseDto } from './dto/confession-response.dto';
+import { StellarService } from '../stellar/stellar.service';
+import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
 
 @Injectable()
 export class ConfessionService {
@@ -25,6 +41,10 @@ export class ConfessionService {
     private readonly aiModerationService: AiModerationService,
     private readonly moderationRepoService: ModerationRepositoryService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly anonymousUserService: AnonymousUserService,
+    private readonly logger: AppLogger,
+    private encryptionService: EncryptionService,
+    private readonly stellarService: StellarService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -35,28 +55,65 @@ export class ConfessionService {
     }).trim();
   }
 
-  async create(dto: CreateConfessionDto) {
+  async create(dto: CreateConfessionDto, manager?: EntityManager) {
     const msg = this.sanitizeMessage(dto.message);
     if (!msg) throw new BadRequestException('Invalid confession content');
 
     try {
       // Step 1: Moderate the content BEFORE encryption
-      const moderationResult = await this.aiModerationService.moderateContent(msg);
+      const moderationResult =
+        await this.aiModerationService.moderateContent(msg);
+
+      // Step 1.5: Create an AnonymousUser to associate with this confession
+      const anonymousUser = manager
+        ? await manager
+            .getRepository(AnonymousUser)
+            .save(manager.getRepository(AnonymousUser).create())
+        : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
       const encryptedMsg = encryptConfession(msg);
-      const conf = this.confessionRepo.create({
+      const confessionRepo: Repository<AnonymousConfession> = manager
+        ? manager.getRepository(AnonymousConfession)
+        : (this.confessionRepo as unknown as Repository<AnonymousConfession>);
+
+      // Prepare Stellar anchoring data if transaction hash provided
+      let stellarData: {
+        stellarTxHash?: string;
+        stellarHash?: string;
+        isAnchored?: boolean;
+        anchoredAt?: Date;
+      } = {};
+
+      if (dto.stellarTxHash) {
+        const anchorData = this.stellarService.processAnchorData(
+          msg,
+          dto.stellarTxHash,
+        );
+        if (anchorData) {
+          stellarData = {
+            stellarTxHash: anchorData.stellarTxHash,
+            stellarHash: anchorData.stellarHash,
+            isAnchored: true,
+            anchoredAt: anchorData.anchoredAt,
+          };
+        }
+      }
+
+      const conf = confessionRepo.create({
         message: encryptedMsg,
         gender: dto.gender,
+        anonymousUser,
         moderationScore: moderationResult.score,
         moderationFlags: moderationResult.flags as any,
         moderationStatus: moderationResult.status as any,
         requiresReview: moderationResult.requiresReview,
         isHidden: moderationResult.status === ModerationStatus.REJECTED,
         moderationDetails: moderationResult.details,
+        ...stellarData,
       });
 
-      const savedConfession = await this.confessionRepo.save(conf);
+      const savedConfession = await confessionRepo.save(conf);
 
       // Step 3: Log moderation decision
       await this.moderationRepoService.createLog(
@@ -65,6 +122,7 @@ export class ConfessionService {
         savedConfession.id,
         undefined,
         'openai',
+        manager,
       );
 
       // Step 4: Handle high-severity content
@@ -95,7 +153,8 @@ export class ConfessionService {
   async getConfessions(dto: GetConfessionsDto) {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 10;
-    if (limit < 1 || limit > 100) throw new BadRequestException('limit must be 1–100');
+    if (limit < 1 || limit > 100)
+      throw new BadRequestException('limit must be 1–100');
 
     const skip = (page - 1) * limit;
     const qb = this.confessionRepo
@@ -151,8 +210,9 @@ export class ConfessionService {
       if (!sanitized) throw new BadRequestException('Invalid content');
 
       // Re-moderate updated content
-      const moderationResult = await this.aiModerationService.moderateContent(sanitized);
-      
+      const moderationResult =
+        await this.aiModerationService.moderateContent(sanitized);
+
       dto.message = encryptConfession(sanitized);
       await this.confessionRepo.update(id, {
         ...dto,
@@ -191,9 +251,15 @@ export class ConfessionService {
   }
 
   async search(dto: SearchConfessionDto) {
-    if (!dto.q.trim()) throw new BadRequestException('Search term cannot be empty');
-    const limit = typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
-    const result = await this.confessionRepo.hybridSearch(dto.q.trim(), dto.page, limit);
+    if (!dto.q.trim())
+      throw new BadRequestException('Search term cannot be empty');
+    const limit =
+      typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const result = await this.confessionRepo.hybridSearch(
+      dto.q.trim(),
+      dto.page,
+      limit,
+    );
     return {
       data: result?.confessions || [],
       meta: {
@@ -207,9 +273,15 @@ export class ConfessionService {
   }
 
   async fullTextSearch(dto: SearchConfessionDto) {
-    if (!dto.q.trim()) throw new BadRequestException('Search term cannot be empty');
-    const limit = typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
-    const result = await this.confessionRepo.fullTextSearch(dto.q.trim(), dto.page, limit);
+    if (!dto.q.trim())
+      throw new BadRequestException('Search term cannot be empty');
+    const limit =
+      typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const result = await this.confessionRepo.fullTextSearch(
+      dto.q.trim(),
+      dto.page,
+      limit,
+    );
     return {
       data: result?.confessions || [],
       meta: {
@@ -232,7 +304,8 @@ export class ConfessionService {
     type AuthenticatedRequest = Request & { user?: { id?: string } };
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user?.id;
-    let userOrIp: string = userId ?? String(req.headers['x-forwarded-for'] ?? req.ip);
+    let userOrIp: string =
+      userId ?? String(req.headers['x-forwarded-for'] ?? req.ip);
     if (Array.isArray(userOrIp)) {
       userOrIp = userOrIp[0] ?? req.ip;
     }
@@ -274,9 +347,15 @@ export class ConfessionService {
 
     const updated = await this.confessionRepo.save(confession);
 
-    const logs = await this.moderationRepoService.getLogsByConfession(confessionId);
+    const logs =
+      await this.moderationRepoService.getLogsByConfession(confessionId);
     if (logs.length > 0) {
-      await this.moderationRepoService.updateReview(logs[0].id, status, moderatorId, notes);
+      await this.moderationRepoService.updateReview(
+        logs[0].id,
+        status,
+        moderatorId,
+        notes,
+      );
     }
 
     return updated;
@@ -295,4 +374,197 @@ export class ConfessionService {
     });
 
     return { data, total, page, limit };
-  }}
+  }
+
+  async createConfession(userId: string, data: any) {
+    // Option 1: Use the logger's built-in method
+    this.logger.logWithUser(
+      'Creating confession',
+      userId,
+      'ConfessionsService',
+    );
+
+    try {
+      // Your logic here
+      const confession = await this.saveConfession(data);
+
+      this.logger.logWithUser(
+        'Confession created successfully',
+        userId,
+        'ConfessionsService',
+      );
+
+      return confession;
+    } catch (error) {
+      // Option 2: Use maskUserId helper for custom messages
+      this.logger.error(
+        `Failed to create confession for ${maskUserId(userId)}: ${error.message}`,
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  async getUserConfessions(userId: string) {
+    // Option 3: Mask in object logging
+    this.logger.log(
+      { action: 'fetch_confessions', userId: maskUserId(userId) },
+      'ConfessionsService',
+    );
+
+    return this.findByUser(userId);
+  }
+
+  // Private methods (examples)
+  private async saveConfession(data: any) {
+    // Implementation
+    return data;
+  }
+
+  private async findByUser(userId: string) {
+    // Implementation
+    return [];
+  }
+
+  async findAll(): Promise<ConfessionResponseDto[]> {
+    try {
+      const confessions = await this.confessionRepo.find({
+        order: { created_at: 'DESC' },
+      });
+
+      // Decrypt all confessions and convert to DTO
+      return confessions.map((confession) => this.toResponseDto(confession));
+    } catch (error) {
+      this.logger.error(
+        'Failed to fetch confessions',
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  async findOne(id: string): Promise<ConfessionResponseDto> {
+    try {
+      const confession = await this.confessionRepo.findOne({
+        where: { id },
+      });
+
+      if (!confession) {
+        throw new NotFoundException(`Confession with ID ${id} not found`);
+      }
+
+      return this.toResponseDto(confession);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      this.logger.error(
+        'Failed to fetch confession',
+        error.stack,
+        'ConfessionsService',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Anchor an existing confession on Stellar blockchain
+   */
+  async anchorConfession(id: string, dto: AnchorConfessionDto) {
+    const confession = await this.confessionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!confession) {
+      throw new NotFoundException(`Confession ${id} not found`);
+    }
+
+    if (confession.isAnchored) {
+      throw new BadRequestException('Confession is already anchored on Stellar');
+    }
+
+    if (!this.stellarService.isValidTxHash(dto.stellarTxHash)) {
+      throw new BadRequestException('Invalid Stellar transaction hash format');
+    }
+
+    // Decrypt confession to generate hash
+    const decryptedMessage = decryptConfession(confession.message);
+    const anchorData = this.stellarService.processAnchorData(
+      decryptedMessage,
+      dto.stellarTxHash,
+    );
+
+    if (!anchorData) {
+      throw new BadRequestException('Failed to process anchoring data');
+    }
+
+    // Update confession with Stellar data
+    await this.confessionRepo.update(id, {
+      stellarTxHash: anchorData.stellarTxHash,
+      stellarHash: anchorData.stellarHash,
+      isAnchored: true,
+      anchoredAt: anchorData.anchoredAt,
+    });
+
+    const updated = await this.confessionRepo.findOne({ where: { id } });
+    if (updated) {
+      updated.message = decryptConfession(updated.message);
+    }
+
+    return {
+      ...updated,
+      stellarExplorerUrl: this.stellarService.getExplorerUrl(dto.stellarTxHash),
+    };
+  }
+
+  /**
+   * Verify if a confession is anchored on Stellar
+   */
+  async verifyStellarAnchor(id: string) {
+    const confession = await this.confessionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!confession) {
+      throw new NotFoundException(`Confession ${id} not found`);
+    }
+
+    if (!confession.isAnchored || !confession.stellarTxHash) {
+      return {
+        isAnchored: false,
+        message: 'Confession is not anchored on Stellar',
+      };
+    }
+
+    const isVerified = await this.stellarService.verifyTransaction(
+      confession.stellarTxHash,
+    );
+
+    return {
+      isAnchored: true,
+      isVerified,
+      stellarTxHash: confession.stellarTxHash,
+      stellarHash: confession.stellarHash,
+      anchoredAt: confession.anchoredAt,
+      stellarExplorerUrl: this.stellarService.getExplorerUrl(
+        confession.stellarTxHash,
+      ),
+    };
+  }
+
+  private toResponseDto(
+    confession: AnonymousConfession,
+  ): ConfessionResponseDto {
+    const decryptedMessage = decryptConfession(confession.message);
+
+    return new ConfessionResponseDto({
+      id: String(confession.id),
+      body: String(decryptedMessage),
+      createdAt: confession.created_at,
+      updatedAt: confession.created_at,
+    });
+  }
+}
