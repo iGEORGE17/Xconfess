@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { ReactionButton } from "./ReactionButtons";
 import { AnchorButton } from "./AnchorButton";
 
@@ -22,7 +22,7 @@ interface Props {
   };
 }
 
-export const ConfessionCard = ({ confession }: Props) => {
+export const ConfessionCard = memo(({ confession }: Props) => {
   const [isAnchored, setIsAnchored] = useState(confession.isAnchored || false);
   const [txHash, setTxHash] = useState<string | null>(
     confession.stellarTxHash || null
@@ -117,4 +117,6 @@ export const ConfessionCard = ({ confession }: Props) => {
       </div>
     </div>
   );
-};
+});
+
+ConfessionCard.displayName = 'ConfessionCard';
