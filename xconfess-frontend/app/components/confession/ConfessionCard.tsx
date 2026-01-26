@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { ReactionButton } from "./ReactionButtons";
 import { AnchorButton } from "./AnchorButton";
+import { TipButton } from "./TipButton";
+import { getTipStats, type TipStats } from "@/lib/services/tipping.service";
+import { useEffect } from "react";
 
 interface Props {
   confession: {
@@ -14,11 +17,13 @@ interface Props {
       id: string;
       username?: string;
       avatar?: string;
+      stellarAddress?: string;
     };
     commentCount?: number;
     viewCount?: number;
     isAnchored?: boolean;
     stellarTxHash?: string | null;
+    tipStats?: TipStats;
   };
 }
 
@@ -27,6 +32,20 @@ export const ConfessionCard = ({ confession }: Props) => {
   const [txHash, setTxHash] = useState<string | null>(
     confession.stellarTxHash || null
   );
+  const [tipStats, setTipStats] = useState<TipStats | null>(
+    confession.tipStats || null
+  );
+
+  useEffect(() => {
+    // Fetch tip stats if not provided
+    if (!tipStats) {
+      getTipStats(confession.id).then((stats) => {
+        if (stats) {
+          setTipStats(stats);
+        }
+      });
+    }
+  }, [confession.id, tipStats]);
 
   const handleAnchorSuccess = (newTxHash: string) => {
     setIsAnchored(true);
@@ -94,6 +113,11 @@ export const ConfessionCard = ({ confession }: Props) => {
         </div>
 
         <div className="flex items-center gap-3">
+          <TipButton
+            confessionId={confession.id}
+            recipientAddress={confession.author?.stellarAddress}
+            initialStats={tipStats || undefined}
+          />
           <AnchorButton
             confessionId={confession.id}
             confessionContent={confession.content}

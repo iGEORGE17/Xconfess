@@ -15,6 +15,7 @@ import throttleConfig from './config/throttle.config';
 import { MessagesModule } from './messages/messages.module';
 import { ReportModule } from './report/reports.module';
 import { StellarModule } from './stellar/stellar.module';
+import { TippingModule } from './tipping/tipping.module';
 
 import { RateLimitGuard } from './auth/guard/rate-limit.guard';
 import { LoggerModule } from './logger/logger.module';
@@ -57,6 +58,7 @@ import { EncryptionModule } from './encryption/encryption.module';
     ReportModule,
     // NotificationModule, // Requires Bull/Redis - temporarily disabled
     StellarModule,
+    TippingModule,
   ],
   controllers: [AppController],
   providers: [
