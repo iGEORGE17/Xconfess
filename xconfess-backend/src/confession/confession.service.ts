@@ -30,6 +30,8 @@ import { AppLogger } from 'src/logger/logger.service';
 import { maskUserId } from 'src/utils/mask-user-id';
 import { EncryptionService } from 'src/encryption/encryption.service';
 import { ConfessionResponseDto } from './dto/confession-response.dto';
+import { StellarService } from '../stellar/stellar.service';
+import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
 
 @Injectable()
 export class ConfessionService {
@@ -41,8 +43,8 @@ export class ConfessionService {
     private readonly eventEmitter: EventEmitter2,
     private readonly anonymousUserService: AnonymousUserService,
     private readonly logger: AppLogger,
-
     private encryptionService: EncryptionService,
+    private readonly stellarService: StellarService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -75,6 +77,29 @@ export class ConfessionService {
         ? manager.getRepository(AnonymousConfession)
         : (this.confessionRepo as unknown as Repository<AnonymousConfession>);
 
+      // Prepare Stellar anchoring data if transaction hash provided
+      let stellarData: {
+        stellarTxHash?: string;
+        stellarHash?: string;
+        isAnchored?: boolean;
+        anchoredAt?: Date;
+      } = {};
+
+      if (dto.stellarTxHash) {
+        const anchorData = this.stellarService.processAnchorData(
+          msg,
+          dto.stellarTxHash,
+        );
+        if (anchorData) {
+          stellarData = {
+            stellarTxHash: anchorData.stellarTxHash,
+            stellarHash: anchorData.stellarHash,
+            isAnchored: true,
+            anchoredAt: anchorData.anchoredAt,
+          };
+        }
+      }
+
       const conf = confessionRepo.create({
         message: encryptedMsg,
         gender: dto.gender,
@@ -85,6 +110,7 @@ export class ConfessionService {
         requiresReview: moderationResult.requiresReview,
         isHidden: moderationResult.status === ModerationStatus.REJECTED,
         moderationDetails: moderationResult.details,
+        ...stellarData,
       });
 
       const savedConfession = await confessionRepo.save(conf);
@@ -444,11 +470,96 @@ export class ConfessionService {
     }
   }
 
+  /**
+   * Anchor an existing confession on Stellar blockchain
+   */
+  async anchorConfession(id: string, dto: AnchorConfessionDto) {
+    const confession = await this.confessionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!confession) {
+      throw new NotFoundException(`Confession ${id} not found`);
+    }
+
+    if (confession.isAnchored) {
+      throw new BadRequestException('Confession is already anchored on Stellar');
+    }
+
+    if (!this.stellarService.isValidTxHash(dto.stellarTxHash)) {
+      throw new BadRequestException('Invalid Stellar transaction hash format');
+    }
+
+    // Decrypt confession to generate hash
+    const decryptedMessage = decryptConfession(confession.message);
+    const anchorData = this.stellarService.processAnchorData(
+      decryptedMessage,
+      dto.stellarTxHash,
+    );
+
+    if (!anchorData) {
+      throw new BadRequestException('Failed to process anchoring data');
+    }
+
+    // Update confession with Stellar data
+    await this.confessionRepo.update(id, {
+      stellarTxHash: anchorData.stellarTxHash,
+      stellarHash: anchorData.stellarHash,
+      isAnchored: true,
+      anchoredAt: anchorData.anchoredAt,
+    });
+
+    const updated = await this.confessionRepo.findOne({ where: { id } });
+    if (updated) {
+      updated.message = decryptConfession(updated.message);
+    }
+
+    return {
+      ...updated,
+      stellarExplorerUrl: this.stellarService.getExplorerUrl(dto.stellarTxHash),
+    };
+  }
+
+  /**
+   * Verify if a confession is anchored on Stellar
+   */
+  async verifyStellarAnchor(id: string) {
+    const confession = await this.confessionRepo.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!confession) {
+      throw new NotFoundException(`Confession ${id} not found`);
+    }
+
+    if (!confession.isAnchored || !confession.stellarTxHash) {
+      return {
+        isAnchored: false,
+        message: 'Confession is not anchored on Stellar',
+      };
+    }
+
+    const isVerified = await this.stellarService.verifyTransaction(
+      confession.stellarTxHash,
+    );
+
+    return {
+      isAnchored: true,
+      isVerified,
+      stellarTxHash: confession.stellarTxHash,
+      stellarHash: confession.stellarHash,
+      anchoredAt: confession.anchoredAt,
+      stellarExplorerUrl: this.stellarService.getExplorerUrl(
+        confession.stellarTxHash,
+      ),
+    };
+  }
+
   private toResponseDto(
     confession: AnonymousConfession,
   ): ConfessionResponseDto {
     const decryptedMessage = decryptConfession(confession.message);
-    
+
     return new ConfessionResponseDto({
       id: String(confession.id),
       body: String(decryptedMessage),

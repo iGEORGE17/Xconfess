@@ -14,12 +14,18 @@ import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
 import { MessagesModule } from './messages/messages.module';
 import { ReportModule } from './report/reports.module';
+import { StellarModule } from './stellar/stellar.module';
 
 import { RateLimitGuard } from './auth/guard/rate-limit.guard';
-import { NotificationModule } from './notifications/notifications.module';
+import { LoggerModule } from './logger/logger.module';
+import { EncryptionModule } from './encryption/encryption.module';
+// TODO: NotificationModule requires Bull/Redis configuration - temporarily disabled
+// import { NotificationModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
+    LoggerModule,
+    EncryptionModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -49,7 +55,8 @@ import { NotificationModule } from './notifications/notifications.module';
     ReactionModule,
     MessagesModule,
     ReportModule,
-    NotificationModule,
+    // NotificationModule, // Requires Bull/Redis - temporarily disabled
+    StellarModule,
   ],
   controllers: [AppController],
   providers: [

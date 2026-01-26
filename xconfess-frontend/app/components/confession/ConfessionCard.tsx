@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import { ReactionButton } from "./ReactionButtons";
+import { AnchorButton } from "./AnchorButton";
 
 interface Props {
   confession: {
@@ -13,10 +17,22 @@ interface Props {
     };
     commentCount?: number;
     viewCount?: number;
+    isAnchored?: boolean;
+    stellarTxHash?: string | null;
   };
 }
 
 export const ConfessionCard = ({ confession }: Props) => {
+  const [isAnchored, setIsAnchored] = useState(confession.isAnchored || false);
+  const [txHash, setTxHash] = useState<string | null>(
+    confession.stellarTxHash || null
+  );
+
+  const handleAnchorSuccess = (newTxHash: string) => {
+    setIsAnchored(true);
+    setTxHash(newTxHash);
+  };
+
   const timeAgo = (date: string) => {
     const seconds = Math.floor(
       (new Date().getTime() - new Date(date).getTime()) / 1000,
@@ -77,17 +93,26 @@ export const ConfessionCard = ({ confession }: Props) => {
           )}
         </div>
 
-        <div className="flex gap-2">
-          <ReactionButton
-            type="like"
-            count={confession.reactions.like}
+        <div className="flex items-center gap-3">
+          <AnchorButton
             confessionId={confession.id}
+            confessionContent={confession.content}
+            isAnchored={isAnchored}
+            stellarTxHash={txHash}
+            onAnchorSuccess={handleAnchorSuccess}
           />
-          <ReactionButton
-            type="love"
-            count={confession.reactions.love}
-            confessionId={confession.id}
-          />
+          <div className="flex gap-2">
+            <ReactionButton
+              type="like"
+              count={confession.reactions.like}
+              confessionId={confession.id}
+            />
+            <ReactionButton
+              type="love"
+              count={confession.reactions.love}
+              confessionId={confession.id}
+            />
+          </div>
         </div>
       </div>
     </div>

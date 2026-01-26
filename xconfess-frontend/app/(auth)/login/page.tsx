@@ -1,10 +1,11 @@
-"use client";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import Link from "next/link";
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import Link from 'next/link';
+import { useAuth } from '@/app/lib/hooks/useAuth';
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -16,11 +17,17 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login, isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Redirect if already authenticated
   useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      router.push('/dashboard');
     const token = localStorage.getItem("token");
     if (token) {
       router.push("/dashboard"); // Redirect to dashboard if already logged in
@@ -29,7 +36,7 @@ export default function LoginPage() {
     if (searchParams.get("registered") === "true") {
       setSuccessMessage("Account created successfully! Please log in.");
     }
-  }, [router, searchParams]);
+  }, [isAuthenticated, authLoading, router, searchParams]);
 
   const {
     register,
@@ -40,6 +47,14 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
+    setIsSubmitting(true);
+
+    try {
+      await login({
+        email: data.email,
+        password: data.password,
+      });
+
     setIsLoading(true);
     setError("");
 
@@ -67,9 +82,11 @@ export default function LoginPage() {
       // Redirect to dashboard after successful login
       router.push("/dashboard");
     } catch (err) {
+      // Error is already handled in auth context
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -84,9 +101,9 @@ export default function LoginPage() {
           </div>
         )}
 
-        {error && (
+        {authError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            {authError}
           </div>
         )}
 
@@ -127,8 +144,10 @@ export default function LoginPage() {
             type="submit"
             disabled={isLoading}
             aria-label={isLoading ? "Logging in..." : "Login"}
+            disabled={isSubmitting || authLoading}
             className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
+            {isSubmitting ? 'Logging in...' : 'Login'}
             {isLoading ? "Logging in..." : "Login"}
           </button>
         </form>

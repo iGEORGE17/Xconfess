@@ -26,6 +26,12 @@ export default function Header() {
                 Feed
               </Link>
               <Link
+                href="/search"
+                className="text-gray-700 hover:text-purple-600"
+              >
+                Search
+              </Link>
+              <Link
                 href="/profile"
                 className="text-gray-700 hover:text-purple-600"
               >

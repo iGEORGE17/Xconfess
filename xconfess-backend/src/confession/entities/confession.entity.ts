@@ -75,6 +75,19 @@ export class AnonymousConfession {
   @Column('json', { name: 'moderation_details', nullable: true })
   moderationDetails: Record<string, number>;
 
+  // Stellar blockchain anchoring fields
+  @Column({ name: 'stellar_tx_hash', nullable: true })
+  stellarTxHash: string;
+
+  @Column({ name: 'stellar_hash', nullable: true })
+  stellarHash: string;
+
+  @Column({ name: 'is_anchored', default: false })
+  isAnchored: boolean;
+
+  @Column({ name: 'anchored_at', type: 'timestamp', nullable: true })
+  anchoredAt: Date;
+
   get content(): string {
     return this.message;
   }
