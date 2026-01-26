@@ -12,7 +12,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="border-b bg-white sticky top-0 z-30">
+      <header aria-label="Main navigation" className="border-b bg-white sticky top-0 z-30">
         <nav className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
@@ -46,7 +46,7 @@ export default function Header() {
 
               {user && (
                 <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-600">
+                  <span aria-label={`@${user.username}`} className="text-sm text-gray-600">
                     @{user.username}
                   </span>
                   <button

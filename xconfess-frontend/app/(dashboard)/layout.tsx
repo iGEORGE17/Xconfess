@@ -1,4 +1,5 @@
 import Header from '../components/layout/Header';
+import { ProfileHeader } from './profile/ProfileHeader';
 
 export default function DashboardLayout({
   children,

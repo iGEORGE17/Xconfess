@@ -40,7 +40,7 @@ export const ReactionButton = ({ type, count, confessionId }: Props) => {
   return (
     <button
       onClick={react}
-      className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 transition-colors min-w-[44px] min-h-[44px] justify-center touch-manipulation"
+      className="flex cursor-pointer items-center gap-2 px-4 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 transition-colors min-w-[44px] min-h-[44px] justify-center touch-manipulation"
       aria-label={`React with ${type}`}
     >
       <span className="text-lg">{type === "like" ? "👍" : "❤️"}</span>

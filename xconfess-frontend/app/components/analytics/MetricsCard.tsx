@@ -20,7 +20,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
 }) => {
     if (loading) {
         return (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 animate-pulse">
+            <div role='status' aria-label='loading' className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 animate-pulse">
                 <div className="flex justify-between items-start mb-4">
                     <div className="w-10 h-10 bg-zinc-800 rounded-xl" />
                     <div className="w-16 h-4 bg-zinc-800 rounded" />

@@ -70,7 +70,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div role='status' aria-label='loading' className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading your profile...</p>
@@ -89,7 +89,7 @@ export default function ProfilePage() {
           <p className="text-red-600">{error}</p>
           <button
             onClick={fetchUserProfile}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition cursor-pointer  "
           >
             Try Again
           </button>

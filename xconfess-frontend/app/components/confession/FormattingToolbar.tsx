@@ -13,7 +13,7 @@ import {
 } from "@/app/lib/utils/markdown";
 
 interface FormattingToolbarProps {
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   onTextChange?: (newText: string, cursorPos: number) => void;
 }
 

@@ -4,6 +4,7 @@ import {
   NotificationFilter,
   PaginatedNotifications,
 } from "@/app/types/notifications";
+import type {Notification} from "@/app/types/notifications"
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 
