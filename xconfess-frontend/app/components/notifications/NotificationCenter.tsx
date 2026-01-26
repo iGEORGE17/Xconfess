@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { Settings, CheckCheck, Filter, X } from "lucide-react";
 import { NotificationItem } from "./NotificationItem";
-import { NotificationPreferences } from "./NotificationPreferences";
-import { useNotifications } from "@/lib/hooks/useNotifications";
-import { NotificationType } from "@/types/notifications";
+import { NotificationPreferences } from "./NotificationPreference";
+import { NotificationType } from "@/app/types/notifications";
+import { useNotifications } from "@/app/lib/hooks/useNotifications";
 
 interface NotificationCenterProps {
   onClose?: () => void;

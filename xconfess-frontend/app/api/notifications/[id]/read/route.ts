@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export async function PATCH(request: NextRequest) {
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } } //  Correct type
+) {
   try {
+    const { id } = params; // no need to await
     const token = request.headers.get("authorization")?.replace("Bearer ", "");
 
     const response = await fetch(
-      `${process.env.BACKEND_URL}/notifications/read-all`,
+      `${process.env.BACKEND_URL}/notifications/${id}/read`,
       {
         method: "PATCH",
         headers: {
@@ -15,15 +20,15 @@ export async function PATCH(request: NextRequest) {
     );
 
     if (!response.ok) {
-      throw new Error("Failed to mark all as read");
+      throw new Error("Failed to mark notification as read");
     }
 
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Error marking all as read:", error);
+    console.error("Error marking notification as read:", error);
     return NextResponse.json(
-      { error: "Failed to mark all as read" },
+      { error: "Failed to mark notification as read" },
       { status: 500 }
     );
   }

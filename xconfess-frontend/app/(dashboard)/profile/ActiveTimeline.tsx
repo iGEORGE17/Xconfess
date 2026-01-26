@@ -286,7 +286,7 @@ export function ActivityTimeline({ userId }: ActivityTimelineProps) {
 
         {/* Loading State */}
         {loading && (
-          <div className="p-6 text-center">
+          <div role="status" aria-label="loading" className="p-6 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         )}
