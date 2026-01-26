@@ -28,14 +28,14 @@ interface ActivityChartProps {
 export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = false }) => {
     if (loading) {
         return (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px] flex items-center justify-center animate-pulse">
+            <div role='status' aria-label='loading' className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px] flex items-center justify-center animate-pulse">
                 <div className="w-full h-full bg-zinc-800/30 rounded-xl" />
             </div>
         );
     }
 
     return (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]" >
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-white">Platform Activity</h3>
                 <div className="flex gap-4">
@@ -51,7 +51,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = fa
             </div>
 
             <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" >
                     <AreaChart data={data}>
                         <defs>
                             <linearGradient id="colorConfessions" x1="0" y1="0" x2="0" y2="1">

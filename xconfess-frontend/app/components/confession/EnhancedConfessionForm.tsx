@@ -19,6 +19,7 @@ import {
   validateConfessionForm,
   Gender,
   type ConfessionFormData,
+  ValidationErrors,
 } from "@/app/lib/utils/validation";
 import { useStellarWallet } from "@/app/lib/hooks/useStellarWallet";
 import { Draft } from "@/app/lib/hooks/useDrafts";
@@ -40,7 +41,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [enableStellarAnchor, setEnableStellarAnchor] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<ValidationErrors>({});
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -142,7 +143,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.message ||
-            `Failed to submit confession: ${response.statusText}`,
+          `Failed to submit confession: ${response.statusText}`,
         );
       }
 
@@ -177,6 +178,32 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
     }
   };
 
+
+
+  // This function closes the when the "esc" key is pressed
+  useEffect(() => {
+    if (!isPreviewMode) return;
+
+    const closePreviewOnEscPress = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setIsPreviewMode(false);
+
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+      }
+    };
+
+    window.addEventListener("keydown", closePreviewOnEscPress);
+
+    return () => {
+      window.removeEventListener("keydown", closePreviewOnEscPress);
+    };
+  }, [isPreviewMode]);
+
+
+
   return (
     <Card className={cn("w-full", className)}>
       <CardHeader>
@@ -205,6 +232,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
               error={!!errors.title}
               maxLength={200}
               aria-describedby={errors.title ? "title-error" : "title-counter"}
+              aria-required="true"
             />
             <div className="flex items-center justify-between mt-1">
               {errors.title ? (
@@ -325,20 +353,20 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
               {Object.values(Gender).map((g) => (
                 <label
                   key={g}
-                  className="flex items-center gap-3 cursor-pointer group p-2 -ml-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+                  htmlFor={g}
+                  className="cursor-pointer p-2 rounded-lg hover:bg-gray-100 flex items-center gap-2"
                 >
                   <input
                     type="radio"
                     name="gender"
+                    id={g}
                     value={g}
                     checked={gender === g}
-                    onChange={(e) => setGender(e.target.value as Gender)}
-                    className="w-5 h-5 border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+                    onChange={() => setGender(g)}
                   />
-                  <span className="text-base text-zinc-300 capitalize">
-                    {g}
-                  </span>
+                  <span>{g}</span>
                 </label>
+
               ))}
             </div>
           </div>

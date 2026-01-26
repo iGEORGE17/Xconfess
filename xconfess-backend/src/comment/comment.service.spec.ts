@@ -12,6 +12,7 @@ describe('CommentService (soft‑delete)', () => {
   let service: CommentService;
   let commentRepo: jest.Mocked<Repository<Comment>>;
   let confessionRepo: jest.Mocked<Repository<AnonymousConfession>>;
+  let moderationRepo: jest.Mocked<Repository<ModerationComment>>;
   let queue: jest.Mocked<NotificationQueue>;
 
   beforeEach(async () => {
@@ -21,7 +22,7 @@ describe('CommentService (soft‑delete)', () => {
         {
           provide: getRepositoryToken(Comment),
           useValue: {
-            find: jest.fn(),
+            createQueryBuilder: jest.fn(),
             findOne: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
@@ -35,6 +36,14 @@ describe('CommentService (soft‑delete)', () => {
           },
         },
         {
+          provide: getRepositoryToken(ModerationComment),
+          useValue: {
+            create: jest.fn(),
+            save: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+        {
           provide: NotificationQueue,
           useValue: { enqueueCommentNotification: jest.fn() },
         },
@@ -44,25 +53,35 @@ describe('CommentService (soft‑delete)', () => {
     service = module.get(CommentService);
     commentRepo = module.get(getRepositoryToken(Comment));
     confessionRepo = module.get(getRepositoryToken(AnonymousConfession));
+    moderationRepo = module.get(getRepositoryToken(ModerationComment));
     queue = module.get(NotificationQueue);
   });
 
   describe(`findByConfessionId()`, () => {
-    it(`calls find() with isDeleted: false`, async () => {
-      commentRepo.find.mockResolvedValue([]);
+    it(`builds query for approved comments only`, async () => {
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      (commentRepo.createQueryBuilder as any).mockReturnValue(qb);
+
       await service.findByConfessionId('conf1');
-      expect(commentRepo.find).toHaveBeenCalledWith({
-        where: { confession: { id: 'conf1' }, isDeleted: false },
-        order: { createdAt: 'DESC' },
+      expect(qb.andWhere).toHaveBeenCalledWith('comment.isDeleted = false');
+      expect(qb.andWhere).toHaveBeenCalledWith('moderation.status = :status', {
+        status: ModerationStatus.APPROVED,
       });
     });
   });
 
   describe(`delete()`, () => {
-    const fakeUser = { id: 11 } as any;
+    const fakeUser = { id: 'anon1' } as any;
     const goodComment = {
       id: 42,
-      user: { id: 11 },
+      anonymousUser: { id: 'anon1' },
       isDeleted: false,
     } as any;
 
@@ -80,46 +99,43 @@ describe('CommentService (soft‑delete)', () => {
     });
 
     it(`throws BadRequestException if user doesn’t own comment`, async () => {
-      commentRepo.findOne.mockResolvedValue({ id: 42, user: { id: 77 }, isDeleted: false } as any);
+      commentRepo.findOne.mockResolvedValue({ id: 42, anonymousUser: { id: 'other' }, isDeleted: false } as any);
       await expect(service.delete(42, fakeUser)).rejects.toThrow(BadRequestException);
     });
   });
 
   describe(`create()`, () => {
-    const fakeUser = { id: 5 } as any;
-    const fakeConf = { id: 'c1', user: { email: 'a@b.com' }, isDeleted: false } as any;
-    const fakeComment = { id: 101, content: 'hey', user: fakeUser, confession: fakeConf } as any;
+    const fakeAnonUser = { id: 'anon1' } as any;
+    const fakeConf = { id: 'c1', isDeleted: false, anonymousUser: { id: 'x' } } as any;
+    const fakeComment = { id: 101, content: 'hey', anonymousUser: fakeAnonUser, confession: fakeConf } as any;
 
     it(`throws if confession not found or deleted`, async () => {
       confessionRepo.findOne.mockResolvedValue(null);
       await expect(
-        service.create('hey', fakeUser, 'c1', 'anonCtx'),
+        service.create('hey', fakeAnonUser, 'c1', 'anonCtx'),
       ).rejects.toThrow(NotFoundException);
 
       confessionRepo.findOne.mockResolvedValue({ ...fakeConf, isDeleted: true });
       await expect(
-        service.create('hey', fakeUser, 'c1', 'anonCtx'),
+        service.create('hey', fakeAnonUser, 'c1', 'anonCtx'),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it(`creates, saves, and enqueues notification`, async () => {
+    it(`creates comment and moderation entry`, async () => {
       confessionRepo.findOne.mockResolvedValue(fakeConf);
       commentRepo.create.mockReturnValue(fakeComment);
       commentRepo.save.mockResolvedValue(fakeComment);
+      moderationRepo.create.mockReturnValue({ commentId: 101, status: ModerationStatus.PENDING } as any);
+      moderationRepo.save.mockResolvedValue({} as any);
 
-      const result = await service.create('hey', fakeUser, 'c1', 'anonCtx');
+      const result = await service.create('hey', fakeAnonUser, 'c1', 'anonCtx');
       expect(commentRepo.create).toHaveBeenCalledWith({
         content: 'hey',
-        user: fakeUser,
+        anonymousUser: fakeAnonUser,
         confession: fakeConf,
         anonymousContextId: 'anonCtx',
       });
-      expect(commentRepo.save).toHaveBeenCalledWith(fakeComment);
-      expect(queue.enqueueCommentNotification).toHaveBeenCalledWith({
-        confession: fakeConf,
-        comment: fakeComment,
-        recipientEmail: 'a@b.com',
-      });
+      expect(moderationRepo.save).toHaveBeenCalled();
       expect(result).toBe(fakeComment);
     });
   });

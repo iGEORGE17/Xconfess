@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { X, LogOut, User, MessageSquare, Home } from "lucide-react";
+import { X, LogOut, User, MessageSquare, Home, Search } from "lucide-react";
 import { useAuth } from "../../lib/hooks/useAuth";
 import { useEffect } from "react";
 
@@ -69,6 +69,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 >
                   <Home size={20} />
                   <span>Feed</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/search"
+                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 hover:text-purple-600 rounded-lg transition-colors"
+                  onClick={onClose}
+                >
+                  <Search size={20} />
+                  <span>Search</span>
                 </Link>
               </li>
               <li>
