@@ -1,4 +1,3 @@
-import { User } from '../../user/entities/user.entity';
 import { AnonymousUser } from '../../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';

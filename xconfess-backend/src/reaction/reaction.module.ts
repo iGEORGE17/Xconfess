@@ -5,14 +5,12 @@ import { ReactionController } from './reaction.controller';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Reaction } from './entities/reaction.entity';
 import { ConfessionModule } from '../confession/confession.module';
-import { EmailModule } from '../email/email.module';
-import { User } from '../user/entities/user.entity';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 
 @Module({
   imports: [
     forwardRef(() => ConfessionModule),
-    forwardRef(() => EmailModule),
-    TypeOrmModule.forFeature([Reaction, AnonymousConfession, User]),
+    TypeOrmModule.forFeature([Reaction, AnonymousConfession, AnonymousUser]),
   ],
   controllers: [ReactionController],
   providers: [ReactionService],

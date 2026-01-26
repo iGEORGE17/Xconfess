@@ -1,12 +1,20 @@
-import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
+import { NextResponse } from 'next/server';
 
-export const GET = NextAuth({
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
-});
-export const POST = GET;
+// NOTE: This project uses a custom JWT flow stored in localStorage.
+// This route exists only to satisfy Next.js routing/build expectations.
+// If you want NextAuth, replace this stub with a real NextAuth handler.
+
+export async function GET() {
+  return NextResponse.json(
+    { error: 'NextAuth is not configured for this app.' },
+    { status: 501 },
+  );
+}
+
+export async function POST() {
+  return NextResponse.json(
+    { error: 'NextAuth is not configured for this app.' },
+    { status: 501 },
+  );
+}
+
