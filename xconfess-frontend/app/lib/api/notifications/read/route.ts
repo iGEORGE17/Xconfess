@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
+
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } } //  Correct type
 ) {
   try {
+    const { id } = params; // no need to await
     const token = request.headers.get("authorization")?.replace("Bearer ", "");
 
     const response = await fetch(
-      `${process.env.BACKEND_URL}/notifications/${params.id}/read`,
+      `${process.env.BACKEND_URL}/notifications/${id}/read`,
       {
         method: "PATCH",
         headers: {

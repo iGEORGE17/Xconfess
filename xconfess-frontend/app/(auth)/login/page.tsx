@@ -92,10 +92,11 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
             <input
               {...register("email")}
               type="email"
+              id="email"
               className="w-full px-3 py-3 text-base border rounded-lg focus:ring-2 focus:ring-purple-500"
               placeholder="your@email.com"
             />
@@ -107,10 +108,11 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium mb-1">Password</label>
             <input
               {...register("password")}
               type="password"
+              id="password"
               className="w-full px-3 py-3 text-base border rounded-lg focus:ring-2 focus:ring-purple-500"
               placeholder="••••••••"
             />
@@ -124,6 +126,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
+            aria-label={isLoading ? "Logging in..." : "Login"}
             className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
             {isLoading ? "Logging in..." : "Login"}
