@@ -15,8 +15,24 @@ interface FilterChipsProps {
 }
 
 function formatDate(s: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (match) {
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    const date = new Date(y, m - 1, d);
+    if (Number.isNaN(date.getTime())) return s;
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  // Fallback for other date formats (ISO with time, etc.)
   try {
-    return new Date(s).toLocaleDateString("en-US", {
+    const date = new Date(s);
+    if (Number.isNaN(date.getTime())) return s;
+    return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",

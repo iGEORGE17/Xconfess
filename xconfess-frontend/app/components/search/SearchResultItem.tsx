@@ -11,18 +11,33 @@ interface SearchResultItemProps {
 }
 
 function timeAgo(date: string) {
-  const seconds = Math.floor(
-    (Date.now() - new Date(date).getTime()) / 1000
-  );
+  const ts = new Date(date).getTime();
+  if (Number.isNaN(ts)) return "Unknown date";
+  
+  const seconds = Math.floor((Date.now() - ts) / 1000);
+  
+  // Handle future dates (clock skew)
+  if (seconds < 0) {
+    return new Date(ts).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric", // Added year for future dates
+    });
+  }
+  
+  // Relative time formatting
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  return new Date(date).toLocaleDateString("en-US", {
+  
+  // Older posts - no year needed for current year posts
+  return new Date(ts).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
 }
+
 
 /**
  * Highlights occurrences of `query` in `text` (case-insensitive).
