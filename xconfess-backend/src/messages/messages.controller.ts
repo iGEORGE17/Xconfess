@@ -1,25 +1,22 @@
-import { Controller, Post, Body, UseGuards, Request, ForbiddenException, NotFoundException, Get, Query, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Query } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto, ReplyMessageDto } from './dto/message.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NotificationQueue } from '../notification/notification.queue';
 
 @Controller('messages')
 export class MessagesController {
   constructor(
     private readonly messagesService: MessagesService,
+    private readonly notificationQueue: NotificationQueue,
   ) {}
 
   @UseGuards(JwtAuthGuard)
   @Post()
   async sendMessage(@Body() dto: CreateMessageDto, @Request() req) {
-   try {
-      const message = await this.messagesService.create(dto, req.user);
-
-      return { success: true, messageId: message.id };
-    } catch (error) {
-      // Service layer exceptions will be handled by NestJS exception filters
-      throw error;
-    }
+    const message = await this.messagesService.create(dto, req.user);
+    // Confessions are anonymous; no email notification is sent here.
+    return { success: true, messageId: message.id };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -31,7 +28,7 @@ export class MessagesController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getMessages(@Query('confession_id', new ParseUUIDPipe()) confession_id: string, @Request() req) {
+  async getMessages(@Query('confession_id') confession_id: string, @Request() req) {
     const messages = await this.messagesService.findForConfessionAuthor(confession_id, req.user);
     // Hide sender info for anonymity
     return {

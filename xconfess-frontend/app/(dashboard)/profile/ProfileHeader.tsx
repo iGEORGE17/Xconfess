@@ -32,7 +32,7 @@ export function ProfileHeader({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <header aria-label="Profile Header" className="bg-white rounded-lg shadow-md p-6">
       <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
         {/* Avatar */}
         <div className="flex-shrink-0">
@@ -106,6 +106,6 @@ export function ProfileHeader({
           )}
         </div>
       </div>
-    </div>
+    </header>
   );
 }

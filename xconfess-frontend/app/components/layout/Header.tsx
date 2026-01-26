@@ -13,7 +13,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="border-b border-zinc-200 dark:border-slate-800 bg-background sticky top-0 z-30 transition-colors">
+      <header aria-label="Main navigation" className="border-b bg-white sticky top-0 z-30">
         <nav className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-xl font-bold text-primary">
@@ -25,8 +25,14 @@ export default function Header() {
                 Feed
               </Link>
               <Link
+                href="/search"
+                className="text-gray-700 hover:text-purple-600"
+              >
+                Search
+              </Link>
+              <Link
                 href="/profile"
-                className="text-gray-700 hover:text-purple-600 dark:text-slate-300 dark:hover:text-purple-400 font-medium transition-colors"
+                className="text-gray-700 hover:text-purple-600"
               >
                 Profile
               </Link>
@@ -43,7 +49,7 @@ export default function Header() {
 
               {user && (
                 <div className="flex items-center space-x-4">
-                  <span className="text-sm text-secondary">
+                  <span aria-label={`@${user.username}`} className="text-sm text-gray-600">
                     @{user.username}
                   </span>
                   <button

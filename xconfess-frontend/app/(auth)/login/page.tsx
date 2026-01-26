@@ -1,142 +1,119 @@
-"use client";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import Link from "next/link";
+'use client';
 
-const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import apiClient from '@/app/lib/api/client';
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      router.push("/dashboard"); // Redirect to dashboard if already logged in
-    }
+  const doMockAdminLogin = () => {
+    localStorage.setItem('adminMock', 'true');
+    localStorage.setItem('accessToken', 'mock');
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 1,
+        username: 'demo-admin',
+        isAdmin: true,
+        is_active: true,
+      }),
+    );
+    router.push('/admin/dashboard');
+  };
 
-    if (searchParams.get("registered") === "true") {
-      setSuccessMessage("Account created successfully! Please log in.");
-    }
-  }, [router, searchParams]);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-  });
-
-  const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
-    setError("");
-
+  const doLogin = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-          }),
-        },
-      );
+      // Best-effort real login. If your backend expects different fields, use Mock Admin Login.
+      const res = await apiClient.post('/api/users/login', { email, password });
+      const { access_token, user } = res.data ?? {};
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Login failed");
+      if (!access_token) {
+        throw new Error('Missing access token');
       }
 
-      const { access_token } = await response.json();
-      localStorage.setItem("token", access_token);
+      localStorage.setItem('accessToken', access_token);
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
+      }
 
-      // Redirect to dashboard after successful login
-      router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      router.push('/admin/dashboard');
+    } catch (e: any) {
+      setError(e?.message || 'Login failed');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">Welcome Back</h1>
-
-        {successMessage && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {successMessage}
-          </div>
-        )}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Login</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            For quick testing, use <span className="font-medium">Mock Admin Login</span>.
+          </p>
+        </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
             <input
-              {...register("email")}
-              type="email"
-              className="w-full px-3 py-3 text-base border rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              placeholder="admin@example.com"
             />
-            {errors.email && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.email.message}
-              </p>
-            )}
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Password
+            </label>
             <input
-              {...register("password")}
               type="password"
-              className="w-full px-3 py-3 text-base border rounded-lg focus:ring-2 focus:ring-purple-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
               placeholder="••••••••"
             />
-            {errors.password && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.password.message}
-              </p>
-            )}
           </div>
 
           <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            onClick={doLogin}
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
-            {isLoading ? "Logging in..." : "Login"}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
-        </form>
 
-        <p className="text-center mt-4 text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link href="/register" className="text-purple-600 hover:underline">
-            Register here
-          </Link>
-        </p>
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={doMockAdminLogin}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800"
+            >
+              Mock Admin Login (Dummy Data)
+            </button>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              This enables local mock data for admin endpoints (analytics, reports, users, audit logs).
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+

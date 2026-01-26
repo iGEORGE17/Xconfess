@@ -108,7 +108,7 @@ export default function AnalyticsPage() {
                         </div>
                         <button
                             onClick={() => window.location.reload()}
-                            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm font-medium"
+                            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer "
                         >
                             Retry
                         </button>

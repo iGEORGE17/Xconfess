@@ -1,13 +1,16 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ReportType } from '../../admin/entities/report.entity';
 
 export class CreateReportDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(255)
-  reason: string;
+  @IsUUID()
+  confessionId: string;
+
+  @IsEnum(ReportType)
+  type: ReportType;
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  details?: string;
+  @MaxLength(2000)
+  reason?: string;
 }
+
