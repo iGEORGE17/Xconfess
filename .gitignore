@@ -2,9 +2,7 @@
 node_modules/
 **/node_modules/
 
-# Or be specific
-xconfess-frontend/node_modules/
-xconfess-backend/node_modules/
+
 # Environment variables
 .env
 .env.local
