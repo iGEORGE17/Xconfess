@@ -623,6 +623,6 @@ export class ConfessionService {
   }
 
   private async invalidateConfessionCache() {
-    await this.cacheService.reset();
+    await this.cacheService.delPattern('confessions:');
   }
 }
