@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// DELETE /api/notifications/[id]
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params;
-
   try {
-    // Example: delete from database
-    // await deleteNotificationById(id);
+    const token = request.headers.get("authorization")?.replace("Bearer ", "");
+
+    const response = await fetch(
+      `${process.env.BACKEND_URL}/notifications/${params.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to delete notification");
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("Error deleting notification:", error);
     return NextResponse.json(
       { error: "Failed to delete notification" },
       { status: 500 }

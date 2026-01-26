@@ -28,7 +28,7 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
 }) => {
     if (loading) {
         return (
-            <div role='status' aria-label='loading' className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
                 <h3 className="text-xl font-bold text-white mb-6">Trending Confessions</h3>
                 <div className="space-y-4">
                     {Array.from({ length: 5 }).map((_, i) => (

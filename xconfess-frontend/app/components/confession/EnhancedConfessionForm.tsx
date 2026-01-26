@@ -351,26 +351,22 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
             </label>
             <div className="flex flex-wrap gap-4">
               {Object.values(Gender).map((g) => (
-                <button
-                  key={g} >
-                  <label
-                    htmlFor={g}
-                    className="flex items-center gap-3 cursor-pointer group p-2 -ml-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="gender"
-                      id={g}
-                      value={g}
-                      checked={gender === g}
-                      onChange={(e) => setGender(e.target.value as Gender)}
-                      className="w-5 h-5 border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
-                    />
-                    <span className="text-base text-zinc-300 capitalize">
-                      {g}
-                    </span>
-                  </label>
-                </button>
+                <label
+                  key={g}
+                  htmlFor={g}
+                  className="cursor-pointer p-2 rounded-lg hover:bg-gray-100 flex items-center gap-2"
+                >
+                  <input
+                    type="radio"
+                    name="gender"
+                    id={g}
+                    value={g}
+                    checked={gender === g}
+                    onChange={() => setGender(g)}
+                  />
+                  <span>{g}</span>
+                </label>
+
               ))}
             </div>
           </div>
