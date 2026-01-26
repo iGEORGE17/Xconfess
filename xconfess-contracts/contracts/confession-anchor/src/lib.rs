@@ -1,8 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, BytesN, Env, Symbol,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, BytesN, Env, Symbol};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,7 +66,8 @@ impl ConfessionAnchor {
         // Note: symbol_short is limited to 9 characters, so we use a
         // dynamically constructed Symbol here.
         let event_topic = Symbol::new(&env, "confession_anchor");
-        env.events().publish((event_topic, hash.clone()), (timestamp, anchor_height));
+        env.events()
+            .publish((event_topic, hash.clone()), (timestamp, anchor_height));
 
         symbol_short!("anchored")
     }

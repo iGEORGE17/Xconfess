@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { CharacterCounter } from "./CharacterCounter";
@@ -9,7 +15,11 @@ import { FormattingToolbar } from "./FormattingToolbar";
 import { PreviewPanel } from "./PreviewPanel";
 import { DraftManager } from "./DraftManager";
 import { StellarAnchorToggle } from "./StellarAnchorToggle";
-import { validateConfessionForm, Gender, type ConfessionFormData } from "@/app/lib/utils/validation";
+import {
+  validateConfessionForm,
+  Gender,
+  type ConfessionFormData,
+} from "@/app/lib/utils/validation";
 import { useStellarWallet } from "@/app/lib/hooks/useStellarWallet";
 import { Draft } from "@/app/lib/hooks/useDrafts";
 import { Eye, EyeOff, Send, Loader2 } from "lucide-react";
@@ -38,15 +48,22 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { anchor } = useStellarWallet();
 
+  // Removed premature validation effect
   useEffect(() => {
-    const validationErrors = validateConfessionForm({
-      title,
-      body,
-      gender,
-      enableStellarAnchor,
-    });
-    setErrors(validationErrors);
-  }, [title, body, gender, enableStellarAnchor]);
+    // Only clear errors when user starts typing to improve UX
+    if (Object.keys(errors).length > 0) {
+      const validationErrors = validateConfessionForm({
+        title,
+        body,
+        gender,
+        enableStellarAnchor,
+      });
+      // Only update if errors are cleared
+      if (Object.keys(validationErrors).length < Object.keys(errors).length) {
+        setErrors(validationErrors);
+      }
+    }
+  }, [title, body, gender, enableStellarAnchor, errors]);
 
   const handleLoadDraft = (draft: Draft) => {
     setTitle(draft.title || "");
@@ -100,7 +117,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
           setStellarTxHash(txHash);
         } else {
           setSubmitError(
-            anchorResult.error || "Failed to anchor confession on Stellar"
+            anchorResult.error || "Failed to anchor confession on Stellar",
           );
           setIsSubmitting(false);
           return;
@@ -124,12 +141,13 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.message || `Failed to submit confession: ${response.statusText}`
+          errorData.message ||
+            `Failed to submit confession: ${response.statusText}`,
         );
       }
 
       setSubmitSuccess(true);
-      
+
       if (onSubmit) {
         onSubmit({
           title,
@@ -150,8 +168,10 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         setSubmitSuccess(false);
         setIsPreviewMode(false);
       }, 2000);
-    } catch (error: any) {
-      setSubmitError(error.message || "Failed to submit confession");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to submit confession";
+      setSubmitError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -162,7 +182,8 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
       <CardHeader>
         <CardTitle>Share Your Confession</CardTitle>
         <CardDescription>
-          Express yourself anonymously. Your confession will be shared with the community.
+          Express yourself anonymously. Your confession will be shared with the
+          community.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -187,13 +208,21 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
             />
             <div className="flex items-center justify-between mt-1">
               {errors.title ? (
-                <p id="title-error" className="text-xs text-red-400" role="alert">
+                <p
+                  id="title-error"
+                  className="text-xs text-red-400"
+                  role="alert"
+                >
                   {errors.title}
                 </p>
               ) : (
                 <div />
               )}
-              <CharacterCounter current={title.length} max={200} id="title-counter" />
+              <CharacterCounter
+                current={title.length}
+                max={200}
+                id="title-counter"
+              />
             </div>
           </div>
 
@@ -216,7 +245,11 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={() => setIsPreviewMode(!isPreviewMode)}
-                  aria-label={isPreviewMode ? "Switch to edit mode" : "Switch to preview mode"}
+                  aria-label={
+                    isPreviewMode
+                      ? "Switch to edit mode"
+                      : "Switch to preview mode"
+                  }
                   className="flex items-center gap-2"
                 >
                   {isPreviewMode ? (
@@ -238,8 +271,8 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
               <PreviewPanel title={title} body={body} />
             ) : (
               <>
-                <FormattingToolbar 
-                  textareaRef={textareaRef} 
+                <FormattingToolbar
+                  textareaRef={textareaRef}
                   onTextChange={handleTextChange}
                 />
                 <textarea
@@ -249,13 +282,13 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                   onChange={(e) => setBody(e.target.value)}
                   placeholder="Share your thoughts, feelings, or experiences..."
                   className={cn(
-                    "mt-2 flex w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-white",
+                    "mt-2 flex w-full rounded-lg border bg-zinc-900 px-3 py-2 text-base text-white",
                     "placeholder:text-zinc-500 min-h-[200px] resize-y",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                     "focus-visible:ring-zinc-400 disabled:cursor-not-allowed disabled:opacity-50",
                     errors.body
                       ? "border-red-500 focus-visible:ring-red-500"
-                      : "border-zinc-700 focus-visible:border-zinc-600"
+                      : "border-zinc-700 focus-visible:border-zinc-600",
                   )}
                   maxLength={5000}
                   aria-describedby={errors.body ? "body-error" : "body-counter"}
@@ -263,13 +296,21 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                 />
                 <div className="flex items-center justify-between mt-1">
                   {errors.body ? (
-                    <p id="body-error" className="text-xs text-red-400" role="alert">
+                    <p
+                      id="body-error"
+                      className="text-xs text-red-400"
+                      role="alert"
+                    >
                       {errors.body}
                     </p>
                   ) : (
                     <div />
                   )}
-                  <CharacterCounter current={body.length} max={5000} id="body-counter" />
+                  <CharacterCounter
+                    current={body.length}
+                    max={5000}
+                    id="body-counter"
+                  />
                 </div>
               </>
             )}
@@ -280,23 +321,21 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
             <label className="block text-sm font-medium text-zinc-300 mb-2">
               Gender <span className="text-zinc-500">(optional)</span>
             </label>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               {Object.values(Gender).map((g) => (
                 <label
                   key={g}
-                  className="flex items-center gap-2 cursor-pointer group"
+                  className="flex items-center gap-3 cursor-pointer group p-2 -ml-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
                 >
                   <input
                     type="radio"
                     name="gender"
                     value={g}
                     checked={gender === g}
-                    onChange={(e) =>
-                      setGender(e.target.value as Gender)
-                    }
-                    className="w-4 h-4 border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+                    onChange={(e) => setGender(e.target.value as Gender)}
+                    className="w-5 h-5 border-zinc-700 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
                   />
-                  <span className="text-sm text-zinc-300 capitalize">
+                  <span className="text-base text-zinc-300 capitalize">
                     {g}
                   </span>
                 </label>
@@ -350,13 +389,16 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
                 setIsPreviewMode(false);
               }}
               disabled={isSubmitting}
+              className="min-h-[44px]"
             >
               Clear
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !!errors.body || body.trim().length < 10}
-              className="min-w-[120px]"
+              disabled={
+                isSubmitting || !!errors.body || body.trim().length < 10
+              }
+              className="min-w-[120px] min-h-[44px]"
             >
               {isSubmitting ? (
                 <>

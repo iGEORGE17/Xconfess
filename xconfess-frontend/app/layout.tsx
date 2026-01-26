@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { WalletProvider } from "@/lib/providers/WalletProvider";
+import { AppHeader } from "@/components/layout/AppHeader";
 import "./globals.css";
 import { AuthProvider } from "./lib/providers/AuthProvider";
 
@@ -29,6 +31,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>{children}</AuthProvider>
+        <WalletProvider>
+          <AppHeader />
+          {children}
+        </WalletProvider>
       </body>
     </html>
   );
