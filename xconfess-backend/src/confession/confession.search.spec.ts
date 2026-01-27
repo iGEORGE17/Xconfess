@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfessionService } from './confession.service';
 import { AnonymousConfessionRepository } from './repository/confession.repository';
 import { SearchConfessionDto } from './dto/search-confession.dto';
+import { ConfessionViewCacheService } from './confession-view-cache.service';
+import { AiModerationService } from '../moderation/ai-moderation.service';
+import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('ConfessionService - Search Functionality', () => {
   let service: ConfessionService;
@@ -16,8 +20,15 @@ describe('ConfessionService - Search Functionality', () => {
           useValue: {
             hybridSearch: jest.fn(),
             fullTextSearch: jest.fn(),
+            findOne: jest.fn(),
+            increment: jest.fn(),
+            save: jest.fn(),
           },
         },
+        { provide: ConfessionViewCacheService, useValue: { checkAndMarkView: jest.fn() } },
+        { provide: AiModerationService, useValue: { moderateContent: jest.fn() } },
+        { provide: ModerationRepositoryService, useValue: { createLog: jest.fn() } },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 
@@ -30,12 +41,12 @@ describe('ConfessionService - Search Functionality', () => {
       const searchDto: SearchConfessionDto = { q: 'love', page: 1, limit: 10 };
       const mockResult = {
         confessions: [
-          { id: '1', message: 'I love programming', created_at: new Date(), reactions: [] }
+          { id: '1', message: 'I love programming', created_at: new Date(), reactions: [] },
         ],
-        total: 1
+        total: 1,
       };
 
-      jest.spyOn(repository, 'hybridSearch').mockResolvedValue(mockResult);
+      jest.spyOn(repository, 'hybridSearch').mockResolvedValue(mockResult as any);
 
       const result = await service.search(searchDto);
 
@@ -54,7 +65,7 @@ describe('ConfessionService - Search Functionality', () => {
       const searchDto: SearchConfessionDto = { q: '  love  ', page: 1, limit: 10 };
       const mockResult = { confessions: [], total: 0 };
 
-      jest.spyOn(repository, 'hybridSearch').mockResolvedValue(mockResult);
+      jest.spyOn(repository, 'hybridSearch').mockResolvedValue(mockResult as any);
 
       await service.search(searchDto);
 
@@ -67,12 +78,12 @@ describe('ConfessionService - Search Functionality', () => {
       const searchDto: SearchConfessionDto = { q: 'relationship advice', page: 1, limit: 10 };
       const mockResult = {
         confessions: [
-          { id: '1', message: 'Need relationship advice', created_at: new Date(), reactions: [] }
+          { id: '1', message: 'Need relationship advice', created_at: new Date(), reactions: [] },
         ],
-        total: 1
+        total: 1,
       };
 
-      jest.spyOn(repository, 'fullTextSearch').mockResolvedValue(mockResult);
+      jest.spyOn(repository, 'fullTextSearch').mockResolvedValue(mockResult as any);
 
       const result = await service.fullTextSearch(searchDto);
 
