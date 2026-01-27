@@ -32,6 +32,7 @@ import { EncryptionService } from 'src/encryption/encryption.service';
 import { ConfessionResponseDto } from './dto/confession-response.dto';
 import { StellarService } from '../stellar/stellar.service';
 import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class ConfessionService {
@@ -45,6 +46,7 @@ export class ConfessionService {
     private readonly logger: AppLogger,
     private encryptionService: EncryptionService,
     private readonly stellarService: StellarService,
+    private readonly cacheService: CacheService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -115,6 +117,8 @@ export class ConfessionService {
 
       const savedConfession = await confessionRepo.save(conf);
 
+      await this.invalidateConfessionCache();
+
       // Step 3: Log moderation decision
       await this.moderationRepoService.createLog(
         msg,
@@ -156,6 +160,19 @@ export class ConfessionService {
     if (limit < 1 || limit > 100)
       throw new BadRequestException('limit must be 1–100');
 
+    const cacheKey = this.cacheService.buildKey(
+      'confessions',
+      page,
+      limit,
+      dto.gender || 'all',
+      dto.sort || 'recent',
+    );
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const skip = (page - 1) * limit;
     const qb = this.confessionRepo
       .createQueryBuilder('confession')
@@ -164,7 +181,20 @@ export class ConfessionService {
       .andWhere('confession.moderationStatus IN (:...statuses)', {
         statuses: [ModerationStatus.APPROVED, ModerationStatus.PENDING],
       })
-      .leftJoinAndSelect('confession.reactions', 'reactions');
+      .leftJoinAndSelect('confession.reactions', 'reactions')
+      .leftJoinAndSelect('reactions.anonymousUser', 'reactionUser')
+      .select([
+        'confession.id',
+        'confession.message',
+        'confession.gender',
+        'confession.created_at',
+        'confession.view_count',
+        'confession.moderationStatus',
+        'reactions.id',
+        'reactions.emoji',
+        'reactions.created_at',
+        'reactionUser.id',
+      ]);
 
     if (dto.gender) {
       qb.andWhere('confession.gender = :gender', { gender: dto.gender });
@@ -193,10 +223,14 @@ export class ConfessionService {
       message: decryptConfession(item.message),
     }));
 
-    return {
+    const result = {
       data: decryptedItems,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
+
+    await this.cacheService.set(cacheKey, result, 300);
+
+    return result;
   }
 
   async update(id: string, dto: UpdateConfessionDto) {
@@ -298,6 +332,23 @@ export class ConfessionService {
   async getConfessionByIdWithViewCount(id: string, req: Request) {
     const conf = await this.confessionRepo.findOne({
       where: { id, isDeleted: false, isHidden: false },
+      relations: ['reactions', 'reactions.anonymousUser'],
+      select: {
+        id: true,
+        message: true,
+        gender: true,
+        created_at: true,
+        view_count: true,
+        moderationStatus: true,
+        reactions: {
+          id: true,
+          emoji: true,
+          created_at: true,
+          anonymousUser: {
+            id: true,
+          },
+        },
+      },
     });
     if (!conf) throw new NotFoundException('Confession not found');
 
@@ -313,7 +364,10 @@ export class ConfessionService {
 
     if (await this.viewCache.checkAndMarkView(id, userOrIp)) {
       await this.confessionRepo.increment({ id }, 'view_count', 1);
-      const updated = await this.confessionRepo.findOne({ where: { id } });
+      const updated = await this.confessionRepo.findOne({
+        where: { id },
+        relations: ['reactions', 'reactions.anonymousUser'],
+      });
       if (updated) updated.message = decryptConfession(updated.message);
       return updated;
     }
@@ -566,5 +620,9 @@ export class ConfessionService {
       createdAt: confession.created_at,
       updatedAt: confession.created_at,
     });
+  }
+
+  private async invalidateConfessionCache() {
+    await this.cacheService.delPattern('confessions:');
   }
 }

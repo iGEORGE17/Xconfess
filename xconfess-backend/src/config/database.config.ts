@@ -12,4 +12,11 @@ export const getTypeOrmConfig = (configService: ConfigService): TypeOrmModuleOpt
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   synchronize: true, // Set to false in production!
   autoLoadEntities: true,
+  extra: {
+    max: 20,
+    min: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  },
+  logging: configService.get<string>('NODE_ENV') === 'development',
 });

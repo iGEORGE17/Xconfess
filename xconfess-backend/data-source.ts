@@ -23,4 +23,10 @@ export default new DataSource({
   database: process.env.DB_NAME,
   entities: [__dirname + '/src/**/*.entity.{ts,js}'],
   migrations: [__dirname + '/migrations/!(*.spec).{ts,js}'],
+  extra: {
+    max: 20,
+    min: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  },
 });
