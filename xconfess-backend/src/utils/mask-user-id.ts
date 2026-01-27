@@ -49,12 +49,12 @@ export class UserIdMasker {
       return obj;
     }
 
-    const masked = { ...obj };
+    const masked = { ...obj } as any;
     if (idField in masked) {
       masked[idField] = this.mask(masked[idField]);
     }
 
-    return masked;
+    return masked as T;
   }
 }
 

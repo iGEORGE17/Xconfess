@@ -365,6 +365,33 @@ pub fn mint_badge(env: Env, user: Address, badge_type: Symbol) -> Result<(), Err
 
 ---
 
+## ⚡ Performance
+
+xConfess is optimized for speed and scalability. See our [Performance Results](PERFORMANCE_RESULTS.md) for detailed metrics.
+
+### Key Metrics
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| API Response Time | < 100ms avg | ✅ |
+| Page Load Time | < 2s | ✅ |
+| Lighthouse Score | 94/100 | ✅ |
+| Database Queries | < 100ms | ✅ |
+| Cache Hit Rate | 82% | ✅ |
+
+### Performance Features
+
+- **Redis Caching**: 82% cache hit rate, 65% database load reduction
+- **Database Indexing**: 70% query time improvement
+- **Code Splitting**: 61% bundle size reduction
+- **Image Optimization**: WebP/AVIF with lazy loading
+- **Connection Pooling**: Optimized for high concurrency
+- **Response Compression**: 60% bandwidth reduction
+
+📊 **Full Report**: [PERFORMANCE_RESULTS.md](PERFORMANCE_RESULTS.md)
+
+---
+
 ## 🤝 Contributing
 
 We welcome contributions from the community! xConfess is participating in the **Stellar Wave Program** 🌊

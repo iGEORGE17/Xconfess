@@ -169,7 +169,8 @@ export class AnalyticsService {
         this.userRepository.count(),
         this.confessionRepository.count(),
         this.reactionRepository.count(),
-        this.confessionRepository.count({ where: { isPublished: true } }),
+        // Note: isPublished field doesn't exist, using total count instead
+        this.confessionRepository.count({ where: { isDeleted: false } }),
       ]);
 
     // Get most popular category

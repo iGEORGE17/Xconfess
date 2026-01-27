@@ -14,8 +14,9 @@ export class WebSocketAdapter extends IoAdapter {
   createIOServer(port: number, options?: ServerOptions): any {
     const corsOrigin = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
     
-    const serverOptions: ServerOptions = {
+    const serverOptions: Partial<ServerOptions> = {
       ...options,
+      path: options?.path || '/socket.io',
       cors: {
         origin: corsOrigin,
         credentials: true,

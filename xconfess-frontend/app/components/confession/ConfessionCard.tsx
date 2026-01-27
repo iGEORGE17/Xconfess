@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
+import Image from "next/image";
 import { ReactionButton } from "./ReactionButtons";
 import { AnchorButton } from "./AnchorButton";
+import { TipButton } from "./TipButton";
+import { getTipStats, type TipStats } from "@/lib/services/tipping.service";
+import { useEffect } from "react";
 
 interface Props {
   confession: {
@@ -14,19 +18,35 @@ interface Props {
       id: string;
       username?: string;
       avatar?: string;
+      stellarAddress?: string;
     };
     commentCount?: number;
     viewCount?: number;
     isAnchored?: boolean;
     stellarTxHash?: string | null;
+    tipStats?: TipStats;
   };
 }
 
-export const ConfessionCard = ({ confession }: Props) => {
+export const ConfessionCard = memo(({ confession }: Props) => {
   const [isAnchored, setIsAnchored] = useState(confession.isAnchored || false);
   const [txHash, setTxHash] = useState<string | null>(
     confession.stellarTxHash || null
   );
+  const [tipStats, setTipStats] = useState<TipStats | null>(
+    confession.tipStats || null
+  );
+
+  useEffect(() => {
+    // Fetch tip stats if not provided
+    if (!tipStats) {
+      getTipStats(confession.id).then((stats) => {
+        if (stats) {
+          setTipStats(stats);
+        }
+      });
+    }
+  }, [confession.id, tipStats]);
 
   const handleAnchorSuccess = (newTxHash: string) => {
     setIsAnchored(true);
@@ -55,11 +75,13 @@ export const ConfessionCard = ({ confession }: Props) => {
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-800">
         <div className="flex items-center gap-3">
           {confession.author?.avatar && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={confession.author.avatar}
               alt={confession.author?.username || "Anonymous"}
-              className="w-10 h-10 rounded-full bg-zinc-700 object-cover"
+              width={40}
+              height={40}
+              className="rounded-full bg-zinc-700 object-cover"
+              loading="lazy"
             />
           )}
           <p className="text-base font-medium text-gray-300">
@@ -94,6 +116,11 @@ export const ConfessionCard = ({ confession }: Props) => {
         </div>
 
         <div className="flex items-center gap-3">
+          <TipButton
+            confessionId={confession.id}
+            recipientAddress={confession.author?.stellarAddress}
+            initialStats={tipStats || undefined}
+          />
           <AnchorButton
             confessionId={confession.id}
             confessionContent={confession.content}
@@ -117,4 +144,15 @@ export const ConfessionCard = ({ confession }: Props) => {
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.confession.id === nextProps.confession.id &&
+    prevProps.confession.reactions.like === nextProps.confession.reactions.like &&
+    prevProps.confession.reactions.love === nextProps.confession.reactions.love &&
+    prevProps.confession.viewCount === nextProps.confession.viewCount &&
+    prevProps.confession.commentCount === nextProps.confession.commentCount &&
+    prevProps.confession.isAnchored === nextProps.confession.isAnchored
+  );
+});
+
+ConfessionCard.displayName = 'ConfessionCard';
