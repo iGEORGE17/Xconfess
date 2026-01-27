@@ -9,7 +9,10 @@ import { Comment } from './entities/comment.entity';
 import { User } from '../user/entities/user.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { NotificationQueue } from '../notification/notification.queue';
-import { ModerationComment, ModerationStatus } from './entities/moderation-comment.entity';
+import {
+  ModerationComment,
+  ModerationStatus,
+} from './entities/moderation-comment.entity';
 import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 
 @Injectable()
@@ -29,6 +32,7 @@ export class CommentService {
     user: AnonymousUser,
     confessionId: string,
     anonymousContextId: string,
+    parentId?: number,
   ): Promise<Comment> {
     const confession = await this.confessionRepo.findOne({
       where: { id: confessionId, isDeleted: false },
@@ -46,6 +50,12 @@ export class CommentService {
       anonymousContextId,
     });
 
+    if (parentId) {
+      const parentComment = new Comment();
+      parentComment.id = parentId;
+      comment.parent = parentComment;
+    }
+
     const saved = await this.commentRepo.save(comment);
 
     // Add moderation entry
@@ -54,24 +64,45 @@ export class CommentService {
         comment: saved,
         commentId: saved.id,
         status: ModerationStatus.PENDING,
-      })
+      }),
     );
 
     return saved;
   }
 
-  async findByConfessionId(confessionId: string): Promise<Comment[]> {
+  async findByConfessionId(
+    confessionId: string,
+    opts?: { page?: number; limit?: number },
+  ): Promise<Comment[]> {
     // Only return comments with approved moderation status
-    const comments = await this.commentRepo
+    const qb = this.commentRepo
       .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.confession', 'confession')
       .leftJoinAndSelect('comment.anonymousUser', 'anonymousUser')
-      .innerJoin('moderation_comments', 'moderation', 'moderation.commentId = comment.id')
+      .leftJoinAndSelect('comment.parent', 'parent')
+      .leftJoinAndSelect('comment.replies', 'replies')
+      .innerJoin(
+        'moderation_comments',
+        'moderation',
+        'moderation.commentId = comment.id',
+      )
       .where('comment.confession = :confessionId', { confessionId })
       .andWhere('comment.isDeleted = false')
-      .andWhere('moderation.status = :status', { status: ModerationStatus.APPROVED })
-      .orderBy('comment.createdAt', 'DESC')
-      .getMany();
+      .andWhere('moderation.status = :status', {
+        status: ModerationStatus.APPROVED,
+      })
+      .orderBy('comment.createdAt', 'DESC');
+
+    if (opts?.page && opts?.limit) {
+      // For pagination we only page top-level comments (parent IS NULL)
+      qb.andWhere('comment.parent IS NULL');
+      const skip = (opts.page - 1) * opts.limit;
+      qb.skip(skip).take(opts.limit);
+    } else if (opts?.limit) {
+      qb.take(opts.limit);
+    }
+
+    const comments = await qb.getMany();
     return comments;
   }
 
