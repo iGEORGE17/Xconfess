@@ -9,7 +9,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  @Throttle(10, 60) 
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) 
   @ApiOperation({ summary: 'Get the welcome message for the API' })
   @ApiResponse({
     status: 200,
