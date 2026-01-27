@@ -1,7 +1,15 @@
-
 import {
-  Controller, Get, Post, Put, Delete,
-  Body, Param, Query, Req, UsePipes, ValidationPipe,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Req,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
@@ -9,6 +17,7 @@ import { UpdateConfessionDto } from './dto/update-confession.dto';
 import { GetConfessionsDto } from './dto/get-confessions.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
 import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
+import { GetConfessionsByTagDto } from './dto/get-confessions-by-tag.dto';
 import { Request } from 'express';
 
 @Controller('confessions')
@@ -48,6 +57,17 @@ export class ConfessionController {
     return this.service.getTrendingConfessions();
   }
 
+  @Get('tags')
+  getAllTags() {
+    return this.service.getAllTags();
+  }
+
+  @Get('tags/:tag')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  getByTag(@Param('tag') tag: string, @Query() dto: GetConfessionsByTagDto) {
+    return this.service.getConfessionsByTag(tag, dto);
+  }
+
   @Get(':id')
   getById(@Param('id') id: string, @Req() req: Request) {
     return this.service.getConfessionByIdWithViewCount(id, req);
@@ -60,10 +80,7 @@ export class ConfessionController {
 
   @Post(':id/anchor')
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  anchorConfession(
-    @Param('id') id: string,
-    @Body() dto: AnchorConfessionDto,
-  ) {
+  anchorConfession(@Param('id') id: string, @Body() dto: AnchorConfessionDto) {
     return this.service.anchorConfession(id, dto);
   }
 
