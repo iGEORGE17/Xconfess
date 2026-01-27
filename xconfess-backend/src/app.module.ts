@@ -15,6 +15,8 @@ import { MessagesModule } from './messages/messages.module';
 import { AdminModule } from './admin/admin.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReportModule } from './report/report.module';
+import { DataExportService } from './data-export/data-export.service';
+import { DataExportModule } from './data-export/data-export.module';
 
 @Module({
   imports: [
@@ -46,6 +48,7 @@ import { ReportModule } from './report/report.module';
     MessagesModule,
     AdminModule,
     ReportModule,
+    DataExportModule,
   ],
   controllers: [AppController],
   providers: [
@@ -54,6 +57,7 @@ import { ReportModule } from './report/report.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    DataExportService,
   ],
 })
 export class AppModule {}
