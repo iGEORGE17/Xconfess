@@ -15,6 +15,12 @@ import { MessagesModule } from './messages/messages.module';
 import { AdminModule } from './admin/admin.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReportModule } from './report/report.module';
+import { StellarModule } from './stellar/stellar.module';
+import { TippingModule } from './tipping/tipping.module';
+import { LoggerModule } from './logger/logger.module';
+import { EncryptionModule } from './encryption/encryption.module';
+// TODO: NotificationModule requires Bull/Redis configuration - temporarily disabled
+// import { NotificationModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -46,6 +52,11 @@ import { ReportModule } from './report/report.module';
     MessagesModule,
     AdminModule,
     ReportModule,
+    // NotificationModule, // Requires Bull/Redis - temporarily disabled
+    StellarModule,
+    TippingModule,
+    LoggerModule,
+    EncryptionModule,
   ],
   controllers: [AppController],
   providers: [

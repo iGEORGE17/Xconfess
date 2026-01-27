@@ -26,4 +26,8 @@ export class CreateConfessionDto {
   @IsNotEmpty()
   @MaxLength(5000)
   body: string;
+
+  @IsOptional()
+  @IsString()
+  stellarTxHash?: string;
 }
