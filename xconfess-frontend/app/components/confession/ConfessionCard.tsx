@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, memo } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { ReactionButton } from "./ReactionButtons";
 import { AnchorButton } from "./AnchorButton";
 import { TipButton } from "./TipButton";
 import { getTipStats, type TipStats } from "@/lib/services/tipping.service";
-import { useEffect } from "react";
+import { memo, useEffect } from "react";
 
 interface Props {
   confession: {
@@ -93,10 +94,12 @@ export const ConfessionCard = memo(({ confession }: Props) => {
         </p>
       </div>
 
-      {/* Content */}
-      <p className="text-white text-lg mb-4 leading-relaxed wrap-break-word">
-        {confession.content}
-      </p>
+      {/* Content - link to detail */}
+      <Link href={`/confessions/${confession.id}`} className="block group">
+        <p className="text-white text-lg mb-4 leading-relaxed wrap-break-word group-hover:text-zinc-200 transition-colors">
+          {confession.content}
+        </p>
+      </Link>
 
       {/* Metadata and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
@@ -108,10 +111,13 @@ export const ConfessionCard = memo(({ confession }: Props) => {
             </div>
           )}
           {confession.commentCount !== undefined && (
-            <button className="flex items-center gap-2 hover:text-gray-300 transition-colors cursor-pointer min-h-[44px] min-w-[44px] touch-manipulation">
+            <Link
+              href={`/confessions/${confession.id}#comments`}
+              className="flex items-center gap-2 hover:text-gray-300 transition-colors cursor-pointer min-h-[44px] min-w-[44px] touch-manipulation"
+            >
               <span className="text-lg">💬</span>
               <span>{confession.commentCount}</span>
-            </button>
+            </Link>
           )}
         </div>
 
