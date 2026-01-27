@@ -1,4 +1,137 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as StellarSDK from '@stellar/stellar-sdk';
+import { StellarConfigService } from './stellar-config.service';
+import { TransactionBuilderService } from './transaction-builder.service';
+import { ITransactionResult } from './interfaces/stellar-config.interface';
+
+@Injectable()
+export class StellarService {
+  private readonly logger = new Logger(StellarService.name);
+
+  constructor(
+    private stellarConfig: StellarConfigService,
+    private txBuilder: TransactionBuilderService,
+    private configService: ConfigService,
+  ) {}
+
+  /**
+   * Get account balance
+   */
+  async getAccountBalance(publicKey: string): Promise<{
+    native: string;
+    assets: Array<{ code: string; issuer: string; balance: string }>;
+  }> {
+    try {
+      const server = this.stellarConfig.getServer();
+      const account = await server.loadAccount(publicKey);
+      const native = account.balances.find(
+        (b) => b.asset_type === 'native',
+      )?.balance || '0';
+      const assets = account.balances
+        .filter((b) => b.asset_type !== 'native')
+        .map((b: any) => ({
+          code: b.asset_code,
+          issuer: b.asset_issuer,
+          balance: b.balance,
+        }));
+      return { native, assets };
+    } catch (error) {
+      this.logger.error(`Failed to get account balance: ${error.message}`);
+      throw new Error(`Account not found or network error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify transaction on-chain
+   */
+  async verifyTransaction(txHash: string): Promise<ITransactionResult> {
+    try {
+      const server = this.stellarConfig.getServer();
+      const tx = await server.transactions().transaction(txHash).call();
+      return {
+        hash: tx.hash,
+        success: tx.successful,
+        ledger: tx.ledger,
+        createdAt: tx.created_at,
+        envelope: tx.envelope_xdr,
+        result: tx.result_xdr,
+      };
+    } catch (error) {
+      this.logger.error(`Transaction verification failed: ${error.message}`);
+      throw new Error(`Transaction not found: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if account exists
+   */
+  async accountExists(publicKey: string): Promise<boolean> {
+    try {
+      const server = this.stellarConfig.getServer();
+      await server.loadAccount(publicKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get network configuration (safe for public exposure)
+   * Never expose secret keys or sensitive info
+   */
+  getNetworkConfig() {
+    const config = this.stellarConfig.getConfig();
+    return {
+      network: config.network,
+      horizonUrl: config.horizonUrl,
+      sorobanRpcUrl: config.sorobanRpcUrl,
+      contractIds: config.contractIds,
+      // Never expose secret keys!
+    };
+  }
+
+  /**
+   * Send payment (for testing/admin purposes)
+   * WARNING: Only use for admin/test flows. Never expose server secret.
+   */
+  async sendPayment(
+    destinationPublicKey: string,
+    amount: string,
+    memo?: string,
+  ): Promise<ITransactionResult> {
+    try {
+      // Get server secret from config (never expose!)
+      const serverSecret = this.configService.get('STELLAR_SERVER_SECRET');
+      if (!serverSecret) {
+        throw new Error('Server secret key not configured');
+      }
+      // Security: never log or return secret
+      const serverKeypair = StellarSDK.Keypair.fromSecret(serverSecret);
+      // Build payment transaction
+      const tx = await this.txBuilder.buildPaymentTransaction(
+        serverKeypair.publicKey(),
+        destinationPublicKey,
+        amount,
+        StellarSDK.Asset.native(),
+        { memo },
+      );
+      // Sign transaction
+      const signedTx = this.txBuilder.signTransaction(tx, serverSecret);
+      // Submit transaction
+      const result = await this.txBuilder.submitTransaction(signedTx);
+      return {
+        hash: result.hash,
+        success: result.successful,
+      };
+    } catch (error) {
+      this.logger.error(`Payment failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // TODO: Add more granular admin guards and logging for all blockchain actions
+}import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
