@@ -13,7 +13,7 @@ const ProfileHeader = ({ profile }: Props) => {
       />
       <div>
         <h1 className="text-3xl font-bold">{profile.isAnonymous ? "Anonymous" : profile.username}</h1>
-        <p className="text-gray-400 text-sm">Member of LogiQuest</p>
+        <p className="text-gray-400 text-sm">Member of Xconfess</p>
       </div>
     </div>
   );
