@@ -33,6 +33,8 @@ import { ConfessionResponseDto } from './dto/confession-response.dto';
 import { StellarService } from '../stellar/stellar.service';
 import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
 import { CacheService } from '../cache/cache.service';
+import { TagService } from './tag.service';
+import { ConfessionTag } from './entities/confession-tag.entity';
 
 @Injectable()
 export class ConfessionService {
@@ -47,6 +49,7 @@ export class ConfessionService {
     private encryptionService: EncryptionService,
     private readonly stellarService: StellarService,
     private readonly cacheService: CacheService,
+    private readonly tagService: TagService,
   ) {}
 
   private sanitizeMessage(message: string): string {
@@ -62,6 +65,12 @@ export class ConfessionService {
     if (!msg) throw new BadRequestException('Invalid confession content');
 
     try {
+      // Step 0: Validate tags if provided
+      let validatedTags: any[] = [];
+      if (dto.tags && dto.tags.length > 0) {
+        validatedTags = await this.tagService.validateTags(dto.tags);
+      }
+
       // Step 1: Moderate the content BEFORE encryption
       const moderationResult =
         await this.aiModerationService.moderateContent(msg);
@@ -116,6 +125,22 @@ export class ConfessionService {
       });
 
       const savedConfession = await confessionRepo.save(conf);
+
+      // Step 2.5: Create ConfessionTag entries if tags were provided
+      if (validatedTags.length > 0) {
+        const confessionTagRepo: Repository<ConfessionTag> = manager
+          ? manager.getRepository(ConfessionTag)
+          : this.confessionRepo.manager.getRepository(ConfessionTag);
+
+        const confessionTags = validatedTags.map((tag) =>
+          confessionTagRepo.create({
+            confession: savedConfession,
+            tag: tag,
+          }),
+        );
+
+        await confessionTagRepo.save(confessionTags);
+      }
 
       await this.invalidateConfessionCache();
 
@@ -537,7 +562,9 @@ export class ConfessionService {
     }
 
     if (confession.isAnchored) {
-      throw new BadRequestException('Confession is already anchored on Stellar');
+      throw new BadRequestException(
+        'Confession is already anchored on Stellar',
+      );
     }
 
     if (!this.stellarService.isValidTxHash(dto.stellarTxHash)) {
@@ -624,5 +651,70 @@ export class ConfessionService {
 
   private async invalidateConfessionCache() {
     await this.cacheService.delPattern('confessions:');
+  }
+
+  /**
+   * Get confessions filtered by tag with pagination
+   */
+  async getConfessionsByTag(tagName: string, dto: any) {
+    const page = dto.page ?? 1;
+    const limit = dto.limit ?? 10;
+
+    if (limit < 1 || limit > 100) {
+      throw new BadRequestException('limit must be 1–100');
+    }
+
+    // Validate that the tag exists
+    const tag = await this.tagService.getTagByName(tagName);
+    if (!tag) {
+      throw new NotFoundException(`Tag '${tagName}' not found`);
+    }
+
+    const cacheKey = this.cacheService.buildKey(
+      'confessions',
+      'tag',
+      tagName,
+      page,
+      limit,
+      dto.sort || 'newest',
+    );
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const { confessions, total } = await this.confessionRepo.findByTag(
+      tagName,
+      page,
+      limit,
+    );
+
+    const decryptedItems = confessions.map((item) => ({
+      ...item,
+      message: decryptConfession(item.message),
+    }));
+
+    const result = {
+      data: decryptedItems,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        tag: tagName,
+      },
+    };
+
+    await this.cacheService.set(cacheKey, result, 300);
+
+    return result;
+  }
+
+  /**
+   * Get all available tags
+   */
+  async getAllTags() {
+    return this.tagService.getAllTags();
   }
 }

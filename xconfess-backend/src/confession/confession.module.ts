@@ -1,12 +1,20 @@
 // src/confession/confession.module.ts
-import { Module, NestModule, MiddlewareConsumer, forwardRef } from '@nestjs/common';
+import {
+  Module,
+  NestModule,
+  MiddlewareConsumer,
+  forwardRef,
+} from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ConfessionController } from './confession.controller';
 import { ConfessionService } from './confession.service';
 import { AnonymousConfession } from './entities/confession.entity';
+import { Tag } from './entities/tag.entity';
+import { ConfessionTag } from './entities/confession-tag.entity';
 import { AnonymousConfessionRepository } from './repository/confession.repository';
 import { ConfessionViewCacheService } from './confession-view-cache.service';
+import { TagService } from './tag.service';
 import { ReactionModule } from '../reaction/reaction.module';
 import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
 import { ModerationModule } from '../moderation/moderation.module';
@@ -27,7 +35,12 @@ class MockRedis {
     return 1;
   }
 
-  async set(key: string, value: string, _exFlag?: string, exSeconds?: number): Promise<string> {
+  async set(
+    key: string,
+    value: string,
+    _exFlag?: string,
+    exSeconds?: number,
+  ): Promise<string> {
     const expiry = exSeconds ? Date.now() + exSeconds * 1000 : undefined;
     this.store.set(key, { value, expiry });
     return 'OK';
@@ -46,7 +59,7 @@ class MockRedis {
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AnonymousConfession]),
+    TypeOrmModule.forFeature([AnonymousConfession, Tag, ConfessionTag]),
     EventEmitterModule.forRoot(),
     forwardRef(() => ReactionModule),
     ModerationModule,
@@ -58,6 +71,7 @@ class MockRedis {
     ConfessionService,
     AnonymousConfessionRepository,
     ConfessionViewCacheService,
+    TagService,
     { provide: 'VIEW_CACHE_EXPIRY', useValue: 60 * 60 },
     // Mock Redis provider for development without Redis server
     { provide: REDIS_TOKEN, useValue: new MockRedis() },
