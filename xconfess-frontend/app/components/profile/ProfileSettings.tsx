@@ -13,7 +13,6 @@ const ProfileSettings = ({ profile, saveProfile }: Props) => {
     await saveProfile({ isAnonymous });
     alert("Profile updated!");
   };
-
   return (
     <div className="p-6 bg-gray-800 rounded space-y-4">
       <h2 className="text-xl font-bold">Profile Settings</h2>
