@@ -7,6 +7,7 @@ import {
   Get,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,14 +33,27 @@ export class CommentController {
     @Body('content') content: string,
     @Req() req: RequestWithUser,
     @Body('anonymousContextId') anonymousContextId: string,
+    @Body('parentId') parentId?: number,
   ) {
     const user = req.user as AnonymousUser;
-    return this.service.create(content, user, confessionId, anonymousContextId);
+    return this.service.create(
+      content,
+      user,
+      confessionId,
+      anonymousContextId,
+      parentId,
+    );
   }
 
   @Get('by-confession/:confessionId')
-  findByConfession(@Param('confessionId') confessionId: string) {
-    return this.service.findByConfessionId(confessionId);
+  findByConfession(
+    @Param('confessionId') confessionId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = page ? Number(page) : undefined;
+    const l = limit ? Number(limit) : undefined;
+    return this.service.findByConfessionId(confessionId, { page: p, limit: l });
   }
 
   @UseGuards(JwtAuthGuard)

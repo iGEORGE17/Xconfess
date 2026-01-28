@@ -3,6 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "./lib/providers/ThemeProvider";
 import "./globals.css";
 import QueryProvider from "./components/providers/QueryProvider";
+import { AuthProvider } from "./lib/providers/AuthProvider";
+
+import { OnboardingFlow } from "@/app/components/onboarding/OnboardingFlow";
+import { HelpButton } from "@/app/components/onboarding/HelpButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,11 +30,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <QueryProvider>
-          <ThemeProvider>{children}</ThemeProvider></QueryProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <AuthProvider>
+          <QueryProvider>
+            <ThemeProvider>
+              {children}
+
+              {/* Onboarding system */}
+              <OnboardingFlow />
+              <HelpButton />
+            </ThemeProvider>
+          </QueryProvider>
+        </AuthProvider>
       </body>
     </html>
   );
