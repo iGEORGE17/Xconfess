@@ -20,18 +20,8 @@ export class CreateReportDto {
   details?: string;
 }
 
-// Only allow transitioning to resolved or dismissed states
 export enum AllowedReportStatusUpdate {
   RESOLVED = ReportStatus.RESOLVED,
   DISMISSED = ReportStatus.DISMISSED,
 }
 
-export class UpdateReportStatusDto {
-  @IsEnum(AllowedReportStatusUpdate)
-  status: AllowedReportStatusUpdate;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  resolutionReason?: string;
-}

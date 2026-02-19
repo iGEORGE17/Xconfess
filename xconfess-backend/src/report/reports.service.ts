@@ -106,8 +106,10 @@ export class ReportsService {
       userAgent?: string;
     },
   ): Promise<Report> {
-    const report = await this.reportRepository.findOne({ 
+    // Use pessimistic locking to prevent race conditions
+    const report = await this.reportRepository.findOne({
       where: { id: reportId },
+      lock: { mode: 'pessimistic_write' },
     });
     
     if (!report) {
@@ -128,11 +130,11 @@ export class ReportsService {
     report.status = ReportStatus.RESOLVED;
     report.resolvedById = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason;
+    report.resolutionReason = options?.reason || 'Report resolved'; // Consistent default
     
     const updatedReport = await this.reportRepository.save(report);
 
-    // Log report resolution (truly non-blocking - removed await)
+    // Log report resolution (truly non-blocking - no await)
     this.auditLogService.logReportResolved(
       reportId.toString(),
       admin.id.toString(),
@@ -140,7 +142,7 @@ export class ReportsService {
         previousStatus,
         reason: options?.reason,
         confessionId: report.confessionId,
-        resolvedBy: admin.username, // Fixed: Use username, not emailIv
+        resolvedBy: admin.username,
       },
       {
         ipAddress: options?.ipAddress,
@@ -164,8 +166,10 @@ export class ReportsService {
       userAgent?: string;
     },
   ): Promise<Report> {
-    const report = await this.reportRepository.findOne({ 
+    // Use pessimistic locking to prevent race conditions
+    const report = await this.reportRepository.findOne({
       where: { id: reportId },
+      lock: { mode: 'pessimistic_write' },
     });
     
     if (!report) {
@@ -186,11 +190,11 @@ export class ReportsService {
     report.status = ReportStatus.DISMISSED;
     report.resolvedById = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason || 'Report dismissed';
+    report.resolutionReason = options?.reason || 'Report dismissed'; // Consistent default
     
     const updatedReport = await this.reportRepository.save(report);
 
-    // Log report dismissal (truly non-blocking - removed await)
+    // Log report dismissal (truly non-blocking - no await)
     this.auditLogService.logReportDismissed(
       reportId.toString(),
       admin.id.toString(),
@@ -198,7 +202,7 @@ export class ReportsService {
         previousStatus,
         reason: options?.reason,
         confessionId: report.confessionId,
-        dismissedBy: admin.username, // Fixed: Use username, not emailIv
+        dismissedBy: admin.username,
       },
       {
         ipAddress: options?.ipAddress,
@@ -257,3 +261,4 @@ export class ReportsService {
     return user.role === UserRole.ADMIN;
   }
 }
+
