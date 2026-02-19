@@ -1,5 +1,15 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Patch,
+  Param,
+  ParseIntPipe,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CreateReportDto } from './dto/create-report.dto';
+import { UpdateReportStatusDto } from './dto/update-report.dto';
 import { ReportService } from './report.service';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { Request } from 'express';
@@ -10,11 +20,6 @@ type AuthedRequest = Request & { user?: any };
 export class ReportController {
   constructor(private readonly reportService: ReportService) {}
 
-  /**
-   * Create a user report for a confession.
-   * - Auth is optional: if JWT is present, we attribute `reporterId`
-   * - Otherwise reporterId is null (anonymous report)
-   */
   @Post()
   @UseGuards(OptionalJwtAuthGuard)
   async create(@Body() dto: CreateReportDto, @Req() req: AuthedRequest) {
@@ -24,8 +29,18 @@ export class ReportController {
         ? Number(reporterIdRaw)
         : null;
 
-    // If guard didn't populate user (e.g. missing token), reporterId becomes null.
-    return this.reportService.createReport(dto, Number.isFinite(reporterId) ? reporterId : null);
+    return this.reportService.createReport(
+      dto,
+      Number.isFinite(reporterId) ? reporterId : null,
+    );
+  }
+
+  // ✅ ADMIN STATUS UPDATE
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateReportStatusDto,
+  ) {
+    return this.reportService.updateReportStatus(id, dto);
   }
 }
-
