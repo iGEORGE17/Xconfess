@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { User } from '../user/entities/user.entity'; // Adjust path based on your user entity
+import { User } from '../user/entities/user.entity';
 
 export enum ReportStatus {
   PENDING = 'pending',
@@ -43,7 +43,10 @@ export class Report {
   @Column({ name: 'resolved_by', nullable: true })
   resolvedById?: number;
 
-  @ManyToOne(() => User, { nullable: true })
+  @ManyToOne(() => User, { 
+    nullable: true,
+    onDelete: 'SET NULL' 
+  })
   @JoinColumn({ name: 'resolved_by' })
   resolvedBy?: User;
 

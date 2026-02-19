@@ -75,7 +75,7 @@ export class ReportsService {
 
       const savedReport = await manager.getRepository(Report).save(report);
 
-      // 4️⃣ Log report creation (non-blocking)
+      // 4️⃣ Log report creation (non-blocking - no await)
       if (reporterId) {
         this.auditLogService.logReport(
           savedReport.id.toString(),
@@ -132,15 +132,15 @@ export class ReportsService {
     
     const updatedReport = await this.reportRepository.save(report);
 
-    // Log report resolution (non-blocking)
-    await this.auditLogService.logReportResolved(
+    // Log report resolution (truly non-blocking - removed await)
+    this.auditLogService.logReportResolved(
       reportId.toString(),
       admin.id.toString(),
       {
         previousStatus,
         reason: options?.reason,
         confessionId: report.confessionId,
-        resolvedBy: admin.emailIv,
+        resolvedBy: admin.username, // Fixed: Use username, not emailIv
       },
       {
         ipAddress: options?.ipAddress,
@@ -190,15 +190,15 @@ export class ReportsService {
     
     const updatedReport = await this.reportRepository.save(report);
 
-    // Log report dismissal (non-blocking)
-    await this.auditLogService.logReportDismissed(
+    // Log report dismissal (truly non-blocking - removed await)
+    this.auditLogService.logReportDismissed(
       reportId.toString(),
       admin.id.toString(),
       {
         previousStatus,
         reason: options?.reason,
         confessionId: report.confessionId,
-        dismissedBy: admin.emailIv,
+        dismissedBy: admin.username, // Fixed: Use username, not emailIv
       },
       {
         ipAddress: options?.ipAddress,
@@ -253,10 +253,7 @@ export class ReportsService {
     return report;
   }
 
-
   private isAdmin(user: User): boolean {
     return user.role === UserRole.ADMIN;
   }
 }
-
-

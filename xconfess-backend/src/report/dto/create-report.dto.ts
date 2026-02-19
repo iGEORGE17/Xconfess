@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ReportStatus } from '../report.entity'; // Adjust path as needed
+import { ReportStatus } from '../report.entity';
 
 export enum ReportReason {
   INAPPROPRIATE = 'inappropriate',
@@ -20,13 +20,18 @@ export class CreateReportDto {
   details?: string;
 }
 
+// Only allow transitioning to resolved or dismissed states
+export enum AllowedReportStatusUpdate {
+  RESOLVED = ReportStatus.RESOLVED,
+  DISMISSED = ReportStatus.DISMISSED,
+}
+
 export class UpdateReportStatusDto {
-  @IsEnum(ReportStatus)
-  status: ReportStatus;
+  @IsEnum(AllowedReportStatusUpdate)
+  status: AllowedReportStatusUpdate;
 
   @IsOptional()
   @IsString()
   @MaxLength(500)
   resolutionReason?: string;
 }
-

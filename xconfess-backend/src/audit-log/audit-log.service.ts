@@ -311,23 +311,36 @@ export class AuditLogService {
    */
   async getStatistics(startDate?: Date, endDate?: Date) {
     try {
-      const query = this.auditLogRepository.createQueryBuilder('audit_log');
+      // Create a base query for counting total logs
+      const countQuery = this.auditLogRepository.createQueryBuilder('audit_log');
 
       if (startDate) {
-        query.andWhere('audit_log.timestamp >= :startDate', { startDate });
+        countQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
       }
 
       if (endDate) {
-        query.andWhere('audit_log.timestamp <= :endDate', { endDate });
+        countQuery.andWhere('audit_log.timestamp <= :endDate', { endDate });
       }
 
-      const actionTypeCounts = await query
+      // Get total count before modifying the query for group by
+      const totalLogs = await countQuery.getCount();
+
+      // Create a separate query for action type counts (with group by)
+      const statsQuery = this.auditLogRepository.createQueryBuilder('audit_log');
+
+      if (startDate) {
+        statsQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
+      }
+
+      if (endDate) {
+        statsQuery.andWhere('audit_log.timestamp <= :endDate', { endDate });
+      }
+
+      const actionTypeCounts = await statsQuery
         .select('audit_log.action_type', 'actionType')
         .addSelect('COUNT(*)', 'count')
         .groupBy('audit_log.action_type')
         .getRawMany();
-
-      const totalLogs = await query.getCount();
 
       return {
         totalLogs,
@@ -342,3 +355,4 @@ export class AuditLogService {
     }
   }
 }
+
