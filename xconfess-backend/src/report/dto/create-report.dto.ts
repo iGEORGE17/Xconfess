@@ -1,16 +1,32 @@
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { ReportType } from '../../admin/entities/report.entity';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ReportStatus } from '../report.entity'; // Adjust path as needed
+
+export enum ReportReason {
+  INAPPROPRIATE = 'inappropriate',
+  HARASSMENT = 'harassment',
+  SPAM = 'spam',
+  HATE_SPEECH = 'hate_speech',
+  FALSE_INFORMATION = 'false_information',
+  OTHER = 'other',
+}
 
 export class CreateReportDto {
-  @IsUUID()
-  confessionId: string;
-
-  @IsEnum(ReportType)
-  type: ReportType;
+  @IsEnum(ReportReason)
+  reason: ReportReason;
 
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  reason?: string;
+  details?: string;
+}
+
+export class UpdateReportStatusDto {
+  @IsEnum(ReportStatus)
+  status: ReportStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  resolutionReason?: string;
 }
 

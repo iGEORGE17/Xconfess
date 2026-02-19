@@ -64,6 +64,8 @@ export class AuditLogService {
       actionType: AuditActionType.CONFESSION_DELETE,
       metadata: {
         confessionId,
+        entityType: 'confession',
+        entityId: confessionId,
         deletedAt: new Date().toISOString(),
       },
       context: { ...context, userId },
@@ -84,6 +86,8 @@ export class AuditLogService {
       metadata: {
         commentId,
         confessionId,
+        entityType: 'comment',
+        entityId: commentId,
         deletedAt: new Date().toISOString(),
       },
       context: { ...context, userId },
@@ -101,7 +105,7 @@ export class AuditLogService {
     await this.log({
       actionType: AuditActionType.FAILED_LOGIN,
       metadata: {
-        identifier, // email or username
+        identifier,
         reason,
         attemptedAt: new Date().toISOString(),
       },
@@ -126,6 +130,8 @@ export class AuditLogService {
         reportId,
         targetType,
         targetId,
+        entityType: targetType,
+        entityId: targetId,
         reason,
         reportedAt: new Date().toISOString(),
       },
@@ -134,81 +140,205 @@ export class AuditLogService {
   }
 
   /**
+   * Log report resolution
+   */
+  async logReportResolved(
+    reportId: string,
+    adminId: string,
+    metadata: {
+      previousStatus?: string;
+      reason?: string;
+      confessionId?: string;
+      resolvedBy?: string;
+    },
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.REPORT_RESOLVED,
+      metadata: {
+        reportId,
+        entityType: 'report',
+        entityId: reportId,
+        ...metadata,
+        resolvedAt: new Date().toISOString(),
+      },
+      context: { ...context, userId: adminId },
+    });
+  }
+
+  /**
+   * Log report dismissal
+   */
+  async logReportDismissed(
+    reportId: string,
+    adminId: string,
+    metadata: {
+      previousStatus?: string;
+      reason?: string;
+      confessionId?: string;
+      dismissedBy?: string;
+    },
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.REPORT_DISMISSED,
+      metadata: {
+        reportId,
+        entityType: 'report',
+        entityId: reportId,
+        ...metadata,
+        dismissedAt: new Date().toISOString(),
+      },
+      context: { ...context, userId: adminId },
+    });
+  }
+
+  /**
+   * Find audit logs by entity (backward compatible with the requested feature)
+   */
+  async findByEntity(entityType: string, entityId: string): Promise<AuditLog[]> {
+    try {
+      // Since we store entity info in metadata, we need to query the JSONB field
+      const logs = await this.auditLogRepository
+        .createQueryBuilder('audit_log')
+        .leftJoinAndSelect('audit_log.user', 'user')
+        .where("audit_log.metadata->>'entityType' = :entityType", { entityType })
+        .andWhere("audit_log.metadata->>'entityId' = :entityId", { entityId })
+        .orderBy('audit_log.timestamp', 'DESC')
+        .getMany();
+      
+      return logs;
+    } catch (error) {
+      this.logger.error(`Failed to find audit logs by entity: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Find audit logs by user
+   */
+  async findByUser(userId: string): Promise<AuditLog[]> {
+    try {
+      return this.auditLogRepository.find({
+        where: { userId },
+        order: { timestamp: 'DESC' },
+        relations: ['user'],
+      });
+    } catch (error) {
+      this.logger.error(`Failed to find audit logs by user: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Get audit logs with filtering and pagination
    */
   async findAll(options: {
     userId?: string;
     actionType?: AuditActionType;
+    entityType?: string;
+    entityId?: string;
     startDate?: Date;
     endDate?: Date;
     limit?: number;
     offset?: number;
   }) {
-    const query = this.auditLogRepository.createQueryBuilder('audit_log');
+    try {
+      const query = this.auditLogRepository.createQueryBuilder('audit_log')
+        .leftJoinAndSelect('audit_log.user', 'user');
 
-    if (options.userId) {
-      query.andWhere('audit_log.user_id = :userId', {
-        userId: options.userId,
-      });
+      if (options.userId) {
+        query.andWhere('audit_log.user_id = :userId', {
+          userId: options.userId,
+        });
+      }
+
+      if (options.actionType) {
+        query.andWhere('audit_log.action_type = :actionType', {
+          actionType: options.actionType,
+        });
+      }
+
+      if (options.entityType) {
+        query.andWhere("audit_log.metadata->>'entityType' = :entityType", {
+          entityType: options.entityType,
+        });
+      }
+
+      if (options.entityId) {
+        query.andWhere("audit_log.metadata->>'entityId' = :entityId", {
+          entityId: options.entityId,
+        });
+      }
+
+      if (options.startDate) {
+        query.andWhere('audit_log.timestamp >= :startDate', {
+          startDate: options.startDate,
+        });
+      }
+
+      if (options.endDate) {
+        query.andWhere('audit_log.timestamp <= :endDate', {
+          endDate: options.endDate,
+        });
+      }
+
+      query.orderBy('audit_log.timestamp', 'DESC');
+      query.limit(options.limit || 100);
+      query.offset(options.offset || 0);
+
+      const [logs, total] = await query.getManyAndCount();
+
+      return {
+        logs,
+        total,
+        limit: options.limit || 100,
+        offset: options.offset || 0,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get audit logs: ${error.message}`);
+      return {
+        logs: [],
+        total: 0,
+        limit: options.limit || 100,
+        offset: options.offset || 0,
+      };
     }
-
-    if (options.actionType) {
-      query.andWhere('audit_log.action_type = :actionType', {
-        actionType: options.actionType,
-      });
-    }
-
-    if (options.startDate) {
-      query.andWhere('audit_log.timestamp >= :startDate', {
-        startDate: options.startDate,
-      });
-    }
-
-    if (options.endDate) {
-      query.andWhere('audit_log.timestamp <= :endDate', {
-        endDate: options.endDate,
-      });
-    }
-
-    query.orderBy('audit_log.timestamp', 'DESC');
-    query.limit(options.limit || 100);
-    query.offset(options.offset || 0);
-
-    const [logs, total] = await query.getManyAndCount();
-
-    return {
-      logs,
-      total,
-      limit: options.limit || 100,
-      offset: options.offset || 0,
-    };
   }
 
   /**
    * Get audit log statistics
    */
   async getStatistics(startDate?: Date, endDate?: Date) {
-    const query = this.auditLogRepository.createQueryBuilder('audit_log');
+    try {
+      const query = this.auditLogRepository.createQueryBuilder('audit_log');
 
-    if (startDate) {
-      query.andWhere('audit_log.timestamp >= :startDate', { startDate });
+      if (startDate) {
+        query.andWhere('audit_log.timestamp >= :startDate', { startDate });
+      }
+
+      if (endDate) {
+        query.andWhere('audit_log.timestamp <= :endDate', { endDate });
+      }
+
+      const actionTypeCounts = await query
+        .select('audit_log.action_type', 'actionType')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('audit_log.action_type')
+        .getRawMany();
+
+      const totalLogs = await query.getCount();
+
+      return {
+        totalLogs,
+        actionTypeCounts,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get audit log statistics: ${error.message}`);
+      return {
+        totalLogs: 0,
+        actionTypeCounts: [],
+      };
     }
-
-    if (endDate) {
-      query.andWhere('audit_log.timestamp <= :endDate', { endDate });
-    }
-
-    const actionTypeCounts = await query
-      .select('audit_log.action_type', 'actionType')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('audit_log.action_type')
-      .getRawMany();
-
-    const totalLogs = await query.getCount();
-
-    return {
-      totalLogs,
-      actionTypeCounts,
-    };
   }
 }
