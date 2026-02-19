@@ -5,9 +5,13 @@ import { Report } from '../admin/entities/report.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { CreateReportDto } from './dto/create-report.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { UpdateReportStatusDto } from './dto/update-report.dto';
 
 @Injectable()
 export class ReportService {
+  updateReportStatus(id: number, dto: UpdateReportStatusDto) {
+    throw new Error('Method not implemented.');
+  }
   constructor(
     @InjectRepository(Report)
     private readonly reportRepository: Repository<Report>,
