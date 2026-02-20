@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 
-interface Confession {
-  id: string;
-  content: string;
-  createdAt: string;
-  reactions: { like: number; love: number };
-}
+import { Confession } from "@/app/lib/types/confession";
 
 export const useConfessions = () => {
   const [data, setData] = useState<Confession[]>([]);

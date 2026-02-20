@@ -4,19 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ConfessionCard } from "./ConfessionCard";
 import { SkeletonCard } from "./LoadingSkeleton";
 
-interface Confession {
-  id: string;
-  content: string;
-  createdAt: string;
-  reactions: { like: number; love: number };
-  author?: {
-    id: string;
-    username?: string;
-    avatar?: string;
-  };
-  commentCount?: number;
-  viewCount?: number;
-}
+import { Confession } from "@/app/lib/types/confession";
 
 interface FetchResponse {
   confessions: Confession[];
