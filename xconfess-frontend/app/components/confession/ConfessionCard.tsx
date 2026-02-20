@@ -4,15 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ReactionButton } from "./ReactionButtons";
-import { AnchorButton } from "./AnchorButton";
-import { TipButton } from "./TipButton";
-import { getTipStats, type TipStats } from "@/lib/services/tipping.service";
-import { memo, useEffect } from "react";
+import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
 
 import { Confession } from "@/app/lib/types/confession";
 
 interface Props {
-  confession: Confession;
+  confession: NormalizedConfession;
 }
 
 export const ConfessionCard = memo(({ confession }: Props) => {
@@ -136,15 +133,4 @@ export const ConfessionCard = memo(({ confession }: Props) => {
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.confession.id === nextProps.confession.id &&
-    prevProps.confession.reactions.like === nextProps.confession.reactions.like &&
-    prevProps.confession.reactions.love === nextProps.confession.reactions.love &&
-    prevProps.confession.viewCount === nextProps.confession.viewCount &&
-    prevProps.confession.commentCount === nextProps.confession.commentCount &&
-    prevProps.confession.isAnchored === nextProps.confession.isAnchored
-  );
-});
-
-ConfessionCard.displayName = 'ConfessionCard';
+};

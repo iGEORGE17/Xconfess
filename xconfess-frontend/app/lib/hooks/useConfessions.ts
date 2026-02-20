@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import apiClient from "@/app/lib/api/client";
+import { getErrorMessage } from "@/app/lib/utils/errorHandler";
 
 import { Confession } from "@/app/lib/types/confession";
 
@@ -12,13 +14,11 @@ export const useConfessions = () => {
     const fetchConfessions = async () => {
       try {
         setLoading(true);
-        setError(null); // Reset error before fetching
-        const res = await fetch(`/api/confessions?page=${page}`);
-        if (!res.ok) throw new Error("Failed to fetch");
-        const json = await res.json();
-        setData(json.confessions || []);
+        setError(null);
+        const res = await apiClient.get(`/confessions?page=${page}`);
+        setData(res.data.confessions || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
+        setError(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -29,3 +29,4 @@ export const useConfessions = () => {
 
   return { data, loading, error, setPage };
 };
+
