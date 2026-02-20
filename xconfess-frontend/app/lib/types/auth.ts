@@ -12,6 +12,9 @@ export interface User {
   is_active: boolean;
   createdAt: string;
   updatedAt: string;
+
+  totalConfessions?: number;
+  totalLikes?: number;
 }
 
 /**
