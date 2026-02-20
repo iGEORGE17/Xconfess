@@ -23,9 +23,9 @@ export const TrendingDashboard = () => {
       setLoading(true);
       setError(null);
       const res = await fetch(`/api/analytics/trending?period=${period}`);
-      
+
       if (!res.ok) throw new Error('Failed to fetch analytics');
-      
+
       const analyticsData = await res.json();
       setData(analyticsData);
     } catch (err) {
@@ -87,21 +87,19 @@ export const TrendingDashboard = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => setPeriod('7days')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  period === '7days'
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${period === '7days'
                     ? 'bg-purple-600 text-white'
                     : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
-                }`}
+                  }`}
               >
                 7 Days
               </button>
               <button
                 onClick={() => setPeriod('30days')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  period === '30days'
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${period === '30days'
                     ? 'bg-purple-600 text-white'
                     : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
-                }`}
+                  }`}
               >
                 30 Days
               </button>
@@ -115,7 +113,7 @@ export const TrendingDashboard = () => {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <ReactionChart data={data.reactionDistribution} />
-          <ActivityChart data={data.dailyActivity} period={period} />
+          <ActivityChart data={data.dailyActivity} />
         </div>
 
         {/* Trending Confessions */}

@@ -6,19 +6,18 @@ import {
   getErrorMessage,
   logError,
 } from '@/app/lib/utils/errorHandler';
-import { T } from 'some-module'; // Placeholder import for T, replace with actual import if needed
 
-interface UseAsyncFormOptions {
-  onSuccess?: () => void;
+interface UseAsyncFormOptions<T> {
+  onSuccess?: (result: T) => void;
   onError?: (error: unknown) => void;
   showToast?: boolean;
   successMessage?: string;
   context?: string;
 }
 
-export const useAsyncForm = (
+export const useAsyncForm = <T = unknown>(
   asyncFn: () => Promise<T>,
-  options: UseAsyncFormOptions = {}
+  options: UseAsyncFormOptions<T> = {}
 ) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +42,7 @@ export const useAsyncForm = (
         toast.success(successMessage);
       }
 
-      onSuccess?.();
+      onSuccess?.(result);
       return result;
     } catch (err) {
       const errorMessage = getErrorMessage(err);

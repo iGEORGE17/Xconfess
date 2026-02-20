@@ -91,7 +91,7 @@ export const ConfessionFeed = () => {
         }
       },
       {
-        rootMargin: "100px", // Start loading before reaching the bottom
+        rootMargin: "100px",
         threshold: 0.1,
       },
     );
@@ -116,9 +116,9 @@ export const ConfessionFeed = () => {
   }, [page, fetchConfessions]);
 
   // Handle retry
-  const handleRetry = () => {
+  const handleRetry = async () => {
     setPage(1);
-    fetchConfessions(1);
+    await fetchConfessions(1);
   };
 
   // Render loading skeleton
@@ -154,15 +154,13 @@ export const ConfessionFeed = () => {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 mb-6">
-          <p className="text-red-300 mb-3">{error}</p>
-          <button
-            onClick={handleRetry}
-            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <ErrorState
+          error={error}
+          title="Failed to load confessions"
+          description="Something went wrong while fetching confessions."
+          onRetry={handleRetry}
+          showRetry
+        />
       )}
 
       {/* Confessions Grid */}
@@ -213,3 +211,4 @@ export const ConfessionFeed = () => {
     </div>
   );
 };
+
