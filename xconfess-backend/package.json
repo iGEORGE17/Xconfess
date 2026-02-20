@@ -35,11 +35,8 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.12",
     "@stellar/stellar-sdk": "^14.5.0",
-<<<<<<< Admin-Report-Listing-Endpoint
-=======
     "@playwright/test": "^1.58.0",
     "@types/helmet": "^0.0.48",
->>>>>>> main
     "@types/nodemailer": "^6.4.17",
     "ansi-styles": "^6.2.3",
     "bcrypt": "^5.1.1",
