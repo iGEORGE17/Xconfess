@@ -22,96 +22,75 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling and retries
-let retryCount = 0;
+// Extend AxiosRequestConfig to support per-request retry tracking
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    __retryCount?: number;
+  }
+}
+
 const MAX_RETRIES = 3;
 
+// Response interceptor for error handling and retries
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const config = error.config;
+    if (!config) {
+      return Promise.reject(error);
+    }
 
-    // Handle 401 Unauthorized
+    // Initialize per-request retry count
+    config.__retryCount = config.__retryCount ?? 0;
+
+    // Handle 401 Unauthorized — no retry, redirect to login
     if (error.response?.status === 401) {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
-      
-      // Redirect to login
+
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
-      
-      logError(error, 'API Client - Unauthorized', {
-        url: config?.url,
-      });
+
+      logError(error, 'API Client - Unauthorized', { url: config.url });
       return Promise.reject(error);
     }
 
-    // Handle 403 Forbidden
+    // Handle 403 Forbidden — no retry
     if (error.response?.status === 403) {
-      logError(error, 'API Client - Forbidden', {
-        url: config?.url,
-      });
+      logError(error, 'API Client - Forbidden', { url: config.url });
       return Promise.reject(error);
     }
 
-    // Handle 429 Too Many Requests with exponential backoff
-    if (error.response?.status === 429) {
-      if (retryCount < MAX_RETRIES) {
-        retryCount++;
-        const delayMs = Math.pow(2, retryCount) * 1000; // Exponential backoff
-        
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        return apiClient(config!);
-      }
-      logError(error, 'API Client - Too Many Requests (max retries exceeded)', {
-        url: config?.url,
-        retries: retryCount,
-      });
-      return Promise.reject(error);
+    // Determine if this error is retryable
+    const isRetryable =
+      error.response?.status === 429 ||
+      error.response?.status !== undefined && error.response.status >= 500 ||
+      !error.response; // network error
+
+    if (isRetryable && config.__retryCount < MAX_RETRIES) {
+      config.__retryCount++;
+      const delayMs = Math.pow(2, config.__retryCount) * 1000;
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return apiClient(config);
     }
 
-    // Handle network errors with retry
-    if (!error.response) {
-      if (retryCount < MAX_RETRIES) {
-        retryCount++;
-        const delayMs = Math.pow(2, retryCount) * 1000;
-        
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        return apiClient(config!);
-      }
-      logError(error, 'API Client - Network Error (max retries exceeded)', {
-        url: config?.url,
-        message: error.message,
-      });
-      return Promise.reject(error);
-    }
+    // Log after retries exhausted or non-retryable error
+    const context = !error.response
+      ? 'API Client - Network Error'
+      : error.response.status === 429
+        ? 'API Client - Too Many Requests'
+        : error.response.status >= 500
+          ? 'API Client - Server Error'
+          : 'API Client - Request Failed';
 
-    // Handle 5xx Server Errors with retry
-    if (error.response.status >= 500) {
-      if (retryCount < MAX_RETRIES) {
-        retryCount++;
-        const delayMs = Math.pow(2, retryCount) * 1000;
-        
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        return apiClient(config!);
-      }
-      logError(error, 'API Client - Server Error (max retries exceeded)', {
-        url: config?.url,
-        status: error.response.status,
-      });
-      return Promise.reject(error);
-    }
-
-    // Log other errors
-    logError(error, 'API Client - Request Failed', {
-      url: config?.url,
+    logError(error, config.__retryCount > 0 ? `${context} (after ${config.__retryCount} retries)` : context, {
+      url: config.url,
       status: error.response?.status,
-      message: getErrorMessage(error),
+      retries: config.__retryCount,
     });
 
-    // Reset retry count on successful response or non-retryable error
-    retryCount = 0;
     return Promise.reject(error);
   }
 );

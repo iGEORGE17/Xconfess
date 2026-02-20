@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ConfessionCard } from "./ConfessionCard";
 import { SkeletonCard } from "./LoadingSkeleton";
+import apiClient from "@/app/lib/api/client";
+import { getErrorMessage } from "@/app/lib/utils/errorHandler";
+import ErrorState from "@/app/components/common/ErrorState";
 
 interface Confession {
   id: string;
@@ -50,18 +53,12 @@ export const ConfessionFeed = () => {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(
-          `/api/confessions?page=${pageNum}&limit=10`,
-          {
-            signal: abortControllerRef.current.signal,
-          }
+        const response = await apiClient.get<FetchResponse>(
+          `/confessions?page=${pageNum}&limit=10`,
+          { signal: abortControllerRef.current.signal }
         );
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch confessions: ${response.statusText}`);
-        }
-
-        const data: FetchResponse = await response.json();
+        const data = response.data;
 
         if (pageNum === 1) {
           setConfessions(data.confessions);
@@ -73,12 +70,18 @@ export const ConfessionFeed = () => {
         setHasMore(data.hasMore);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          // Ignore abort errors
           return;
         }
-        setError(
-          err instanceof Error ? err.message : "Failed to load confessions"
-        );
+        // Check for Axios cancel
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          "code" in err &&
+          (err as { code: string }).code === "ERR_CANCELED"
+        ) {
+          return;
+        }
+        setError(getErrorMessage(err));
       } finally {
         setIsLoading(false);
       }
@@ -107,7 +110,7 @@ export const ConfessionFeed = () => {
         }
       },
       {
-        rootMargin: "100px", // Start loading before reaching the bottom
+        rootMargin: "100px",
         threshold: 0.1,
       }
     );
@@ -132,9 +135,9 @@ export const ConfessionFeed = () => {
   }, [page, fetchConfessions]);
 
   // Handle retry
-  const handleRetry = () => {
+  const handleRetry = async () => {
     setPage(1);
-    fetchConfessions(1);
+    await fetchConfessions(1);
   };
 
   // Render loading skeleton
@@ -170,15 +173,13 @@ export const ConfessionFeed = () => {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 mb-6">
-          <p className="text-red-300 mb-3">{error}</p>
-          <button
-            onClick={handleRetry}
-            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <ErrorState
+          error={error}
+          title="Failed to load confessions"
+          description="Something went wrong while fetching confessions."
+          onRetry={handleRetry}
+          showRetry
+        />
       )}
 
       {/* Confessions Grid */}
@@ -224,3 +225,4 @@ export const ConfessionFeed = () => {
     </div>
   );
 };
+

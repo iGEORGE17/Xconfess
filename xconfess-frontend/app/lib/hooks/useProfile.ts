@@ -1,6 +1,7 @@
 // frontend/hooks/useProfile.ts
 import { useEffect, useState } from "react";
 import { fetchUserProfile, fetchUserStats, updateProfile, UserProfile, UserStats } from "../../api/user.api";
+import { getErrorMessage } from "@/app/lib/utils/errorHandler";
 
 export const useProfile = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -15,8 +16,8 @@ export const useProfile = () => {
       setProfile(user);
       setStats(userStats);
       setError(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -27,8 +28,8 @@ export const useProfile = () => {
       setLoading(true);
       const updated = await updateProfile(data);
       setProfile(updated);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -40,3 +41,4 @@ export const useProfile = () => {
 
   return { profile, stats, loading, error, saveProfile, reload: loadProfile };
 };
+

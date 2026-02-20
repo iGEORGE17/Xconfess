@@ -25,6 +25,9 @@ import { useStellarWallet } from "@/app/lib/hooks/useStellarWallet";
 import { Draft } from "@/app/lib/hooks/useDrafts";
 import { Eye, EyeOff, Send, Loader2 } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
+import apiClient from "@/app/lib/api/client";
+import { getErrorMessage } from "@/app/lib/utils/errorHandler";
+import { useGlobalToast } from "@/app/components/common/Toast";
 
 interface EnhancedConfessionFormProps {
   onSubmit?: (data: ConfessionFormData & { stellarTxHash?: string }) => void;
@@ -48,6 +51,7 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { anchor } = useStellarWallet();
+  const toast = useGlobalToast();
 
   // Removed premature validation effect
   useEffect(() => {
@@ -125,29 +129,16 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         }
       }
 
-      const response = await fetch("/api/confessions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: title || undefined,
-          body,
-          message: body,
-          gender,
-          stellarTxHash: txHash,
-        }),
+      await apiClient.post("/confessions", {
+        title: title || undefined,
+        body,
+        message: body,
+        gender,
+        stellarTxHash: txHash,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message ||
-          `Failed to submit confession: ${response.statusText}`,
-        );
-      }
-
       setSubmitSuccess(true);
+      toast.success("Confession submitted successfully!");
 
       if (onSubmit) {
         onSubmit({
@@ -170,9 +161,9 @@ export const EnhancedConfessionForm: React.FC<EnhancedConfessionFormProps> = ({
         setIsPreviewMode(false);
       }, 2000);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to submit confession";
+      const errorMessage = getErrorMessage(error);
       setSubmitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
