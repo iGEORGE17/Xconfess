@@ -12,6 +12,17 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
 import { MessagesModule } from './messages/messages.module';
+import { AdminModule } from './admin/admin.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ReportModule } from './report/report.module';
+import { DataExportService } from './data-export/data-export.service';
+import { DataExportModule } from './data-export/data-export.module';
+import { StellarModule } from './stellar/stellar.module';
+import { TippingModule } from './tipping/tipping.module';
+import { LoggerModule } from './logger/logger.module';
+import { EncryptionModule } from './encryption/encryption.module';
+// TODO: NotificationModule requires Bull/Redis configuration - temporarily disabled
+// import { NotificationModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -35,11 +46,20 @@ import { MessagesModule } from './messages/messages.module';
       inject: [ConfigService],
       useFactory: getTypeOrmConfig,
     }),
+    EventEmitterModule.forRoot(),
     UserModule,
     AuthModule,
     ConfessionModule,
     ReactionModule,
     MessagesModule,
+    AdminModule,
+    ReportModule,
+    DataExportModule,
+    // NotificationModule, // Requires Bull/Redis - temporarily disabled
+    StellarModule,
+    TippingModule,
+    LoggerModule,
+    EncryptionModule,
   ],
   controllers: [AppController],
   providers: [
@@ -48,6 +68,7 @@ import { MessagesModule } from './messages/messages.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    DataExportService,
   ],
 })
 export class AppModule {}

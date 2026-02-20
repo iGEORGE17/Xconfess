@@ -1,5 +1,5 @@
 export const SkeletonCard = () => (
-  <div className="bg-zinc-900 rounded-xl p-6 shadow-lg animate-pulse">
+  <div role='status' aria-label='loading' className="bg-zinc-900 rounded-xl p-6 shadow-lg animate-pulse">
     {/* Author skeleton */}
     <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-800">
       <div className="flex items-center gap-3">

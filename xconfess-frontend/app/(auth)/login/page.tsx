@@ -1,0 +1,118 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import apiClient from '@/app/lib/api/client';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const doMockAdminLogin = () => {
+    localStorage.setItem('adminMock', 'true');
+    localStorage.setItem('accessToken', 'mock');
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 1,
+        username: 'demo-admin',
+        isAdmin: true,
+        is_active: true,
+      }),
+    );
+    router.push('/admin/dashboard');
+  };
+
+  const doLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Best-effort real login. If your backend expects different fields, use Mock Admin Login.
+      const res = await apiClient.post('/api/users/login', { email, password });
+      const { access_token, user } = res.data ?? {};
+
+      if (!access_token) {
+        throw new Error('Missing access token');
+      }
+
+      localStorage.setItem('accessToken', access_token);
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
+      }
+
+      router.push('/admin/dashboard');
+    } catch (e: any) {
+      setError(e?.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Login</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            For quick testing, use <span className="font-medium">Mock Admin Login</span>.
+          </p>
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              placeholder="admin@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button
+            onClick={doLogin}
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={doMockAdminLogin}
+              className="w-full bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800"
+            >
+              Mock Admin Login (Dummy Data)
+            </button>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              This enables local mock data for admin endpoints (analytics, reports, users, audit logs).
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

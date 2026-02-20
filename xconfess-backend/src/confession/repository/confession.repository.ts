@@ -21,7 +21,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
   async findByIdWithReactions(id: string): Promise<AnonymousConfession | null> {
     return this.findOne({
       where: { id },
-      relations: ['reactions']
+      relations: ['reactions'],
     });
   }
 
@@ -33,12 +33,12 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
   async findBySearchTerm(searchTerm: string): Promise<AnonymousConfession[]> {
     return this.find({
       where: {
-        message: ILike(`%${searchTerm}%`)
+        message: ILike(`%${searchTerm}%`),
       },
       order: {
-        created_at: 'DESC'
+        created_at: 'DESC',
       },
-      relations: ['reactions']
+      relations: ['reactions'],
     });
   }
 
@@ -49,19 +49,23 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param limit Number of results per page
    * @returns Array of confessions ranked by relevance
    */
-  async fullTextSearch(searchTerm: string, page: number = 1, limit: number = 10): Promise<{
+  async fullTextSearch(
+    searchTerm: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
   }> {
     const safeLimit = typeof limit === 'number' ? limit : 10;
     const offset = (page - 1) * safeLimit;
-    
+
     // Sanitize search term for tsquery
     const sanitizedTerm = searchTerm
       .replace(/[^\w\s]/g, ' ') // Remove special characters
       .trim()
       .split(/\s+/)
-      .filter(term => term.length > 0)
+      .filter((term) => term.length > 0)
       .join(' & '); // Join with AND operator
 
     if (!sanitizedTerm) {
@@ -71,20 +75,27 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
     // Build the query with ts_rank for relevance scoring
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reactions')
-      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', { searchTerm })
-      .addSelect('ts_rank(confession.search_vector, plainto_tsquery(:searchTerm))', 'rank')
+      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', {
+        searchTerm,
+      })
+      .addSelect(
+        'ts_rank(confession.search_vector, plainto_tsquery(:searchTerm))',
+        'rank',
+      )
       .orderBy('rank', 'DESC')
       .addOrderBy('confession.created_at', 'DESC')
       .skip(offset)
       .take(limit);
 
     // Get total count for pagination
-    const totalQuery = this.createQueryBuilder('confession')
-      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', { searchTerm });
+    const totalQuery = this.createQueryBuilder('confession').where(
+      'confession.search_vector @@ plainto_tsquery(:searchTerm)',
+      { searchTerm },
+    );
 
     const [confessions, total] = await Promise.all([
       queryBuilder.getMany(),
-      totalQuery.getCount()
+      totalQuery.getCount(),
     ]);
 
     return { confessions, total };
@@ -97,14 +108,22 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param limit Number of results per page
    * @returns Array of confessions with relevance ranking
    */
-  async hybridSearch(searchTerm: string, page: number = 1, limit: number = 10): Promise<{
+  async hybridSearch(
+    searchTerm: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
   }> {
     // First try full-text search
     const safeLimit = typeof limit === 'number' ? limit : 10;
-    const fullTextResult = await this.fullTextSearch(searchTerm, page, safeLimit);
-    
+    const fullTextResult = await this.fullTextSearch(
+      searchTerm,
+      page,
+      safeLimit,
+    );
+
     // If full-text search returns results, use them
     if (fullTextResult.total > 0) {
       return fullTextResult;
@@ -112,20 +131,24 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
 
     // Fallback to ILIKE search for partial matches
     const offset = (page - 1) * safeLimit;
-    
+
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reactions')
-      .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` })
+      .where('confession.message ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
+      })
       .orderBy('confession.created_at', 'DESC')
       .skip(offset)
       .take(safeLimit);
 
-    const totalQuery = this.createQueryBuilder('confession')
-      .where('confession.message ILIKE :searchTerm', { searchTerm: `%${searchTerm}%` });
+    const totalQuery = this.createQueryBuilder('confession').where(
+      'confession.message ILIKE :searchTerm',
+      { searchTerm: `%${searchTerm}%` },
+    );
 
     const [confessions, total] = await Promise.all([
       queryBuilder.getMany(),
-      totalQuery.getCount()
+      totalQuery.getCount(),
     ]);
 
     return { confessions, total };
@@ -137,14 +160,17 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param limit The number of items per page
    * @returns Array of confessions for the specified page
    */
-  async findRecent(page: number = 1, limit: number = 10): Promise<AnonymousConfession[]> {
+  async findRecent(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<AnonymousConfession[]> {
     return this.find({
       order: {
-        created_at: 'DESC'
+        created_at: 'DESC',
       },
       skip: (page - 1) * limit,
       take: limit,
-      relations: ['reactions']
+      relations: ['reactions'],
     });
   }
 
@@ -181,7 +207,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .leftJoinAndSelect('confession.reactions', 'reactions')
       .addSelect(
         `confession.view_count + 3 * COUNT(CASE WHEN reactions.createdAt > :oneDayAgo THEN 1 END) + 10.0 / (1 + EXTRACT(EPOCH FROM (NOW() - confession.created_at)) / 3600)`,
-        'trending_score'
+        'trending_score',
       )
       .where('confession.created_at IS NOT NULL')
       .groupBy('confession.id')
@@ -189,5 +215,68 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .limit(limit)
       .setParameter('oneDayAgo', oneDayAgo.toISOString())
       .getMany();
+  }
+
+  /**
+   * Find confessions by tag with pagination
+   * @param tagName The name of the tag to filter by
+   * @param page Page number for pagination
+   * @param limit Number of results per page
+   * @returns Object containing confessions and total count
+   */
+  async findByTag(
+    tagName: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
+    confessions: AnonymousConfession[];
+    total: number;
+  }> {
+    const safeLimit = typeof limit === 'number' ? limit : 10;
+    const offset = (page - 1) * safeLimit;
+
+    const queryBuilder = this.createQueryBuilder('confession')
+      .innerJoin('confession.confessionTags', 'confessionTag')
+      .innerJoin('confessionTag.tag', 'tag')
+      .leftJoinAndSelect('confession.reactions', 'reactions')
+      .leftJoinAndSelect('reactions.anonymousUser', 'reactionUser')
+      .where('tag.name = :tagName', { tagName: tagName.toLowerCase().trim() })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      })
+      .select([
+        'confession.id',
+        'confession.message',
+        'confession.gender',
+        'confession.created_at',
+        'confession.view_count',
+        'confession.moderationStatus',
+        'reactions.id',
+        'reactions.emoji',
+        'reactions.created_at',
+        'reactionUser.id',
+      ])
+      .orderBy('confession.created_at', 'DESC')
+      .skip(offset)
+      .take(safeLimit);
+
+    const totalQuery = this.createQueryBuilder('confession')
+      .innerJoin('confession.confessionTags', 'confessionTag')
+      .innerJoin('confessionTag.tag', 'tag')
+      .where('tag.name = :tagName', { tagName: tagName.toLowerCase().trim() })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      });
+
+    const [confessions, total] = await Promise.all([
+      queryBuilder.getMany(),
+      totalQuery.getCount(),
+    ]);
+
+    return { confessions, total };
   }
 }

@@ -16,9 +16,10 @@ export class MessagesService {
   ) {}
 
   async create(createMessageDto: CreateMessageDto, sender: User): Promise<Message> {
-    const confession = await this.confessionRepository.findOne({ where: { id: String(createMessageDto.confession_id) }, relations: ['user'] });
+    const confession = await this.confessionRepository.findOne({
+      where: { id: String(createMessageDto.confession_id) },
+    });
     if (!confession) throw new NotFoundException('Confession not found');
-    if (confession.user?.id === sender.id) throw new ForbiddenException('Cannot message your own confession');
     const message = this.messageRepository.create({
       sender,
       confession,
@@ -32,9 +33,8 @@ export class MessagesService {
     if (!confessionId || confessionId.trim() === '') {
       throw new BadRequestException('Invalid confession ID');
     }
-    const confession = await this.confessionRepository.findOne({ where: { id: confessionId }, relations: ['user'] });
+    const confession = await this.confessionRepository.findOne({ where: { id: confessionId } });
     if (!confession) throw new NotFoundException('Confession not found');
-    if (confession.user?.id !== user.id) throw new ForbiddenException('Not the confession author');
      // Consider adding pagination for large message lists
     return this.messageRepository.find({ 
       where: { confession: { id: confessionId } }, 
@@ -48,9 +48,11 @@ export class MessagesService {
     if (!dto.reply || dto.reply.trim() === '') {
       throw new BadRequestException('Reply content cannot be empty');
     }
-    const message = await this.messageRepository.findOne({ where: { id: dto.message_id }, relations: ['confession', 'confession.user'] });
+    const message = await this.messageRepository.findOne({
+      where: { id: dto.message_id },
+      relations: ['confession'],
+    });
     if (!message) throw new NotFoundException('Message not found');
-    if (message.confession.user?.id !== user.id) throw new ForbiddenException('Not the confession author');
     if (message.hasReply) throw new ForbiddenException('Already replied');
    
     // Use a transaction to ensure atomicity
