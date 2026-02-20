@@ -1,8 +1,13 @@
+'use client';
+
 export default function MessagesPage() {
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold text-white mb-4">Messages</h1>
-      <p className="text-zinc-400">Messages page coming soon...</p>
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Messages</h1>
+      <p className="mt-2 text-gray-600 dark:text-gray-300">
+        This page was previously an empty file (which breaks Next.js builds). Replace this
+        placeholder with the real messages UI.
+      </p>
     </div>
   );
 }

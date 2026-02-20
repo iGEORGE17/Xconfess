@@ -1,5 +1,77 @@
 "use client";
 
+import { DailyActivity } from "@/app/lib/types/analytics.types";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Activity } from "lucide-react";
+
+interface Props {
+  data: DailyActivity[];
+  period: '7days' | '30days';
+}
+
+export const ActivityChart = ({ data, period }: Props) => {
+  const chartData = data.map(item => ({
+    ...item,
+    date: new Date(item.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    })
+  }));
+
+  return (
+    <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div className="flex items-center gap-2 mb-6">
+        <Activity className="w-6 h-6 text-purple-500" />
+        <h3 className="text-xl font-semibold">Platform Activity</h3>
+      </div>
+
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <XAxis
+            dataKey="date"
+            stroke="#71717a"
+            tick={{ fill: '#a1a1aa' }}
+          />
+          <YAxis
+            stroke="#71717a"
+            tick={{ fill: '#a1a1aa' }}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
+              color: '#ffffff'
+            }}
+          />
+          <Legend />
+          <Line
+            type="monotone"
+            dataKey="confessions"
+            stroke="#8b5cf6"
+            strokeWidth={2}
+            name="Confessions"
+          />
+          <Line
+            type="monotone"
+            dataKey="reactions"
+            stroke="#ec4899"
+            strokeWidth={2}
+            name="Reactions"
+          />
+          <Line
+            type="monotone"
+            dataKey="activeUsers"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            name="Active Users"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
 import React from 'react';
 import {
     LineChart,
@@ -28,14 +100,14 @@ interface ActivityChartProps {
 export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = false }) => {
     if (loading) {
         return (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px] flex items-center justify-center animate-pulse">
+            <div role='status' aria-label='loading' className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px] flex items-center justify-center animate-pulse">
                 <div className="w-full h-full bg-zinc-800/30 rounded-xl" />
             </div>
         );
     }
 
     return (
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]" >
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-white">Platform Activity</h3>
                 <div className="flex gap-4">
@@ -51,7 +123,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = fa
             </div>
 
             <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" >
                     <AreaChart data={data}>
                         <defs>
                             <linearGradient id="colorConfessions" x1="0" y1="0" x2="0" y2="1">

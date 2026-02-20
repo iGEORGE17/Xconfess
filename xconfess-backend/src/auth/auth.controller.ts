@@ -7,12 +7,15 @@ import {
   BadRequestException,
   Req,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 
+@ApiTags('Authentication')
 @Controller('auth')
+
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

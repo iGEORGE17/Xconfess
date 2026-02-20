@@ -1,13 +1,46 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateReportDto {
+  @IsInt()
+  @Type(() => Number)
+  confessionId: number;
+
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(500)
   reason: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
+  additionalDetails?: string;
+  type: any;
+}
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ReportStatus } from '../report.entity';
+
+export enum ReportReason {
+  INAPPROPRIATE = 'inappropriate',
+  HARASSMENT = 'harassment',
+  SPAM = 'spam',
+  HATE_SPEECH = 'hate_speech',
+  FALSE_INFORMATION = 'false_information',
+  OTHER = 'other',
+}
+
+export class CreateReportDto {
+  @IsEnum(ReportReason)
+  reason: ReportReason;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
   details?: string;
 }
+
+export enum AllowedReportStatusUpdate {
+  RESOLVED = ReportStatus.RESOLVED,
+  DISMISSED = ReportStatus.DISMISSED,
+}
+

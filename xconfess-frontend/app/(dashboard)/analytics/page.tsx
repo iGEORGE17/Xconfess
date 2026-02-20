@@ -1,10 +1,8 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import React, { useState, useEffect } from 'react';
 import { MetricsCard } from '@/app/components/analytics/MetricsCard';
-import { ActivityChart } from '@/app/components/analytics/ActivityChart';
-import { ReactionDistribution } from '@/app/components/analytics/ReactionDistribution';
-import { TrendingConfessions } from '@/app/components/analytics/TrendingConfessions';
 import { TimePeriodSelector } from '@/app/components/analytics/TimePeriodSelector';
 import {
     MessageSquare,
@@ -14,6 +12,21 @@ import {
     TrendingUp,
     AlertCircle
 } from 'lucide-react';
+
+const ActivityChart = dynamic(
+  () => import('@/app/components/analytics/ActivityChart').then(mod => ({ default: mod.ActivityChart })),
+  { loading: () => <div className="animate-pulse bg-zinc-900 rounded-lg p-6 h-80"></div> }
+);
+
+const ReactionDistribution = dynamic(
+  () => import('@/app/components/analytics/ReactionDistribution').then(mod => ({ default: mod.ReactionDistribution })),
+  { loading: () => <div className="animate-pulse bg-zinc-900 rounded-lg p-6 h-80"></div> }
+);
+
+const TrendingConfessions = dynamic(
+  () => import('@/app/components/analytics/TrendingConfessions').then(mod => ({ default: mod.TrendingConfessions })),
+  { loading: () => <div className="animate-pulse bg-zinc-900 rounded-lg p-6 h-96"></div> }
+);
 
 interface AnalyticsData {
     metrics: {
@@ -108,7 +121,7 @@ export default function AnalyticsPage() {
                         </div>
                         <button
                             onClick={() => window.location.reload()}
-                            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm font-medium"
+                            className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer "
                         >
                             Retry
                         </button>

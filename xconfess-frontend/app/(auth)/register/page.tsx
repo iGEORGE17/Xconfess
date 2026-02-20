@@ -1,136 +1,94 @@
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import Link from 'next/link';
-import { useAuth } from '@/app/lib/hooks/useAuth';
-
-const registerSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ['confirmPassword'],
-});
-
-type RegisterFormData = z.infer<typeof registerSchema>;
+import apiClient from '@/app/lib/api/client';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register: registerUser, error: authError, isLoading: authLoading } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-  });
-
-  const onSubmit = async (data: RegisterFormData) => {
-    setIsSubmitting(true);
-
+  const doRegister = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      await registerUser({
-        username: data.username,
-        email: data.email,
-        password: data.password,
-      });
-
-      // Auto-login happens in the register function
-      // Redirect to dashboard after successful registration
-      router.push('/dashboard');
-    } catch (err) {
-      // Error is already handled in auth context
-      console.error('Registration error:', err);
+      await apiClient.post('/api/users/register', { username, email, password });
+      router.push('/login');
+    } catch (e: any) {
+      setError(e?.message || 'Registration failed');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">Create Account</h1>
-        
-        {authError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {authError}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create account</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Already have an account?{' '}
+            <Link href="/login" className="text-indigo-600 dark:text-indigo-400">
+              Sign in
+            </Link>
+          </p>
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
+            {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Username</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Username
+            </label>
             <input
-              {...register('username')}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="Choose a username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              placeholder="yourname"
             />
-            {errors.username && (
-              <p className="text-red-500 text-sm mt-1">{errors.username.message}</p>
-            )}
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
             <input
-              {...register('email')}
-              type="email"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+              placeholder="you@example.com"
             />
-            {errors.email && (
-              <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
-            )}
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Password
+            </label>
             <input
-              {...register('password')}
               type="password"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
               placeholder="••••••••"
             />
-            {errors.password && (
-              <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Confirm Password</label>
-            <input
-              {...register('confirmPassword')}
-              type="password"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-              placeholder="••••••••"
-            />
-            {errors.confirmPassword && (
-              <p className="text-red-500 text-sm mt-1">{errors.confirmPassword.message}</p>
-            )}
           </div>
 
           <button
-            type="submit"
-            disabled={isSubmitting || authLoading}
-            className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            onClick={doRegister}
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
-            {isSubmitting ? 'Creating Account...' : 'Create Account'}
+            {loading ? 'Creating…' : 'Create account'}
           </button>
-        </form>
-
-        <p className="text-center mt-4 text-sm text-gray-600">
-          Already have an account?{' '}
-          <Link href="/login" className="text-purple-600 hover:underline">
-            Login here
-          </Link>
-        </p>
+        </div>
       </div>
     </div>
   );

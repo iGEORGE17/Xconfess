@@ -74,7 +74,7 @@ export const StellarAnchorToggle: React.FC<StellarAnchorToggleProps> = ({
           Anchor on Stellar
         </span>
         {isLoading || isConnecting ? (
-          <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+          <Loader2 role='status' aria-label='loading' className="h-4 w-4 animate-spin text-zinc-400" />
         ) : enabled && transactionHash ? (
           <CheckCircle2 className="h-4 w-4 text-green-400" />
         ) : null}

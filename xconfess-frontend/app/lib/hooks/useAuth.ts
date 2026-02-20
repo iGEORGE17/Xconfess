@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useAuthContext } from '../providers/AuthProvider';
 import { AuthContextValue } from '../types/auth';
@@ -8,22 +8,6 @@ import { AuthContextValue } from '../types/auth';
  * 
  * Provides access to authentication state and methods.
  * Must be used within an AuthProvider.
- * 
- * @example
- * ```tsx
- * const { user, isAuthenticated, login, logout } = useAuth();
- * 
- * // Login
- * await login({ email: 'user@example.com', password: 'password' });
- * 
- * // Logout
- * logout();
- * 
- * // Check if authenticated
- * if (isAuthenticated) {
- *   console.log('User:', user);
- * }
- * ```
  * 
  * @returns Authentication context value with state and methods
  */

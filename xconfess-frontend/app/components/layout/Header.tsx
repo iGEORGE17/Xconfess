@@ -2,110 +2,88 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import { useAuth } from "../../lib/hooks/useAuth";
+import { ThemeToggle } from "../common/ThemeToggle";
+import Sidebar from "./Sidebar";
 
 export default function Header() {
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="border-b bg-white">
-      <nav className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="text-xl font-bold text-purple-600">
-            xConfess
-          </Link>
-
-          {/* Desktop Nav */}
-          <div className="hidden md:flex items-center space-x-8">
-            <Link href="/" className="text-gray-700 hover:text-purple-600">
-              Feed
-            </Link>
-            <Link
-              href="/profile"
-              className="text-gray-700 hover:text-purple-600"
-            >
-              Profile
-            </Link>
-            <Link
-              href="/messages"
-              className="text-gray-700 hover:text-purple-600"
-            >
-              Messages
+    <>
+      <header aria-label="Main navigation" className="border-b bg-white sticky top-0 z-30">
+        <nav className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-xl font-bold text-primary">
+              xConfess
             </Link>
 
-            {user && (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">@{user.username}</span>
-                <button
-                  onClick={logout}
-                  className="flex items-center space-x-1 text-red-600 hover:text-red-700"
-                >
-                  <LogOut size={18} />
-                  <span>Logout</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            className="md:hidden"
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-
-        {/* Mobile Nav */}
-        {mobileMenuOpen && (
-          <div
-            id="mobile-navigation"
-            role="navigation"
-            className="md:hidden mt-4 space-y-3"
-          >
-            <Link
-              href="/"
-              className="block py-2 text-gray-700"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Feed
-            </Link>
-            <Link
-              href="/profile"
-              className="block py-2 text-gray-700"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Profile
-            </Link>
-            <Link
-              href="/messages"
-              className="block py-2 text-gray-700"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Messages
-            </Link>
-
-            {user && (
-              <button
-                onClick={() => {
-                  logout();
-                  setMobileMenuOpen(false);
-                }}
-                className="block w-full text-left py-2 text-red-600"
+            <div className="hidden md:flex items-center space-x-8">
+              <Link href="/" className="text-gray-700 hover:text-purple-600 dark:text-slate-300 dark:hover:text-purple-400 font-medium transition-colors">
+                Feed
+              </Link>
+              <Link
+                href="/search"
+                className="text-gray-700 hover:text-purple-600"
               >
-                Logout
+                Search
+              </Link>
+              <Link
+                href="/profile"
+                className="text-gray-700 hover:text-purple-600"
+              >
+                Profile
+              </Link>
+              <Link
+                href="/messages"
+                className="text-gray-700 hover:text-purple-600 dark:text-slate-300 dark:hover:text-purple-400 font-medium transition-colors"
+              >
+                Messages
+              </Link>
+
+              <div className="h-6 w-px bg-zinc-200 dark:bg-slate-800" />
+              
+              <ThemeToggle />
+
+              {user && (
+                <div className="flex items-center space-x-4">
+                  <span aria-label={`@${user.username}`} className="text-sm text-gray-600">
+                    @{user.username}
+                  </span>
+                  <button
+                    onClick={logout}
+                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                  >
+                    <LogOut size={18} />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 md:hidden">
+              <ThemeToggle />
+              <button
+                type="button"
+                className="p-2 -mr-2 text-gray-700 dark:text-slate-300 transition-colors"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={mobileMenuOpen}
+                aria-controls="mobile-navigation"
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                <Menu size={24} />
               </button>
-            )}
+            </div>
           </div>
-        )}
-      </nav>
-    </header>
+        </nav>
+      </header>
+
+      <Sidebar
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
+    </>
   );
 }

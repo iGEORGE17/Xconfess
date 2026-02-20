@@ -138,11 +138,13 @@ export async function POST(request: Request) {
         },
       );
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating confession:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Internal server error";
     return new Response(
       JSON.stringify({
-        message: error.message || "Internal server error",
+        message: errorMessage,
       }),
       {
         status: 500,

@@ -40,7 +40,8 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
     if (currentDraftId && !loadDraft(currentDraftId)) {
       setCurrentDraftId(null);
     }
-  }, [drafts, currentDraftId, loadDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts]);
 
   useEffect(() => {
     const currentContent = JSON.stringify(currentDraft);
@@ -62,7 +63,7 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         };
 
         const existingDraft = currentDraftId ? loadDraft(currentDraftId) : null;
-        
+
         if (existingDraft && currentDraftId) {
           updateDraft(currentDraftId, draftToSave);
         } else {
@@ -81,7 +82,14 @@ export const DraftManager: React.FC<DraftManagerProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [currentDraft, autoSaveInterval, currentDraftId, saveDraft, updateDraft, loadDraft]);
+  }, [
+    currentDraft,
+    autoSaveInterval,
+    currentDraftId,
+    saveDraft,
+    updateDraft,
+    loadDraft,
+  ]);
 
   const handleLoadDraft = (draft: Draft) => {
     onLoadDraft(draft);

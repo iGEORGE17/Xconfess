@@ -43,10 +43,10 @@ export class User {
   @Column({ default: true })
   is_active: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   resetPasswordToken: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   resetPasswordExpires: Date | null;
 
   @CreateDateColumn()
@@ -55,3 +55,4 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
+
