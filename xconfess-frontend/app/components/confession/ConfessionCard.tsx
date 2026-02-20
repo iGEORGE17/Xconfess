@@ -6,6 +6,8 @@ import Image from "next/image";
 import { ReactionButton } from "./ReactionButtons";
 import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
 
+import { Confession } from "@/app/lib/types/confession";
+
 interface Props {
   confession: NormalizedConfession;
 }
@@ -86,7 +88,7 @@ export const ConfessionCard = memo(({ confession }: Props) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
         <div className="flex items-center gap-4 text-sm text-gray-400">
           {confession.viewCount !== undefined && (
-            <div  className="flex items-center gap-2 min-h-[44px] min-w-[44px]">
+            <div className="flex items-center gap-2 min-h-[44px] min-w-[44px]">
               <span className="text-lg">👁️</span>
               <span>{confession.viewCount}</span>
             </div>

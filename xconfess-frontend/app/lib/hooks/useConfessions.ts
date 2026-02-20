@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import apiClient from "@/app/lib/api/client";
 import { getErrorMessage } from "@/app/lib/utils/errorHandler";
 
-interface Confession {
-  id: string;
-  content: string;
-  createdAt: string;
-  reactions: { like: number; love: number };
-}
+import { Confession } from "@/app/lib/types/confession";
 
 export const useConfessions = () => {
   const [data, setData] = useState<Confession[]>([]);
