@@ -1,9 +1,14 @@
+// Stable Next.js App Router handler signature.
+// params is typed directly as { id: string } — no Promise wrapper needed.
+// The Promise wrapper was non-idiomatic and required an unnecessary await on params.
 export async function POST(
   request: Request,
+  { params }: { params: { id: string } }
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await context.params;
+    // Destructure id directly — no await required since params is not a Promise
+    const { id } = params;
     const { type } = await request.json();
 
     if (!type || !["like", "love"].includes(type)) {
