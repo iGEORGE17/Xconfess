@@ -1,14 +1,14 @@
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ReportStatus } from '../enums/report-status.enum';
+import { ReportStatus } from '../report.entity';
 
 export class UpdateReportStatusDto {
-  @IsEnum(ReportStatus, {
-    message: `status must be one of: ${Object.values(ReportStatus).join(', ')}`,
+  @IsEnum([ReportStatus.RESOLVED, ReportStatus.DISMISSED], {
+    message: 'status must be "resolved" or "dismissed"',
   })
-  status: ReportStatus;
+  status: ReportStatus.RESOLVED | ReportStatus.DISMISSED;
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
-  adminNote?: string;
+  @MaxLength(2000)
+  resolutionReason?: string;
 }

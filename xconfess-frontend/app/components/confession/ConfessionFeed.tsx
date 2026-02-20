@@ -3,30 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ConfessionCard } from "./ConfessionCard";
 import { SkeletonCard } from "./LoadingSkeleton";
-
-interface Confession {
-  id: string;
-  content: string;
-  createdAt: string;
-  reactions: { like: number; love: number };
-  author?: {
-    id: string;
-    username?: string;
-    avatar?: string;
-  };
-  commentCount?: number;
-  viewCount?: number;
-}
+import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
 
 interface FetchResponse {
-  confessions: Confession[];
+  confessions: NormalizedConfession[];
   hasMore: boolean;
   total?: number;
   page?: number;
 }
 
 export const ConfessionFeed = () => {
-  const [confessions, setConfessions] = useState<Confession[]>([]);
+  const [confessions, setConfessions] = useState<NormalizedConfession[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,54 +24,51 @@ export const ConfessionFeed = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Fetch confessions
-  const fetchConfessions = useCallback(
-    async (pageNum: number) => {
-      // Cancel previous request if still pending
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+  const fetchConfessions = useCallback(async (pageNum: number) => {
+    // Cancel previous request if still pending
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await fetch(
+        `/api/confessions?page=${pageNum}&limit=10`,
+        {
+          signal: abortControllerRef.current.signal,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch confessions: ${response.statusText}`);
       }
 
-      abortControllerRef.current = new AbortController();
+      const data: FetchResponse = await response.json();
 
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(
-          `/api/confessions?page=${pageNum}&limit=10`,
-          {
-            signal: abortControllerRef.current.signal,
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch confessions: ${response.statusText}`);
-        }
-
-        const data: FetchResponse = await response.json();
-
-        if (pageNum === 1) {
-          setConfessions(data.confessions);
-          setIsEmpty(data.confessions.length === 0);
-        } else {
-          setConfessions((prev) => [...prev, ...data.confessions]);
-        }
-
-        setHasMore(data.hasMore);
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          // Ignore abort errors
-          return;
-        }
-        setError(
-          err instanceof Error ? err.message : "Failed to load confessions"
-        );
-      } finally {
-        setIsLoading(false);
+      if (pageNum === 1) {
+        setConfessions(data.confessions);
+        setIsEmpty(data.confessions.length === 0);
+      } else {
+        setConfessions((prev) => [...prev, ...data.confessions]);
       }
-    },
-    []
-  );
+
+      setHasMore(data.hasMore);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // Ignore abort errors
+        return;
+      }
+      setError(
+        err instanceof Error ? err.message : "Failed to load confessions",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -109,7 +93,7 @@ export const ConfessionFeed = () => {
       {
         rootMargin: "100px", // Start loading before reaching the bottom
         threshold: 0.1,
-      }
+      },
     );
 
     const target = observerTarget.current;
@@ -185,7 +169,10 @@ export const ConfessionFeed = () => {
       {!isEmpty && (
         <div className="space-y-4">
           {confessions.map((confession) => (
-            <ConfessionCard key={confession.id} confession={confession} />
+            <ConfessionCard
+              key={confession.id}
+              confession={confession}
+            />
           ))}
 
           {/* Loading skeletons while fetching more */}
@@ -218,7 +205,9 @@ export const ConfessionFeed = () => {
       {/* End of feed message */}
       {!hasMore && confessions.length > 0 && (
         <div className="text-center py-8">
-          <p className="text-gray-500">You&apos;ve reached the end of confessions</p>
+          <p className="text-gray-500">
+            You&apos;ve reached the end of confessions
+          </p>
         </div>
       )}
     </div>
