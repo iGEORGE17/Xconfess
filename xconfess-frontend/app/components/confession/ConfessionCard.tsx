@@ -1,33 +1,24 @@
 import { ReactionButton } from "./ReactionButtons";
+import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
 
 interface Props {
-  confession: {
-    id: string;
-    content: string;
-    createdAt: string;
-    reactions: { like: number; love: number };
-    author?: {
-      id: string;
-      username?: string;
-      avatar?: string;
-    };
-    commentCount?: number;
-    viewCount?: number;
-  };
+  confession: NormalizedConfession;
 }
 
 export const ConfessionCard = ({ confession }: Props) => {
   const timeAgo = (date: string) => {
-    const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
-    
+    const seconds = Math.floor(
+      (new Date().getTime() - new Date(date).getTime()) / 1000,
+    );
+
     if (seconds < 60) return `${seconds}s ago`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-    
-    return new Date(date).toLocaleDateString("en-US", { 
-      month: "short", 
-      day: "numeric" 
+
+    return new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
     });
   };
 
