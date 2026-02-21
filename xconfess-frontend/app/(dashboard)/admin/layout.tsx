@@ -47,7 +47,7 @@ export default function AdminLayout({
           is_active: true,
         }),
       );
-      localStorage.setItem('accessToken', 'mock');
+      localStorage.setItem('access_token', 'mock');
       return;
     }
 
@@ -71,7 +71,7 @@ export default function AdminLayout({
   useEffect(() => {
     // Real-time notifications for new reports (admins only)
     if (isMockAdminEnabled()) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     if (!token) return;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL;

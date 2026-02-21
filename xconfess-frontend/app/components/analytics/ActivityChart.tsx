@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { DailyActivity } from "@/app/lib/types/analytics.types";
 import {
   XAxis,
   YAxis,
@@ -10,18 +11,12 @@ import {
   Area,
   AreaChart,
 } from 'recharts';
-
-interface ActivityData {
-  date: string;
-  confessions: number;
-  reactions: number;
-  users?: number;
-  activeUsers?: number;
-}
+import { Activity } from "lucide-react";
 
 interface ActivityChartProps {
-  data: ActivityData[];
+  data: DailyActivity[];
   loading?: boolean;
+  period?: '7days' | '30days';
 }
 
 export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = false }) => {
@@ -33,10 +28,21 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = fa
     );
   }
 
+  const chartData = data.map(item => ({
+    ...item,
+    date: new Date(item.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    })
+  }));
+
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]" >
+    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-[400px]">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-white">Platform Activity</h3>
+        <div className="flex items-center gap-2">
+          <Activity className="w-6 h-6 text-purple-500" />
+          <h3 className="text-xl font-bold text-white">Platform Activity</h3>
+        </div>
         <div className="flex gap-4">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500" />
@@ -50,8 +56,8 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({ data, loading = fa
       </div>
 
       <div className="h-[300px] w-full">
-        <ResponsiveContainer width="100%" height="100%" >
-          <AreaChart data={data}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorConfessions" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />

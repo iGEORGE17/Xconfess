@@ -105,7 +105,7 @@ export function CommentSection({
     setSubmitError(null);
     const token =
       typeof localStorage !== "undefined"
-        ? localStorage.getItem("accessToken")
+        ? localStorage.getItem("access_token")
         : null;
 
     try {

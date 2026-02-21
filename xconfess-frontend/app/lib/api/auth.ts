@@ -17,7 +17,7 @@ checkAuth();
 }, []);
 
 const checkAuth = async () => {
-const token = localStorage.getItem('accessToken');
+const token = localStorage.getItem('access_token');
 
 if (!token) {
   setIsLoading(false);
@@ -35,7 +35,7 @@ try {
     const userData = await response.json();
     setUser(userData);
   } else {
-    localStorage.removeItem('accessToken');
+    localStorage.removeItem('access_token');
     localStorage.removeItem('user');
   }
 } catch (error) {
@@ -46,7 +46,7 @@ try {
 };
 
 const logout = () => {
-localStorage.removeItem('accessToken');
+localStorage.removeItem('access_token');
 localStorage.removeItem('user');
 setUser(null);
 router.push('/login');

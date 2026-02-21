@@ -13,7 +13,7 @@ export default function LoginPage() {
 
   const doMockAdminLogin = () => {
     localStorage.setItem('adminMock', 'true');
-    localStorage.setItem('accessToken', 'mock');
+    localStorage.setItem('access_token', 'mock');
     localStorage.setItem(
       'user',
       JSON.stringify({
@@ -38,7 +38,7 @@ export default function LoginPage() {
         throw new Error('Missing access token');
       }
 
-      localStorage.setItem('accessToken', access_token);
+      localStorage.setItem('access_token', access_token);
       if (user) {
         localStorage.setItem('user', JSON.stringify(user));
       }
