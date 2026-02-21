@@ -112,20 +112,20 @@ export class AnalyticsService {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // Get daily active users (users who created confessions or reactions)
+    // Get daily active users (anonymous users who created confessions or reactions)
     const dailyActivity = await this.confessionRepository
       .createQueryBuilder('confession')
-      .select('DATE(confession.createdAt)', 'date')
-      .addSelect('COUNT(DISTINCT confession.userId)', 'activeUsers')
-      .where('confession.createdAt >= :startDate', { startDate })
-      .groupBy('DATE(confession.createdAt)')
+      .select('DATE(confession.created_at)', 'date')
+      .addSelect('COUNT(DISTINCT confession.anonymous_user_id)', 'activeUsers')
+      .where('confession.created_at >= :startDate', { startDate })
+      .groupBy('DATE(confession.created_at)')
       .orderBy('date', 'ASC')
       .getRawMany();
 
     const reactionActivity = await this.reactionRepository
       .createQueryBuilder('reaction')
       .select('DATE(reaction.createdAt)', 'date')
-      .addSelect('COUNT(DISTINCT reaction.userId)', 'activeUsers')
+      .addSelect('COUNT(DISTINCT reaction.anonymous_user_id)', 'activeUsers')
       .where('reaction.createdAt >= :startDate', { startDate })
       .groupBy('DATE(reaction.createdAt)')
       .orderBy('date', 'ASC')
