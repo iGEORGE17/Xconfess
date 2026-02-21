@@ -64,7 +64,7 @@ export async function getConfessions(
       ok: true,
       data: {
         confessions,
-        hasMore: json.hasMore !== false,
+        hasMore: json.hasMore === true,
         total: json.total,
         page: json.page ?? page,
       },
@@ -124,12 +124,16 @@ export async function getConfessionById(
 
     const data = await response.json();
     const normalized = normalizeConfession(data as RawConfession);
+    const reactions = normalized.reactions ?? {};
     const result: GetConfessionByIdResult = {
       id: normalized.id,
       content: normalized.content,
       createdAt: normalized.createdAt,
       viewCount: normalized.viewCount,
-      reactions: normalized.reactions as { like: number; love: number },
+      reactions: {
+        like: typeof reactions.like === "number" ? reactions.like : 0,
+        love: typeof reactions.love === "number" ? reactions.love : 0,
+      },
       commentCount: normalized.commentCount,
       author: normalized.author,
     };

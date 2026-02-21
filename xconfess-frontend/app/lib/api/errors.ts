@@ -51,7 +51,7 @@ export async function normalizeApiError(
       // keep default message
     }
     return {
-      message,
+      message: message ?? "An error occurred. Please try again.",
       code: STATUS_CODES[status] ?? "REQUEST_FAILED",
       status,
     };

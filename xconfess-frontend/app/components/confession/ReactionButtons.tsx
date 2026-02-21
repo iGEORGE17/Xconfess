@@ -36,6 +36,7 @@ export const ReactionButton = ({
       return;
     }
 
+    setActive(true);
     const reactions = result.data.reactions;
     if (reactions && typeof reactions[type] === "number") {
       setLocalCount(reactions[type]);

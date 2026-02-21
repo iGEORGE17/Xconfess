@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { getConfessions } from "@/app/lib/api/confessions";
 import type { NormalizedConfession } from "@/app/lib/utils/normalizeConfession";

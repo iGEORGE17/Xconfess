@@ -33,10 +33,8 @@ export const ConfessionFeed = () => {
     );
 
     if (result.ok === false) {
-      if (result.error.message === "Request was cancelled.") {
-        setIsLoading(false);
-        return;
-      }
+      // Do not touch isLoading on cancel—the new in-flight request owns it
+      if (result.error.message === "Request was cancelled.") return;
       setError(result.error.message);
       setIsLoading(false);
       return;
