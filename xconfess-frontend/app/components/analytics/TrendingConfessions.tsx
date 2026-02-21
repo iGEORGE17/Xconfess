@@ -3,19 +3,7 @@
 import React from 'react';
 import { Clock, Heart, Eye, MessageCircle } from 'lucide-react';
 
-interface Confession {
-    id: string;
-    message: string;
-    category?: string;
-    reactions: {
-        like?: number;
-        love?: number;
-        funny?: number;
-        sad?: number;
-    } | number; // Added number support for consolidated reaction count
-    viewCount?: number;
-    createdAt: string;
-}
+import { Confession } from "@/app/lib/types/confession";
 
 interface TrendingConfessionsProps {
     confessions: Confession[];
@@ -59,9 +47,10 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
         return `${Math.floor(days / 7)}w ago`;
     };
 
-    const getTotalReactions = (reactions: Confession['reactions']) => {
-        if (typeof reactions === 'number') return reactions;
-        return Object.values(reactions).reduce((sum, val) => sum + (val || 0), 0);
+    const getTotalReactions = (confession: Confession) => {
+        if (typeof confession.reactions === 'number') return confession.reactions;
+        if (confession.reactionCount !== undefined) return confession.reactionCount;
+        return Object.values(confession.reactions).reduce((sum, val) => sum + (val || 0), 0);
     };
 
     return (
@@ -90,7 +79,7 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                                 <p className="text-zinc-300 text-sm leading-relaxed line-clamp-2 mb-3 group-hover:text-white transition-colors">
-                                    {confession.message}
+                                    {confession.content}
                                 </p>
 
                                 {/* Category & Time */}
@@ -110,7 +99,7 @@ export const TrendingConfessions: React.FC<TrendingConfessionsProps> = ({
                                 <div className="flex items-center gap-4 text-xs">
                                     <div className="flex items-center gap-1.5 text-rose-400">
                                         <Heart className="w-4 h-4 fill-rose-400" />
-                                        <span className="font-medium">{getTotalReactions(confession.reactions)}</span>
+                                        <span className="font-medium">{getTotalReactions(confession)}</span>
                                     </div>
                                     {confession.viewCount !== undefined && (
                                         <div className="flex items-center gap-1.5 text-blue-400">

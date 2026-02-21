@@ -4,29 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ReactionButton } from "./ReactionButtons";
-import { AnchorButton } from "./AnchorButton";
-import { TipButton } from "./TipButton";
-import { getTipStats, type TipStats } from "@/lib/services/tipping.service";
-import { memo, useEffect } from "react";
+import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
+
+import { Confession } from "@/app/lib/types/confession";
 
 interface Props {
-  confession: {
-    id: string;
-    content: string;
-    createdAt: string;
-    reactions: { like: number; love: number };
-    author?: {
-      id: string;
-      username?: string;
-      avatar?: string;
-      stellarAddress?: string;
-    };
-    commentCount?: number;
-    viewCount?: number;
-    isAnchored?: boolean;
-    stellarTxHash?: string | null;
-    tipStats?: TipStats;
-  };
+  confession: NormalizedConfession;
 }
 
 export const ConfessionCard = memo(({ confession }: Props) => {
@@ -105,7 +88,7 @@ export const ConfessionCard = memo(({ confession }: Props) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
         <div className="flex items-center gap-4 text-sm text-gray-400">
           {confession.viewCount !== undefined && (
-            <div  className="flex items-center gap-2 min-h-[44px] min-w-[44px]">
+            <div className="flex items-center gap-2 min-h-[44px] min-w-[44px]">
               <span className="text-lg">👁️</span>
               <span>{confession.viewCount}</span>
             </div>
@@ -150,15 +133,4 @@ export const ConfessionCard = memo(({ confession }: Props) => {
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.confession.id === nextProps.confession.id &&
-    prevProps.confession.reactions.like === nextProps.confession.reactions.like &&
-    prevProps.confession.reactions.love === nextProps.confession.reactions.love &&
-    prevProps.confession.viewCount === nextProps.confession.viewCount &&
-    prevProps.confession.commentCount === nextProps.confession.commentCount &&
-    prevProps.confession.isAnchored === nextProps.confession.isAnchored
-  );
-});
-
-ConfessionCard.displayName = 'ConfessionCard';
+};

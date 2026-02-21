@@ -1,3 +1,5 @@
+import { normalizeConfession } from "../../lib/utils/normalizeConfession";
+
 const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export async function POST(request: Request) {
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
     const confessionContent = bodyContent || message;
     const backendUrl = `${BASE_API_URL}/confessions`;
 
-    const backendBody: Record<string, unknown> = {
+    const backendBody: any = {
       message: confessionContent,
       body: confessionContent,
     };
@@ -86,23 +88,21 @@ export async function POST(request: Request) {
       }
 
       const data = await response.json();
+      const normalized = normalizeConfession(data);
 
-      return new Response(JSON.stringify(data), {
+      return new Response(JSON.stringify(normalized), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       });
-    } catch (fetchError) {
+    } catch (fetchError: any) {
       const isDemoMode =
         process.env.NODE_ENV === "development" ||
         process.env.DEMO_MODE === "true";
 
-      const errorMessage =
-        fetchError instanceof Error ? fetchError.message : "Unknown error";
-      const errorCode = (fetchError as { code?: string })?.code;
-
       if (
         isDemoMode &&
-        (errorMessage?.includes("fetch failed") || errorCode === "ECONNREFUSED")
+        (fetchError.message?.includes("fetch failed") ||
+          fetchError.code === "ECONNREFUSED")
       ) {
         console.warn(
           "Backend unreachable, returning demo response for testing",
@@ -280,10 +280,12 @@ export async function GET(request: Request) {
     }
 
     const data = await response.json();
+    const rawConfessions = data.data || data.confessions || [];
+    const confessions = rawConfessions.map(normalizeConfession);
 
     return new Response(
       JSON.stringify({
-        confessions: data.data || data.confessions || [],
+        confessions,
         hasMore: data.hasMore !== false,
         total: data.total,
         page: data.page || page,

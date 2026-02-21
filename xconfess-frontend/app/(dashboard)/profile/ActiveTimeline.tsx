@@ -17,15 +17,7 @@ interface ActivityItem {
   data: any;
 }
 
-interface Confession {
-  id: string;
-  content: string;
-  category: string;
-  createdAt: string;
-  viewCount: number;
-  reactionCount: number;
-  isAnonymous: boolean;
-}
+import { Confession } from "@/app/lib/types/confession";
 
 interface ActivityTimelineProps {
   userId: string;
@@ -181,11 +173,10 @@ export function ActivityTimeline({ userId }: ActivityTimelineProps) {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                activeTab === tab
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab
                   ? "bg-blue-600 text-white"
                   : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-300"
-              }`}
+                }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
