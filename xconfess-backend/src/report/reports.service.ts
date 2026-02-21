@@ -6,20 +6,25 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { Report } from '../admin/entities/report.entity';
-import { CreateReportDto } from './dto/create-report.dto';
-import {AnonymousConfession } from '../confession/entities/confession.entity';
-import { GetReportsQueryDto } from './dto/get-reports-query.dto';
-import { PaginatedReportsResponseDto } from './dto/get-reports-response.dto';
-import { ReportStatus, ReportType } from '../admin/entities/report.entity';
-
 import { Repository } from 'typeorm';
-import { Report, ReportStatus } from './report.entity';
+import { Report, ReportStatus } from '../admin/entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
+import { GetReportsQueryDto } from './dto/get-reports-query.dto';
+import { PaginatedReportsResponseDto } from './dto/get-reports-response.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { User, UserRole } from '../user/entities/user.entity';
+
+/** Message returned when user attempts a duplicate report */
+export const DUPLICATE_REPORT_MESSAGE =
+  'You have already reported this confession within the last 24 hours.';
+
+/** PostgreSQL unique_violation (23505) from idx_reports_dedupe_confession_reporter */
+function isDuplicateReportConstraintViolation(err: unknown): boolean {
+  const code = (err as { code?: string; driverError?: { code?: string } })?.code
+    ?? (err as { driverError?: { code?: string } })?.driverError?.code;
+  return code === '23505';
+}
 
 @Injectable()
 export class ReportsService {
@@ -67,25 +72,28 @@ export class ReportsService {
       const existingReport = await qb.getOne();
 
       if (existingReport) {
-        throw new BadRequestException(
-          'You have already reported this confession within the last 24 hours.',
-        );
+        throw new BadRequestException(DUPLICATE_REPORT_MESSAGE);
       }
 
       // 3️⃣ Save report atomically with pending status
+      // DB-level unique index (idx_reports_dedupe_confession_reporter) catches concurrent duplicates
       const report = manager.getRepository(Report).create({
         confessionId,
         reporterId: reporterId ?? undefined,
-        type: dto.type, // Using type instead of reason for admin entity
+        type: dto.type,
         reason: dto.reason,
-<<<<<<< Admin-Report-Listing-Endpoint
-=======
-        details: dto.details,
         status: ReportStatus.PENDING,
->>>>>>> main
       });
 
-      const savedReport = await manager.getRepository(Report).save(report);
+      let savedReport: Report;
+      try {
+        savedReport = await manager.getRepository(Report).save(report);
+      } catch (err: unknown) {
+        if (isDuplicateReportConstraintViolation(err)) {
+          throw new BadRequestException(DUPLICATE_REPORT_MESSAGE);
+        }
+        throw err;
+      }
 
       // 4️⃣ Log report creation (non-blocking - no await)
       if (reporterId) {
@@ -140,7 +148,7 @@ export class ReportsService {
     
     // Update report status
     report.status = ReportStatus.RESOLVED;
-    report.resolvedById = admin.id;
+    report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
     report.resolutionReason = options?.reason || 'Report resolved'; // Consistent default
     
@@ -200,7 +208,7 @@ export class ReportsService {
     
     // Update report status
     report.status = ReportStatus.DISMISSED;
-    report.resolvedById = admin.id;
+    report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
     report.resolutionReason = options?.reason || 'Report dismissed'; // Consistent default
     
