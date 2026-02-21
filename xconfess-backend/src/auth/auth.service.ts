@@ -118,6 +118,17 @@ export class AuthService {
     }
   }
 
+  async validateUserById(userId: number): Promise<UserResponse | null> {
+    const user = await this.userService.findById(userId);
+    if (user && user.is_active) {
+      // Decrypt email for response
+      const decryptedEmail = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
+      const { password: _, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+      return { ...result, email: decryptedEmail };
+    }
+    return null;
+  }
+
   async forgotPassword(
     forgotPasswordDto: ForgotPasswordDto,
     ipAddress?: string,

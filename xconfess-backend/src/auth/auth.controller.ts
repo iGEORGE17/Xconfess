@@ -6,18 +6,76 @@ import {
   HttpStatus,
   BadRequestException,
   Req,
+  Get,
+  UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { LoginDto } from '../user/dto/login.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { GetUser } from './get-user.decorator';
+import { User } from '../user/entities/user.entity';
+import { CryptoUtil } from '../common/crypto.util';
 
 @ApiTags('Authentication')
 @Controller('auth')
 
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() loginDto: LoginDto,
+  ): Promise<{ access_token: string; user: any }> {
+    try {
+      const result = await this.authService.login(loginDto.email, loginDto.password);
+      
+      if (!result) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Login failed: ' + errorMessage);
+    }
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@GetUser('id') userId: number): Promise<any> {
+    try {
+      const user = await this.authService.validateUserById(userId);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      return user; // Already formatted by validateUserById
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to get profile: ' + errorMessage);
+    }
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout(): Promise<{ message: string }> {
+    // In a stateless JWT setup, logout is mainly client-side
+    // but we can add token blacklisting here if needed
+    return { message: 'Logged out successfully' };
+  }
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
