@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from "react";
+import { getConfessions } from "@/app/lib/api/confessions";
+import type { NormalizedConfession } from "@/app/lib/utils/normalizeConfession";
 
-interface Props { userId: string; }
+interface Props {
+  userId: string;
+}
 
 const ConfessionHistory = ({ userId }: Props) => {
-  const [confessions, setConfessions] = useState<any[]>([]);
+  const [confessions, setConfessions] = useState<NormalizedConfession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Replace with real API call later
     const fetchHistory = async () => {
       setLoading(true);
-      const res = await fetch(`/api/confessions?userId=${userId}`);
-      const data = await res.json();
-      setConfessions(data);
+      const result = await getConfessions({ page: 1, limit: 20, userId });
+      if (result.ok) {
+        setConfessions(result.data.confessions);
+      }
       setLoading(false);
     };
     fetchHistory();

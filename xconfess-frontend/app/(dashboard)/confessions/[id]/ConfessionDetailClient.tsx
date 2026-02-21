@@ -13,6 +13,7 @@ import { CommentSection } from "@/app/components/confession/CommentSection";
 import { RelatedConfessions } from "@/app/components/confession/RelatedConfessions";
 import { formatDate } from "@/app/lib/utils/formatDate";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { getConfessionById } from "@/app/lib/api/confessions";
 
 interface ConfessionDetailClientProps {
   initialConfession: {
@@ -43,24 +44,20 @@ export function ConfessionDetailClient({
 
   const refetch = async () => {
     setRefetching(true);
-    try {
-      const res = await fetch(`/api/confessions/${confessionId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setConfession({
-          id: data.id,
-          content: data.content ?? data.message,
-          createdAt: data.createdAt ?? data.created_at,
-          viewCount: data.viewCount ?? data.view_count ?? 0,
-          reactions: data.reactions ?? { like: 0, love: 0 },
-          commentCount: data.commentCount,
-          isAnchored: data.isAnchored,
-          stellarTxHash: data.stellarTxHash,
-        });
-      }
-    } finally {
-      setRefetching(false);
+    const result = await getConfessionById(confessionId);
+    if (result.ok && result.data) {
+      setConfession({
+        id: result.data.id,
+        content: result.data.content,
+        createdAt: result.data.createdAt,
+        viewCount: result.data.viewCount,
+        reactions: result.data.reactions ?? { like: 0, love: 0 },
+        commentCount: result.data.commentCount,
+        isAnchored: result.data.isAnchored,
+        stellarTxHash: result.data.stellarTxHash,
+      });
     }
+    setRefetching(false);
   };
 
   const dateLabel = formatDate(new Date(confession.createdAt));
