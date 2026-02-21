@@ -1,12 +1,13 @@
 import { normalizeApiError, type ApiError } from "./errors";
+import type { ReactionType, ReactionCounts } from "../types/reaction";
 
 const API_BASE = "";
 
-export type ReactionType = "like" | "love";
+export type { ReactionType } from "../types/reaction";
 
 export interface AddReactionResult {
   success: boolean;
-  reactions?: { like: number; love: number };
+  reactions?: ReactionCounts;
 }
 
 export type AddReactionResponse =
