@@ -4,13 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ConfessionCard } from "./ConfessionCard";
 import { SkeletonCard } from "./LoadingSkeleton";
 import type { NormalizedConfession } from "../../lib/utils/normalizeConfession";
-
-interface FetchResponse {
-  confessions: NormalizedConfession[];
-  hasMore: boolean;
-  total?: number;
-  page?: number;
-}
+import { getConfessions } from "../../lib/api/confessions";
+import ErrorState from "../common/ErrorState";
 
 export const ConfessionFeed = () => {
   const [confessions, setConfessions] = useState<NormalizedConfession[]>([]);
@@ -23,51 +18,37 @@ export const ConfessionFeed = () => {
   const observerTarget = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Fetch confessions
   const fetchConfessions = useCallback(async (pageNum: number) => {
-    // Cancel previous request if still pending
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-
     abortControllerRef.current = new AbortController();
 
-    try {
-      setIsLoading(true);
-      setError(null);
+    setIsLoading(true);
+    setError(null);
 
-      const response = await fetch(
-        `/api/confessions?page=${pageNum}&limit=10`,
-        {
-          signal: abortControllerRef.current.signal,
-        },
-      );
+    const result = await getConfessions(
+      { page: pageNum, limit: 10 },
+      abortControllerRef.current.signal
+    );
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch confessions: ${response.statusText}`);
-      }
-
-      const data: FetchResponse = await response.json();
-
-      if (pageNum === 1) {
-        setConfessions(data.confessions);
-        setIsEmpty(data.confessions.length === 0);
-      } else {
-        setConfessions((prev) => [...prev, ...data.confessions]);
-      }
-
-      setHasMore(data.hasMore);
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        // Ignore abort errors
-        return;
-      }
-      setError(
-        err instanceof Error ? err.message : "Failed to load confessions",
-      );
-    } finally {
+    if (result.ok === false) {
+      // Do not touch isLoading on cancel—the new in-flight request owns it
+      if (result.error.message === "Request was cancelled.") return;
+      setError(result.error.message);
       setIsLoading(false);
+      return;
     }
+
+    const { confessions: list, hasMore: more } = result.data;
+    if (pageNum === 1) {
+      setConfessions(list);
+      setIsEmpty(list.length === 0);
+    } else {
+      setConfessions((prev: NormalizedConfession[]) => [...prev, ...list]);
+    }
+    setHasMore(more);
+    setIsLoading(false);
   }, []);
 
   // Initial fetch on mount
@@ -87,7 +68,7 @@ export const ConfessionFeed = () => {
       (entries) => {
         const [entry] = entries;
         if (entry.isIntersecting && hasMore && !isLoading && !error) {
-          setPage((prev) => prev + 1);
+          setPage((prev: number) => prev + 1);
         }
       },
       {
@@ -166,7 +147,7 @@ export const ConfessionFeed = () => {
       {/* Confessions Grid */}
       {!isEmpty && (
         <div className="space-y-4">
-          {confessions.map((confession) => (
+          {confessions.map((confession: NormalizedConfession) => (
             <ConfessionCard
               key={confession.id}
               confession={confession}
