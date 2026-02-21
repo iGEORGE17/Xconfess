@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '../api/authService';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY } from '../api/constants';
 import {
   AuthContextValue,
   AuthState,
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Check if user is authenticated by validating token with backend
    */
   const checkAuth = async (): Promise<void> => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
     if (!token) {
       setState({
@@ -62,8 +63,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
     } catch (error) {
       // Token is invalid or expired
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(USER_DATA_KEY);
       setState({
         user: null,
         isAuthenticated: false,
@@ -91,8 +92,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await authApi.login(credentials);
       
       // Store token and user data
-      localStorage.setItem('access_token', response.access_token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      localStorage.setItem(AUTH_TOKEN_KEY, response.access_token);
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(response.user));
 
       setState({
         user: response.user,

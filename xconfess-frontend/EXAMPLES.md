@@ -212,7 +212,8 @@ export function LoginForm() {
     async () => {
       const response = await apiClient.post('/api/auth/login', formData);
       const { token } = response.data;
-      localStorage.setItem('access_token', token);
+      // AUTH_TOKEN_KEY from '@/app/lib/api/constants'
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
       return response.data;
     },
     {

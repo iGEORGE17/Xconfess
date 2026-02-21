@@ -66,7 +66,7 @@ export class MessagesService {
     });
     const anonIds = userAnons.map((ua) => ua.anonymousUserId);
 
-    const isAuthor = anonIds.includes(confession.anonymousUser.id);
+    const isAuthor = confession.anonymousUser?.id && anonIds.includes(confession.anonymousUser.id);
     const isSender = anonIds.includes(senderId);
 
     if (!isAuthor && !isSender) {
@@ -138,7 +138,8 @@ export class MessagesService {
       where: { userId: user.id },
     });
     const anonIds = userAnons.map((ua) => ua.anonymousUserId);
-    if (!anonIds.includes(message.confession.anonymousUser.id)) {
+    const confessionAuthorId = message.confession?.anonymousUser?.id;
+    if (!confessionAuthorId || !anonIds.includes(confessionAuthorId)) {
       throw new ForbiddenException('You are not the author of this confession');
     }
 
