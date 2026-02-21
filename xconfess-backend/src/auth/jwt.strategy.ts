@@ -18,6 +18,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: any) {
     // Fetch the user from the database to get role
     const user = await this.userService.findById(payload.sub);
-    return { userId: payload.sub, username: payload.username, role: user?.role || UserRole.USER };
+    return { id: payload.sub, username: payload.username, role: user?.role || UserRole.USER };
   }
 }
