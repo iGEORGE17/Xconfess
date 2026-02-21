@@ -10,11 +10,8 @@ import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { CryptoUtil } from '../common/crypto.util';
-
-interface JwtPayload {
-  email: string;
-  sub: string;
-}
+import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { UserRole } from '../user/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -57,7 +54,9 @@ export class AuthService {
     const anonymousUser = await this.anonymousUserService.getOrCreateForUserSession(user.id);
     const payload: JwtPayload = {
       email: user.email,
-      sub: user.id.toString(),
+      sub: user.id, // Keep as number for consistency
+      username: user.username,
+      role: user.role || UserRole.USER,
     };
     return {
       access_token: this.jwtService.sign(payload),
