@@ -37,6 +37,11 @@ export class AnonymousConfession {
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 
+  /**
+   * Owner relation - use anonymousUser, NOT user.
+   * The confession entity defines owner relation as anonymousUser.
+   * Always use confession.anonymousUser for ownership checks and relation loading.
+   */
   @ManyToOne(
     () => AnonymousUser,
     (anonymousUser) => anonymousUser.confessions,

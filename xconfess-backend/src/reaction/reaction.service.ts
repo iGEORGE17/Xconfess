@@ -22,6 +22,7 @@ export class ReactionService {
   async createReaction(dto: CreateReactionDto): Promise<Reaction> {
     const confession = await this.confessionRepo.findOne({
       where: { id: dto.confessionId },
+      relations: ['anonymousUser'],
     });
 
     if (!confession) {
