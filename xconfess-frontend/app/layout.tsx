@@ -1,4 +1,4 @@
-import React from "react"
+import React from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "./lib/providers/ThemeProvider";
@@ -24,7 +24,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "xConfess - Anonymous Confessions on Stellar",
   description: "Share your thoughts anonymously with blockchain verification",
-    generator: 'v0.app'
+  generator: "v0.app",
 };
 
 export default function RootLayout({
@@ -34,7 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <ErrorBoundary>
           <AuthProvider>
             <QueryProvider>

@@ -8,7 +8,7 @@ export class Message {
   id: number;
 
   @ManyToOne(() => AnonymousUser, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'senderId' })
+ @JoinColumn({ name: 'senderId' })
   sender: AnonymousUser;
 
   @ManyToOne(() => AnonymousConfession, { nullable: false, onDelete: 'CASCADE' })

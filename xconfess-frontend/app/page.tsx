@@ -6,7 +6,10 @@ import { ConfessionFeed } from "./components/confession/ConfessionFeed";
 import { ErrorBoundary } from "./components/confession/ErrorBoundary";
 
 const EnhancedConfessionForm = dynamic(
-  () => import("./components/confession/EnhancedConfessionForm").then(mod => ({ default: mod.EnhancedConfessionForm })),
+  () =>
+    import("./components/confession/EnhancedConfessionForm").then((mod) => ({
+      default: mod.EnhancedConfessionForm,
+    })),
   {
     loading: () => (
       <div className="animate-pulse bg-zinc-900 rounded-xl p-6 h-48">
@@ -16,7 +19,7 @@ const EnhancedConfessionForm = dynamic(
       </div>
     ),
     ssr: false,
-  }
+  },
 );
 import Header from "./components/layout/Header";
 
@@ -35,9 +38,7 @@ export default function Home() {
           </p>
         </div>
 
-        <button className="create-confession-button">
-          Post Confession
-        </button>
+        <button className="create-confession-button">Post Confession</button>
 
         <div className="reaction-buttons flex gap-4">
           <button>👍 Like</button>
@@ -63,9 +64,7 @@ export default function Home() {
           </div>
         </ErrorBoundary>
 
-        <button className="wallet-connect">
-          Connect Wallet
-        </button>
+        <button className="wallet-connect">Connect Wallet</button>
       </main>
     </>
   );

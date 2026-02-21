@@ -23,7 +23,7 @@ import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { CryptoUtil } from '../common/crypto.util';
 
 // Add decrypted email to the response type for API output
-export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: string };
+export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: number };
 
 @Controller('users')
 export class UserController {
@@ -32,111 +32,48 @@ export class UserController {
     private readonly authService: AuthService,
   ) {}
 
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto): Promise<UserResponse> {
-    try {
-      // Check if user with this email already exists
-      const existingUser = await this.userService.findByEmail(
-        registerDto.email,
-      );
-      if (existingUser) {
-        throw new ConflictException('User with this email already exists');
-      }
-
-      // Create the new user
-      const user = await this.userService.create(
-        registerDto.email,
-        registerDto.password,
-        registerDto.username,
-      );
-      // Decrypt email for response
-      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
-      const email = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
-      return { ...result, email };
-    } catch (error) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      // Handle generic errors
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new BadRequestException('Failed to register user: ' + errorMessage);
-    }
-  }
-
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async login(
-    @Body() loginDto: LoginDto,
-  ): Promise<{ access_token: string; user: UserResponse }> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-      return await this.authService.login(loginDto.email, loginDto.password);
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      // Handle generic errors
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new BadRequestException('Failed to login: ' + errorMessage);
-    }
+  // Helper method to keep DRY (Don't Repeat Yourself)
+  private formatUserResponse(user: User): UserResponse {
+    const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+    const email = CryptoUtil.decrypt(emailEncrypted, emailIv, emailTag);
+    return { ...result, email } as unknown as UserResponse;
   }
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@GetUser() user: User): Promise<UserResponse> {
+  async getProfile(@GetUser('id') userId: number): Promise<UserResponse> {
     try {
-      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
-      const email = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
-      return { ...result, email };
+      const user = await this.userService.findById(userId); // Use canonical ID
+      if (!user) throw new UnauthorizedException();
+      return this.formatUserResponse(user);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new BadRequestException('Failed to get profile: ' + errorMessage);
+          const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Failed to get profile: ' + message);
     }
   }
 
   @Post('deactivate')
   @UseGuards(JwtAuthGuard)
-  async deactivateAccount(@GetUser() user: User): Promise<UserResponse> {
-    try {
-      const updatedUser = await this.userService.deactivateAccount(user.id);
-      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
-      const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
-      return { ...result, email };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new BadRequestException('Failed to deactivate account: ' + errorMessage);
-    }
+  async deactivateAccount(@GetUser('id') userId: number): Promise<UserResponse> {
+    const updatedUser = await this.userService.deactivateAccount(userId);
+    return this.formatUserResponse(updatedUser);
   }
 
   @Post('reactivate')
   @UseGuards(JwtAuthGuard)
-  async reactivateAccount(@GetUser() user: User): Promise<UserResponse> {
-    try {
-      const updatedUser = await this.userService.reactivateAccount(user.id);
-      const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
-      const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
-      return { ...result, email };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      throw new BadRequestException('Failed to reactivate account: ' + errorMessage);
-    }
+  async reactivateAccount(@GetUser('id') userId: number): Promise<UserResponse> {
+    const updatedUser = await this.userService.reactivateAccount(userId);
+    return this.formatUserResponse(updatedUser);
   }
 
   @UseGuards(JwtAuthGuard)
   @Put('profile')
   async updateProfile(
-    @Request() req,
+    @GetUser('id') userId: number, // Replaced @Request() req
     @Body() updateUserProfileDto: UpdateUserProfileDto,
-  ) {
-    const updatedUser = await this.userService.updateProfile(req.user.id, updateUserProfileDto);
-    const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = updatedUser;
-    const email = CryptoUtil.decrypt(updatedUser.emailEncrypted, updatedUser.emailIv, updatedUser.emailTag);
-    return { ...result, email };
+  ): Promise<UserResponse> {
+    const updatedUser = await this.userService.updateProfile(userId, updateUserProfileDto);
+    return this.formatUserResponse(updatedUser);
   }
 
 }
