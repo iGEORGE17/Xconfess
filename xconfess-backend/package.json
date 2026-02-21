@@ -34,12 +34,9 @@
     "@nestjs/swagger": "^11.2.5",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.12",
-<<<<<<< HEAD
     "@stellar/stellar-sdk": "^14.5.0",
-=======
     "@playwright/test": "^1.58.0",
     "@types/helmet": "^0.0.48",
->>>>>>> 96db4d17561a00d6b3208ec9d67ce526b91d95a6
     "@types/nodemailer": "^6.4.17",
     "ansi-styles": "^6.2.3",
     "bcrypt": "^5.1.1",

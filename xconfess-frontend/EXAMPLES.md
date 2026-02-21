@@ -212,7 +212,7 @@ export function LoginForm() {
     async () => {
       const response = await apiClient.post('/api/auth/login', formData);
       const { token } = response.data;
-      localStorage.setItem('accessToken', token);
+      localStorage.setItem('access_token', token);
       return response.data;
     },
     {
