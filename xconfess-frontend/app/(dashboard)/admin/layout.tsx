@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY } from '@/app/lib/api/constants';
 
 function isMockAdminEnabled(): boolean {
   if (process.env.NEXT_PUBLIC_ADMIN_MOCK === 'true') return true;
@@ -37,9 +38,9 @@ export default function AdminLayout({
     const mockEnabled = isMockAdminEnabled();
 
     // In mock mode, auto-seed a demo admin user for convenience
-    if (mockEnabled && !localStorage.getItem('user')) {
+    if (mockEnabled && !localStorage.getItem(USER_DATA_KEY)) {
       localStorage.setItem(
-        'user',
+        USER_DATA_KEY,
         JSON.stringify({
           id: 1,
           username: 'demo-admin',
@@ -47,12 +48,12 @@ export default function AdminLayout({
           is_active: true,
         }),
       );
-      localStorage.setItem('access_token', 'mock');
+      localStorage.setItem(AUTH_TOKEN_KEY, 'mock');
       return;
     }
 
     // Check if user is admin
-    const userStr = localStorage.getItem('user');
+    const userStr = localStorage.getItem(USER_DATA_KEY);
     if (!userStr) {
       router.replace('/login');
       return;
@@ -71,7 +72,7 @@ export default function AdminLayout({
   useEffect(() => {
     // Real-time notifications for new reports (admins only)
     if (isMockAdminEnabled()) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
     if (!token) return;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL;

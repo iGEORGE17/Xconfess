@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { logError, getErrorMessage } from '@/app/lib/utils/errorHandler';
+import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from './constants';
 
 const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -10,7 +11,7 @@ const apiClient = axios.create({
 // Request interceptor for adding auth token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -45,9 +46,10 @@ apiClient.interceptors.response.use(
 
     // Handle 401 Unauthorized — no retry, redirect to login
     if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refreshToken');
-
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      
+      // Redirect to login
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }

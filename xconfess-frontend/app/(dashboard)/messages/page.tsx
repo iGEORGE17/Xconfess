@@ -94,8 +94,6 @@ export default function MessagesPage() {
             reply: newMessage.trim(),
           });
         } else {
-          // If all replied, we can't send a new message as author in this simplified model
-          // unless backend allows author-initiated messages.
           alert("Please wait for the sender to message you again.");
           return;
         }
@@ -216,7 +214,6 @@ export default function MessagesPage() {
                   <div className="space-y-6 pb-4">
                     {messages.map((msg) => (
                       <div key={msg.id} className="space-y-2">
-                        {/* Initial Message (from sender to author) */}
                         <div className={`flex ${selectedThread.isAuthor ? 'justify-start' : 'justify-end'}`}>
                           <Card className={`max-w-[80%] p-3 ${
                             selectedThread.isAuthor 
@@ -237,7 +234,6 @@ export default function MessagesPage() {
                           </Card>
                         </div>
                         
-                        {/* Reply (from author to sender) */}
                         {msg.hasReply && (
                           <div className={`flex ${selectedThread.isAuthor ? 'justify-end' : 'justify-start'}`}>
                             <Card className={`max-w-[80%] p-3 ${
