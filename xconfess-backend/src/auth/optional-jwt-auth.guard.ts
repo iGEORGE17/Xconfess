@@ -12,7 +12,7 @@ export class OptionalJwtAuthGuard extends AuthGuard('jwt') {
     // If a token was present but invalid, let the error bubble up.
     if (err) return super.handleRequest(err, user, info, context, status);
     // If there's no user (no token), just proceed as anonymous.
-    return user ?? null;
+    return user || null;
   }
 }
 
