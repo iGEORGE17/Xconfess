@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CommentItem } from "./CommentItem";
 import { Button } from "@/app/components/ui/button";
 import { type Comment } from "@/app/lib/types/confession";
+import { AUTH_TOKEN_KEY } from "@/app/lib/api/constants";
 
 const COMMENTS_PAGE_SIZE = 10;
 
@@ -105,7 +106,7 @@ export function CommentSection({
     setSubmitError(null);
     const token =
       typeof localStorage !== "undefined"
-        ? localStorage.getItem("accessToken")
+        ? localStorage.getItem(AUTH_TOKEN_KEY)
         : null;
 
     try {

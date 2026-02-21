@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Save, Bell, Mail } from "lucide-react";
 import { NotificationPreferences as Preferences } from "@/app/types/notifications";
+import { AUTH_TOKEN_KEY } from "@/app/lib/api/constants";
 
 interface NotificationPreferencesProps {
   onClose: () => void;
@@ -39,7 +40,7 @@ export function NotificationPreferences({
     try {
       const response = await fetch(`/api/notifications/preferences`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
         },
       });
 
@@ -63,7 +64,7 @@ export function NotificationPreferences({
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
         },
         body: JSON.stringify(preferences),
       });

@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import React, { useState, useEffect } from 'react';
 import { MetricsCard } from '@/app/components/analytics/MetricsCard';
 import { TimePeriodSelector } from '@/app/components/analytics/TimePeriodSelector';
+import { AUTH_TOKEN_KEY } from '@/app/lib/api/constants';
 import {
     MessageSquare,
     Users,
@@ -72,7 +73,7 @@ export default function AnalyticsPage() {
                 setLoading(true);
                 setError(null);
 
-                const token = localStorage.getItem('accessToken');
+                const token = localStorage.getItem(AUTH_TOKEN_KEY);
                 const response = await fetch(`/api/analytics?period=${period}`, {
                     headers: token ? { 'Authorization': `Bearer ${token}` } : {}
                 });
