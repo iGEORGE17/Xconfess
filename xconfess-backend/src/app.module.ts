@@ -18,6 +18,7 @@ import { ReportModule } from './report/report.module';
 import { DataExportService } from './data-export/data-export.service';
 import { DataExportModule } from './data-export/data-export.module';
 import { StellarModule } from './stellar/stellar.module';
+import { CacheModule } from './cache/cache.module';
 import { TippingModule } from './tipping/tipping.module';
 import { LoggerModule } from './logger/logger.module';
 import { EncryptionModule } from './encryption/encryption.module';
@@ -60,6 +61,7 @@ import { EncryptionModule } from './encryption/encryption.module';
     TippingModule,
     LoggerModule,
     EncryptionModule,
+    CacheModule,
   ],
   controllers: [AppController],
   providers: [
