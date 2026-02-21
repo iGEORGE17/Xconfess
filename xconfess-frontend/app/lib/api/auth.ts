@@ -9,6 +9,11 @@
  * - Attached to API requests via the Authorization header
  * - No login required for anonymous confession posting or reactions
  *
+ * Security note: JWT is stored in localStorage which is accessible to
+ * JavaScript. Ensure a strict Content Security Policy (CSP) is in place
+ * and that no user-controlled HTML is rendered unsanitized. A future
+ * improvement would be to use HttpOnly cookies set by the NestJS backend.
+ *
  * Environment variable required:
  *   NEXT_PUBLIC_API_URL=http://localhost:5000
  */
@@ -22,10 +27,10 @@ const TOKEN_KEY = "xconfess_token";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface AuthTokenPayload {
-  sub: string; // user ID
+  sub: string;       // user ID
   email?: string;
-  iat: number; // issued at (unix timestamp)
-  exp: number; // expiry (unix timestamp)
+  iat: number;       // issued at (unix timestamp)
+  exp: number;       // expiry (unix timestamp)
 }
 
 export interface LoginCredentials {
@@ -67,6 +72,7 @@ export function removeToken(): void {
 
 /**
  * Decodes the JWT payload without verifying the signature.
+ * Handles base64url encoding (replaces - with +, _ with /) before decoding.
  * Signature verification is handled by the backend on every request.
  * Returns null if the token is missing or malformed.
  */
@@ -74,7 +80,14 @@ export function decodeToken(token: string): AuthTokenPayload | null {
   try {
     const base64Payload = token.split(".")[1];
     if (!base64Payload) return null;
-    const decoded = atob(base64Payload);
+
+    // Convert base64url → standard base64 before decoding
+    const base64 = base64Payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(base64Payload.length / 4) * 4, "=");
+
+    const decoded = atob(base64);
     return JSON.parse(decoded) as AuthTokenPayload;
   } catch {
     return null;
@@ -97,11 +110,13 @@ export function isAuthenticated(): boolean {
 
 /**
  * Returns the decoded payload of the current stored token,
- * or null if the user is not authenticated.
+ * or null if the user is not authenticated or token is expired.
  */
 export function getCurrentUser(): AuthTokenPayload | null {
   const token = getToken();
   if (!token) return null;
+  // Check expiry before returning — expired tokens return null
+  if (!isAuthenticated()) return null;
   return decodeToken(token);
 }
 
@@ -112,9 +127,7 @@ export function getCurrentUser(): AuthTokenPayload | null {
  * On success, saves the token and returns the decoded payload.
  * Throws an error with the server message on failure.
  */
-export async function login(
-  credentials: LoginCredentials,
-): Promise<AuthTokenPayload> {
+export async function login(credentials: LoginCredentials): Promise<AuthTokenPayload> {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -122,9 +135,7 @@ export async function login(
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ message: "Login failed" }));
+    const error = await response.json().catch(() => ({ message: "Login failed" }));
     throw new Error(error.message ?? "Login failed");
   }
 
@@ -150,6 +161,11 @@ export function logout(): void {
  * A thin wrapper around fetch that automatically attaches the JWT token
  * to the Authorization header if the user is authenticated.
  *
+ * Uses new Headers() to properly handle all HeadersInit types including
+ * Headers instances, string[][], and plain objects. Callers can override
+ * Content-Type (e.g. for FormData/multipart requests) by setting it
+ * explicitly in options.headers.
+ *
  * Usage:
  *   const data = await authFetch("/confessions", { method: "GET" });
  */
@@ -159,11 +175,18 @@ export async function authFetch(
 ): Promise<Response> {
   const token = getToken();
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(options.headers ?? {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  // Use new Headers() to correctly merge all HeadersInit types
+  const headers = new Headers(options.headers);
+
+  // Only set Content-Type if the caller hasn't already set one
+  // (allows FormData/multipart requests to work correctly)
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
   return fetch(`${API_URL}${path}`, { ...options, headers });
 }
