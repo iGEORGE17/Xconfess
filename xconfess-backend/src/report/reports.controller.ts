@@ -17,11 +17,11 @@ export class ReportsController {
   @Post(':id/report')
   @UseGuards(OptionalJwtAuthGuard) // 🛡️ Allows both Guest and Auth users
   async reportConfession(
-    @Param('id') id: string, // ✅ Standardized UUID
+    @Param('id') confessionId: string, // ✅ UUID validation (will add pipe separately)
     @GetUser('id') reporterId: number | null, // ✅ Standardized Canonical ID
     @Body() dto: CreateReportDto,
   ) {
-    // If user is not logged in, reporterId will be null via the OptionalGuard logic
-    return this.reportsService.createReport(id, reporterId, dto);
+    // If user is not logged in, reporterId will be null via OptionalGuard logic
+    return this.reportsService.createReport(confessionId, reporterId, dto);
   }
 }
