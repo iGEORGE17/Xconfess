@@ -9,7 +9,7 @@
 
 **A privacy-first anonymous confession platform leveraging Stellar blockchain for immutability, transparency, and trustless verification.**
 
-[🚀 Live Demo](#) • [📖 Documentation](#) • [💬 Community](https://t.me/xconfess_Community) • [🐛 Report Bug](https://github.com/Godsmiracle001/Xconfess/issues)
+[💬 Community](https://t.me/xconfess_Community) • [🐛 Report Bug](https://github.com/Godsmiracle001/Xconfess/issues)
 
 </div>
 
@@ -46,16 +46,16 @@ xConfess uses **custom JWT authentication** — NextAuth is not used in this pro
 
 All auth logic lives in `xconfess-frontend/app/lib/api/auth.ts`:
 
-| Function                   | Description                                      |
-| -------------------------- | ------------------------------------------------ |
-| `login(credentials)`       | Authenticates with backend, saves token          |
-| `logout()`                 | Removes stored token                             |
-| `isAuthenticated()`        | Returns true if a valid non-expired token exists |
-| `getCurrentUser()`         | Returns decoded JWT payload or null              |
-| `authFetch(path, options)` | Fetch wrapper that auto-attaches the token       |
-| `getToken()`               | Returns raw JWT string from storage              |
-| `saveToken(token)`         | Saves JWT to localStorage                        |
-| `removeToken()`            | Clears token from localStorage                   |
+| Function | Description |
+|---|---|
+| `login(credentials)` | Authenticates with backend, saves token |
+| `logout()` | Removes stored token |
+| `isAuthenticated()` | Returns true if a valid non-expired token exists |
+| `getCurrentUser()` | Returns decoded JWT payload or null (null if expired) |
+| `authFetch(path, options)` | Fetch wrapper that auto-attaches the token |
+| `getToken()` | Returns raw JWT string from storage |
+| `saveToken(token)` | Saves JWT to localStorage |
+| `removeToken()` | Clears token from localStorage |
 
 ### Usage example
 
@@ -81,9 +81,9 @@ logout();
 NEXT_PUBLIC_API_URL=http://localhost:5000
 ```
 
-### Note on /api/auth/\* route
+### Note on /api/auth/* route
 
-The file `app/api/auth/[...nextauth]/route.ts` exists but returns a `404` with an explanatory message. It is **not** a NextAuth handler. If NextAuth is adopted in future, replace its contents with the standard NextAuth handler.
+The file `app/api/auth/[...nextauth]/route.ts` exists but returns a `501 Not Implemented` response. It is **not** a NextAuth handler. If NextAuth is adopted in the future, replace its contents with the standard NextAuth handler.
 
 ---
 
@@ -115,7 +115,7 @@ Built for the **Stellar ecosystem** with first-class **Soroban** support:
 
 ### 📦 Smart Contract Architecture
 
-```
+```text
 contracts/soroban-xconfess/
 ├── confession-anchor/     # Anchoring confession hashes
 ├── reputation-badges/     # NFT badge minting & management
@@ -123,7 +123,6 @@ contracts/soroban-xconfess/
 ```
 
 **Deployed Contracts** (Stellar Testnet):
-
 - Confession Anchor: `Coming Soon`
 - Reputation Badges: `Coming Soon`
 - Tipping System: `Coming Soon`
@@ -133,21 +132,18 @@ contracts/soroban-xconfess/
 ## 🛠️ Tech Stack
 
 ### Backend
-
 - **NestJS**: Robust, scalable Node.js framework
 - **PostgreSQL**: Reliable relational database
 - **WebSockets**: Real-time communication
 - **JWT**: Secure session management
 
 ### Frontend
-
-- **Next.js 14**: React framework with App Router
+- **Next.js 16**: React framework with App Router
 - **TailwindCSS**: Utility-first styling
 - **Stellar SDK**: Blockchain interactions
 - **Freighter Integration**: Wallet connectivity
 
 ### Blockchain
-
 - **Soroban**: Stellar smart contract platform
 - **Rust**: Smart contract development language
 - **Stellar SDK**: JavaScript/TypeScript integration
@@ -168,21 +164,18 @@ contracts/soroban-xconfess/
 ### Quick Start
 
 1. **Clone the repository**
-
    ```bash
    git clone https://github.com/Godsmiracle001/xconfess.git
    cd xconfess
    ```
 
 2. **Install backend dependencies**
-
    ```bash
    cd xconfess-backend
    npm install
    ```
 
 3. **Install frontend dependencies**
-
    ```bash
    cd ../xconfess-frontend
    npm install
@@ -191,7 +184,6 @@ contracts/soroban-xconfess/
 4. **Set up environment variables**
 
    **Backend (.env)**
-
    ```env
    DATABASE_URL=postgresql://username:password@localhost:5432/xconfess
    JWT_SECRET=your-super-secret-jwt-key
@@ -202,7 +194,6 @@ contracts/soroban-xconfess/
    ```
 
    **Frontend (.env.local)**
-
    ```env
    NEXT_PUBLIC_API_URL=http://localhost:5000
    NEXT_PUBLIC_STELLAR_NETWORK=testnet
@@ -210,20 +201,17 @@ contracts/soroban-xconfess/
    ```
 
 5. **Set up the database**
-
    ```bash
    cd xconfess-backend
    npm run migration:run
    ```
 
 6. **Start the backend**
-
    ```bash
    npm run start:dev
    ```
 
 7. **Start the frontend**
-
    ```bash
    cd xconfess-frontend
    npm run dev
@@ -260,7 +248,6 @@ We welcome contributions from the community! xConfess is participating in the **
 ## 🗺️ Roadmap
 
 ### ✅ Phase 1: Core Platform (Current)
-
 - [x] Anonymous confession posting
 - [x] Emoji reactions
 - [x] Real-time updates
@@ -268,7 +255,6 @@ We welcome contributions from the community! xConfess is participating in the **
 - [ ] Complete backend API
 
 ### 🚧 Phase 2: Stellar Integration (In Progress)
-
 - [ ] Soroban smart contract development
 - [ ] Confession anchoring on Stellar
 - [ ] Freighter wallet integration
@@ -276,14 +262,12 @@ We welcome contributions from the community! xConfess is participating in the **
 - [ ] Deploy to Stellar Testnet
 
 ### 🔮 Phase 3: Advanced Features (Q2 2026)
-
 - [ ] NFT badge system
 - [ ] Anonymous messaging (E2E encrypted)
 - [ ] Reputation scoring
 - [ ] Content moderation tools
 
 ### 🌟 Phase 4: Mainnet & Scale (Q3 2026)
-
 - [ ] Deploy to Stellar Mainnet
 - [ ] Advanced analytics dashboard
 - [ ] Community governance
@@ -301,6 +285,6 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for d
 
 **Built with ❤️ for the Stellar ecosystem**
 
-[Website](#) • [Documentation](#) • [Community](https://t.me/xconfess_Community) • [Contribute](CONTRIBUTING.md)
+[Community](https://t.me/xconfess_Community) • [Contribute](CONTRIBUTING.md)
 
 </div>
