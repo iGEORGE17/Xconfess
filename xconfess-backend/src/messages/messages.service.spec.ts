@@ -117,6 +117,58 @@ describe('MessagesService', () => {
     });
   });
 
+  describe('reply', () => {
+    it('should allow reply when user is confession author', async () => {
+      const message = {
+        id: 1,
+        hasReply: false,
+        confession: { id: 'c1', anonymousUser: { id: mockAnonId } },
+      } as any;
+      jest.spyOn(messageRepo, 'findOne').mockResolvedValue(message);
+      jest.spyOn(userAnonRepo, 'find').mockResolvedValue([{ anonymousUserId: mockAnonId }] as any);
+      const mockSave = jest.fn().mockImplementation((m) => Promise.resolve({ ...m }));
+      const mockManager = { save: mockSave };
+      jest.spyOn(messageRepo.manager, 'transaction').mockImplementation(async (fn) => fn(mockManager) as any);
+
+      await service.reply({ message_id: 1, reply: 'Got it!' }, mockUser);
+      expect(message.hasReply).toBe(true);
+      expect(message.replyContent).toBe('Got it!');
+      expect(mockSave).toHaveBeenCalledWith(message);
+    });
+
+    it('should throw ForbiddenException when user is not confession author', async () => {
+      const message = {
+        id: 1,
+        hasReply: false,
+        confession: { id: 'c1', anonymousUser: { id: 'other-anon' } },
+      } as any;
+      jest.spyOn(messageRepo, 'findOne').mockResolvedValue(message);
+      jest.spyOn(userAnonRepo, 'find').mockResolvedValue([{ anonymousUserId: 'unrelated-anon' }] as any);
+
+      await expect(service.reply({ message_id: 1, reply: 'Reply' }, mockUser))
+        .rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw NotFoundException when message does not exist', async () => {
+      jest.spyOn(messageRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(service.reply({ message_id: 999, reply: 'Reply' }, mockUser))
+        .rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when already replied', async () => {
+      const message = {
+        id: 1,
+        hasReply: true,
+        confession: { id: 'c1', anonymousUser: { id: mockAnonId } },
+      } as any;
+      jest.spyOn(messageRepo, 'findOne').mockResolvedValue(message);
+
+      await expect(service.reply({ message_id: 1, reply: 'Reply' }, mockUser))
+        .rejects.toThrow(ForbiddenException);
+    });
+  });
+
   describe('findAllThreadsForUser', () => {
     it('should return grouped threads', async () => {
       jest.spyOn(userAnonRepo, 'find').mockResolvedValue([{ anonymousUserId: mockAnonId }] as any);
