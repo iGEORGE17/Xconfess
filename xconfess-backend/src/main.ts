@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filter';
-import * as compression from 'compression';
+import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,7 +18,7 @@ async function bootstrap() {
   }));
 
   app.setGlobalPrefix('api');
-  
+
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     transform: true,

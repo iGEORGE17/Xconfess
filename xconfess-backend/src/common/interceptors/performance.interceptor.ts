@@ -15,11 +15,11 @@ export class PerformanceInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         const duration = Date.now() - start;
-        
+
         if (duration > 200) {
           this.logger.warn(`SLOW: ${method} ${url} took ${duration}ms`);
         }
-        
+
         this.recordMetric(method, url, duration);
       }),
     );
@@ -27,10 +27,12 @@ export class PerformanceInterceptor implements NestInterceptor {
 
   private recordMetric(method: string, url: string, duration: number) {
     const key = `${method} ${url}`;
-    if (!this.metrics.has(key)) {
-      this.metrics.set(key, []);
+    let metrics = this.metrics.get(key);
+    if (!metrics) {
+      metrics = [];
+      this.metrics.set(key, metrics);
     }
-    this.metrics.get(key).push(duration);
+    metrics.push(duration);
   }
 
   getMetrics() {

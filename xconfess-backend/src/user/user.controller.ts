@@ -30,7 +30,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly authService: AuthService,
-  ) {}
+  ) { }
 
   // Helper method to keep DRY (Don't Repeat Yourself)
   private formatUserResponse(user: User): UserResponse {
@@ -47,7 +47,7 @@ export class UserController {
       if (!user) throw new UnauthorizedException();
       return this.formatUserResponse(user);
     } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException('Failed to get profile: ' + message);
     }
   }

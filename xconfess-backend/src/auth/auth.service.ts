@@ -5,7 +5,7 @@ import { UserService } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import { PasswordResetService } from './password-reset.service';
 import { AnonymousUserService } from '../user/anonymous-user.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';

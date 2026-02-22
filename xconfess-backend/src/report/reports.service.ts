@@ -50,7 +50,7 @@ export class ReportsService {
     @InjectRepository(AnonymousConfession)
     private readonly confessionRepository: Repository<AnonymousConfession>,
     private readonly auditLogService: AuditLogService,
-  ) {}
+  ) { }
 
   async createReport(
     confessionId: string,
@@ -112,7 +112,7 @@ export class ReportsService {
       // 4️⃣ Log report creation (non-blocking - no await)
       if (reporterId) {
         this.auditLogService.logReport(
-          savedReport.id.toString(),
+          savedReport.id,
           'confession',
           confessionId,
           reporterId.toString(),
@@ -132,10 +132,10 @@ export class ReportsService {
   }
 
   async resolveReport(
-    reportId: number,
+    reportId: string,
     admin: User,
-    options?: { 
-      reason?: string; 
+    options?: {
+      reason?: string;
       ipAddress?: string;
       userAgent?: string;
     },
@@ -145,7 +145,7 @@ export class ReportsService {
       where: { id: reportId },
       lock: { mode: 'pessimistic_write' },
     });
-    
+
     if (!report) {
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
@@ -159,13 +159,13 @@ export class ReportsService {
     }
 
     const previousStatus = report.status;
-    
+
     // Update report status
     report.status = ReportStatus.RESOLVED;
     report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason || 'Report resolved'; // Consistent default
-    
+    report.resolutionNotes = options?.reason || 'Report resolved'; // Consistent default
+
     const updatedReport = await this.reportRepository.save(report);
 
     // Log report resolution (truly non-blocking - no await)
@@ -187,15 +187,15 @@ export class ReportsService {
     });
 
     this.logger.log(`Report ${reportId} resolved by admin ${admin.id}`);
-    
+
     return updatedReport;
   }
 
   async dismissReport(
-    reportId: number,
+    reportId: string,
     admin: User,
-    options?: { 
-      reason?: string; 
+    options?: {
+      reason?: string;
       ipAddress?: string;
       userAgent?: string;
     },
@@ -205,7 +205,7 @@ export class ReportsService {
       where: { id: reportId },
       lock: { mode: 'pessimistic_write' },
     });
-    
+
     if (!report) {
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
@@ -219,13 +219,13 @@ export class ReportsService {
     }
 
     const previousStatus = report.status;
-    
+
     // Update report status
     report.status = ReportStatus.DISMISSED;
     report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason || 'Report dismissed'; // Consistent default
-    
+    report.resolutionNotes = options?.reason || 'Report dismissed'; // Consistent default
+
     const updatedReport = await this.reportRepository.save(report);
 
     // Log report dismissal (truly non-blocking - no await)
@@ -247,12 +247,12 @@ export class ReportsService {
     });
 
     this.logger.log(`Report ${reportId} dismissed by admin ${admin.id}`);
-    
+
     return updatedReport;
   }
 
-  async getReportAuditLogs(reportId: number): Promise<any> {
-    return this.auditLogService.findByEntity('report', reportId.toString());
+  async getReportAuditLogs(reportId: string): Promise<any> {
+    return this.auditLogService.findByEntity('report', reportId);
   }
 
   async findAll(options?: {
@@ -261,7 +261,7 @@ export class ReportsService {
     limit?: number;
   }): Promise<{ items: Report[]; total: number }> {
     const { status, page = 1, limit = 20 } = options || {};
-    
+
     const query = this.reportRepository.createQueryBuilder('report')
       .leftJoinAndSelect('report.resolvedBy', 'resolvedBy')
       .orderBy('report.createdAt', 'DESC');
@@ -278,7 +278,7 @@ export class ReportsService {
     return { items, total };
   }
 
-  async findOne(id: number): Promise<Report> {
+  async findOne(id: string): Promise<Report> {
     const report = await this.reportRepository.findOne({
       where: { id },
       relations: ['resolvedBy'],

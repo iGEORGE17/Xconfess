@@ -7,7 +7,7 @@ import { IStellarConfig, StellarNetwork } from './interfaces/stellar-config.inte
 export class StellarConfigService {
   private readonly logger = new Logger(StellarConfigService.name);
   private config: IStellarConfig;
-  private server: StellarSDK.Server;
+  private server: StellarSDK.Horizon.Server;
 
   constructor(private configService: ConfigService) {
     this.initializeConfig();
@@ -33,7 +33,7 @@ export class StellarConfigService {
         tippingSystem: this.configService.get('TIPPING_SYSTEM_CONTRACT_ID'),
       },
     };
-    this.server = new StellarSDK.Server(this.config.horizonUrl);
+    this.server = new StellarSDK.Horizon.Server(this.config.horizonUrl);
     this.logger.log(`Stellar configured for ${network}`);
     this.logger.log(`Horizon URL: ${this.config.horizonUrl}`);
   }
@@ -42,11 +42,11 @@ export class StellarConfigService {
     return { ...this.config };
   }
 
-  getServer(): StellarSDK.Server {
+  getServer(): StellarSDK.Horizon.Server {
     return this.server;
   }
 
-  getNetwork(): StellarSDK.Network {
+  getNetwork(): string {
     return this.config.network === StellarNetwork.MAINNET
       ? StellarSDK.Networks.PUBLIC
       : StellarSDK.Networks.TESTNET;
