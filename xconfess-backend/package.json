@@ -24,6 +24,7 @@
     "@nestjs-modules/ioredis": "^2.0.2",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/cache-manager": "^3.1.0",
+    "@nestjs/common": "^11.1.3",
     "@nestjs/core": "^11.0.1",
     "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/jwt": "^11.0.0",
@@ -35,11 +36,8 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.12",
     "@stellar/stellar-sdk": "^14.5.0",
-<<<<<<< Admin-Report-Listing-Endpoint
-=======
     "@playwright/test": "^1.58.0",
     "@types/helmet": "^0.0.48",
->>>>>>> main
     "@types/nodemailer": "^6.4.17",
     "ansi-styles": "^6.2.3",
     "bcrypt": "^5.1.1",
@@ -69,7 +67,6 @@
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
-    "@nestjs/common": "^11.1.3",
     "@nestjs/config": "^4.0.2",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.1.3",

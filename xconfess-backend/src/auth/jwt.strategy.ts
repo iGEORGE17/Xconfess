@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserService } from '../user/user.service';
 import { UserRole } from '../user/entities/user.entity';
+import { JwtPayload, RequestUser } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -15,9 +16,20 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: any) {
-    // Fetch the user from the database to get role
+  async validate(payload: JwtPayload): Promise<RequestUser> {
+    // Fetch the user from the database to get latest role and validate existence
     const user = await this.userService.findById(payload.sub);
-    return { userId: payload.sub, username: payload.username, role: user?.role || UserRole.USER };
+    
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Return canonical RequestUser shape
+    return {
+      id: payload.sub, // Canonical ID field
+      username: payload.username,
+      email: payload.email,
+      role: user?.role || UserRole.USER,
+    };
   }
 }

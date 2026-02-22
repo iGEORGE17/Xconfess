@@ -2,12 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '../api/authService';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY } from '../api/constants';
 import {
   AuthContextValue,
   AuthState,
   LoginCredentials,
   RegisterData,
 } from '../types/auth';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * Auth Context
@@ -26,6 +28,11 @@ interface AuthProviderProps {
  * Manages global authentication state and provides auth methods
  */
 export function AuthProvider({ children }: AuthProviderProps) {
+  const setStoreUser = useAuthStore((s) => s.setUser);
+  const setStoreLoading = useAuthStore((s) => s.setLoading);
+  const setStoreError = useAuthStore((s) => s.setError);
+  const storeLogout = useAuthStore((s) => s.logout);
+
   const [state, setState] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
@@ -40,9 +47,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Check if user is authenticated by validating token with backend
    */
   const checkAuth = async (): Promise<void> => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
     if (!token) {
+      setStoreUser(null);
       setState({
         user: null,
         isAuthenticated: false,
@@ -54,6 +62,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       const user = await authApi.getCurrentUser();
+      setStoreUser(user);
       setState({
         user,
         isAuthenticated: true,
@@ -62,8 +71,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
     } catch (error) {
       // Token is invalid or expired
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      setStoreUser(null);
+      setStoreError(error instanceof Error ? error.message : 'Authentication failed');
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(USER_DATA_KEY);
       setState({
         user: null,
         isAuthenticated: false,
@@ -91,8 +102,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await authApi.login(credentials);
       
       // Store token and user data
-      localStorage.setItem('access_token', response.access_token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      localStorage.setItem(AUTH_TOKEN_KEY, response.access_token);
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(response.user));
+      setStoreUser(response.user);
 
       setState({
         user: response.user,
@@ -139,6 +151,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = (): void => {
     authApi.logout();
+    storeLogout();
     setState({
       user: null,
       isAuthenticated: false,

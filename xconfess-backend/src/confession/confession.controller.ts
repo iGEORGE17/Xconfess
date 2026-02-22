@@ -1,24 +1,12 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  Req,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
-import { ConfessionService } from './confession.service';
-import { CreateConfessionDto } from './dto/create-confession.dto';
-import { UpdateConfessionDto } from './dto/update-confession.dto';
-import { GetConfessionsDto } from './dto/get-confessions.dto';
-import { SearchConfessionDto } from './dto/search-confession.dto';
-import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
-import { GetConfessionsByTagDto } from './dto/get-confessions-by-tag.dto';
-import { Request } from 'express';
+import { Controller, Post, UsePipes, ValidationPipe, Body, Get, Query, Param, Put, Delete, Req } from "@nestjs/common";
+import { Request } from "express";
+import { AnchorConfessionDto } from "src/stellar/dto/anchor-confession.dto";
+import { ConfessionService } from "./confession.service";
+import { CreateConfessionDto } from "./dto/create-confession.dto";
+import { GetConfessionsByTagDto } from "./dto/get-confessions-by-tag.dto";
+import { GetConfessionsDto } from "./dto/get-confessions.dto";
+import { SearchConfessionDto } from "./dto/search-confession.dto";
+import { UpdateConfessionDto } from "./dto/update-confession.dto";
 
 @Controller('confessions')
 export class ConfessionController {
@@ -26,6 +14,7 @@ export class ConfessionController {
   getConfessionById(id: string, req: Request) {
     return this.getById(id, req);
   }
+
   constructor(private readonly service: ConfessionService) {}
 
   @Post()
@@ -68,11 +57,10 @@ export class ConfessionController {
     return this.service.getConfessionsByTag(tag, dto);
   }
 
-  @Get(':id')
-  getById(@Param('id') id: string, @Req() req: Request) {
-    return this.service.getConfessionByIdWithViewCount(id, req);
-  }
-
+  /**
+   * IMPORTANT:
+   * Place nested param routes BEFORE :id
+   */
   @Get(':id/stellar/verify')
   verifyStellarAnchor(@Param('id') id: string) {
     return this.service.verifyStellarAnchor(id);
@@ -93,5 +81,13 @@ export class ConfessionController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  /**
+   * ALWAYS keep generic :id LAST
+   */
+  @Get(':id')
+  getById(@Param('id') id: string, @Req() req: Request) {
+    return this.service.getConfessionByIdWithViewCount(id, req);
   }
 }

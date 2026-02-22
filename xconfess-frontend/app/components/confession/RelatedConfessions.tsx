@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader } from "@/app/components/ui/card";
-import { type Confession } from "@/app/lib/types/confession";
 import { formatDate } from "@/app/lib/utils/formatDate";
+import { getConfessions } from "@/app/lib/api/confessions";
+import type { NormalizedConfession } from "@/app/lib/utils/normalizeConfession";
 
 const RELATED_LIMIT = 4;
 
@@ -17,29 +18,32 @@ export function RelatedConfessions({
   currentId,
   className = "",
 }: RelatedConfessionsProps) {
-  const [items, setItems] = useState<Confession[]>([]);
+  const [items, setItems] = useState<NormalizedConfession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchRelated() {
-      try {
-        const res = await fetch(
-          `/api/confessions?page=1&limit=${RELATED_LIMIT + 5}&sort=newest`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const list = data.confessions ?? [];
-        const filtered = list
-          .filter((c: Confession) => c.id !== currentId)
-          .slice(0, RELATED_LIMIT);
-        if (!cancelled) setItems(filtered);
-      } catch {
-        // ignore
-      } finally {
-        if (!cancelled) setLoading(false);
+      const result = await getConfessions({
+        page: 1,
+        limit: RELATED_LIMIT + 5,
+        sort: "newest",
+      });
+      if (cancelled) {
+        setLoading(false);
+        return;
       }
+      if (result.ok === false) {
+        setLoading(false);
+        return;
+      }
+      const list = result.data.confessions;
+      const filtered = list
+        .filter((c: NormalizedConfession) => c.id !== currentId)
+        .slice(0, RELATED_LIMIT);
+      setItems(filtered);
+      setLoading(false);
     }
 
     fetchRelated();

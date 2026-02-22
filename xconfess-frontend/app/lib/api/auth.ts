@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY } from './constants';
 
 interface User {
 id: string;
@@ -17,7 +18,7 @@ checkAuth();
 }, []);
 
 const checkAuth = async () => {
-const token = localStorage.getItem('accessToken');
+const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
 if (!token) {
   setIsLoading(false);
@@ -35,8 +36,8 @@ try {
     const userData = await response.json();
     setUser(userData);
   } else {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(USER_DATA_KEY);
   }
 } catch (error) {
   console.error('Auth check failed:', error);
@@ -46,8 +47,8 @@ try {
 };
 
 const logout = () => {
-localStorage.removeItem('accessToken');
-localStorage.removeItem('user');
+localStorage.removeItem(AUTH_TOKEN_KEY);
+localStorage.removeItem(USER_DATA_KEY);
 setUser(null);
 router.push('/login');
 };

@@ -20,8 +20,10 @@ import { BanUserDto } from './dto/ban-user.dto';
 import { BulkResolveDto } from './dto/bulk-resolve.dto';
 import { ReportStatus, ReportType } from './entities/report.entity';
 import { Request } from 'express';
+import { GetUser } from '../auth/get-user.decorator';
+import { RequestUser } from '../auth/interfaces/jwt-payload.interface';
 
-type AuthedRequest = Request & { user?: any };
+type AuthedRequest = Request & { user?: RequestUser };
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -70,9 +72,9 @@ export class AdminController {
   async resolveReport(
     @Param('id') id: string,
     @Body() dto: ResolveReportDto,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.resolveReport(
       id,
       adminId,
@@ -86,9 +88,9 @@ export class AdminController {
   async dismissReport(
     @Param('id') id: string,
     @Body() dto: ResolveReportDto,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.dismissReport(
       id,
       adminId,
@@ -101,9 +103,9 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   async bulkResolveReports(
     @Body() dto: BulkResolveDto,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     const count = await this.adminService.bulkResolveReports(
       dto.reportIds,
       adminId,
@@ -119,9 +121,9 @@ export class AdminController {
   async deleteConfession(
     @Param('id') id: string,
     @Body() body: { reason?: string },
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     await this.adminService.deleteConfession(
       id,
       adminId,
@@ -136,9 +138,9 @@ export class AdminController {
   async hideConfession(
     @Param('id') id: string,
     @Body() body: { reason?: string },
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.hideConfession(
       id,
       adminId,
@@ -151,9 +153,9 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   async unhideConfession(
     @Param('id') id: string,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.unhideConfession(id, adminId, req);
   }
 
@@ -185,9 +187,9 @@ export class AdminController {
   async banUser(
     @Param('id') id: string,
     @Body() dto: BanUserDto,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.banUser(
       parseInt(id, 10),
       adminId,
@@ -200,9 +202,9 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   async unbanUser(
     @Param('id') id: string,
+    @GetUser('id') adminId: number,
     @Req() req: AuthedRequest,
   ) {
-    const adminId = parseInt((req.user as any).userId || (req.user as any).sub, 10);
     return this.adminService.unbanUser(parseInt(id, 10), adminId, req);
   }
 

@@ -7,6 +7,7 @@ import {
 import type {Notification} from "@/app/types/notifications"
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
+import { AUTH_TOKEN_KEY } from "@/app/lib/api/constants";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
 
@@ -61,7 +62,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
           `/api/notifications?${params.toString()}`,
           {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
+              Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
             },
           }
         );
@@ -93,7 +94,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
         {
           method: "PATCH",
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
           },
         }
       );
@@ -116,7 +117,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       const response = await fetch("/api/notifications/read-all", {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
         },
       });
 
@@ -136,7 +137,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       const response = await fetch(`/api/notifications/${notificationId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}`,
         },
       });
 
@@ -154,7 +155,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
   useEffect(() => {
     if (!userId) return;
 
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
     const socket = io(WS_URL, {
       auth: { token },

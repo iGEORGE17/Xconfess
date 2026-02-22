@@ -6,11 +6,15 @@ import { MessagesController } from './messages.controller';
 import { User } from '../user/entities/user.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { NotificationModule } from '../notification/notification.module';
+import { UserAnonymousUser } from '../user/entities/user-anonymous-link.entity';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Message, User, AnonymousConfession]),
+    TypeOrmModule.forFeature([Message, User, AnonymousConfession, UserAnonymousUser, AnonymousUser]),
     forwardRef(() => NotificationModule),
+    UserModule,
   ],
   providers: [MessagesService],
   controllers: [MessagesController],

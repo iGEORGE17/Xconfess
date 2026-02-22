@@ -18,8 +18,28 @@ export class AnonymousUserService {
     return this.anonymousUserRepository.save(anon);
   }
 
-  async getOrCreateForUserSession(userId: number): Promise<AnonymousUser> {
-    // For demo: always create a new one. In production, check for existing within 24h.
+  async getOrCreateForUserSession(userId: number, sessionWindowHours: number = 24): Promise<AnonymousUser> {
+    // Calculate the session window cutoff time
+    const sessionCutoff = new Date();
+    sessionCutoff.setHours(sessionCutoff.getHours() - sessionWindowHours);
+
+    // Look for existing anonymous user within the session window
+    const existingLink = await this.userAnonRepo.findOne({
+      where: {
+        userId,
+        createdAt: MoreThan(sessionCutoff),
+      },
+      relations: ['anonymousUser'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    if (existingLink && existingLink.anonymousUser) {
+      return existingLink.anonymousUser;
+    }
+
+    // Create new anonymous user for this session
     const anon = await this.create();
     await this.userAnonRepo.save(
       this.userAnonRepo.create({
@@ -32,5 +52,27 @@ export class AnonymousUserService {
 
   async findById(id: string): Promise<AnonymousUser | null> {
     return this.anonymousUserRepository.findOne({ where: { id } });
+  }
+
+  async rotateAnonymousContext(userId: number): Promise<AnonymousUser> {
+    // Create new anonymous user for rotation
+    const newAnon = await this.create();
+    await this.userAnonRepo.save(
+      this.userAnonRepo.create({
+        userId,
+        anonymousUserId: newAnon.id,
+      }),
+    );
+    return newAnon;
+  }
+
+  async cleanupExpiredSessions(sessionWindowHours: number = 24): Promise<void> {
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - sessionWindowHours);
+
+    // Delete expired user-anonymous links (cascades to anonymous users if no other links)
+    await this.userAnonRepo.delete({
+      createdAt: MoreThan(cutoff),
+    });
   }
 }

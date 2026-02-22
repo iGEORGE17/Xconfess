@@ -60,7 +60,7 @@ class MockRedis {
 @Module({
   imports: [
     TypeOrmModule.forFeature([AnonymousConfession, Tag, ConfessionTag]),
-    EventEmitterModule.forRoot(),
+
     forwardRef(() => ReactionModule),
     ModerationModule,
     UserModule,
