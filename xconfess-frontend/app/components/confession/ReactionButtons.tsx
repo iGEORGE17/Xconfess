@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/app/lib/utils/cn";
+import { Heart, ThumbsUp } from "lucide-react";
 
 interface Props {
   type: "like" | "love";
@@ -10,8 +11,8 @@ interface Props {
   isActive?: boolean;
 }
 
-export const ReactionButton = ({type, count, confessionId,
-isActive = false,
+export const ReactionButton = ({ type, count, confessionId,
+  isActive = false,
 }: Props) => {
   const [localCount, setLocalCount] = useState(count);
   const [active, setActive] = useState(isActive);
@@ -27,6 +28,7 @@ isActive = false,
     setLocalCount((c) => c + 1);
 
     try {
+      setActive(true);
       const res = await fetch(`/api/confessions/${confessionId}/react`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -56,26 +58,28 @@ isActive = false,
       setActive(false);
       setLocalCount((c) => c - 1);
       console.error("Failed to react:", error);
+    } finally {
+      setActive(false);
     }
   };
-
+  const Icon = type === "like" ? ThumbsUp : Heart;
   return (
     <button
       onClick={react}
-      className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 transition-colors min-w-11 min-h-11 justify-center touch-manipulation"
       aria-label={`React with ${type}`}
       className={cn(
-        "relative flex items-center gap-2 px-4 py-2 rounded-full",
-        "min-w-[44px] min-h-[44px] touch-manipulation",
+        "relative flex items-center gap-2 px-4 py-2 rounded-full justify-center touch-manipulation",
+        "min-w-11 min-h-11 touch-manipulation",
         "transition-all duration-200 ease-out",
         "bg-zinc-800 hover:bg-zinc-700",
         "active:scale-95",
         active && "bg-pink-600 text-white",
-        isAnimating && "animate-reaction-bounce"
+        isAnimating && "animate-reaction-bounce",
+         type !== "like" ? "hover:bg-pink-700" : " hover:bg-blue-700"
       )}
     >
-      <span className="text-lg select-none">
-        {type === "like" ? "👍" : "❤️"}
+      <span className="text-lg select-none text-inherit">
+        <Icon size={18} />
       </span>
 
       <span className="text-sm font-medium">{localCount}</span>
