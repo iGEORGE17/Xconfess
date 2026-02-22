@@ -10,7 +10,7 @@ import { User } from '../user/entities/user.entity';
 import { PasswordReset } from './entities/password-reset.entity';
 import { Repository } from 'typeorm';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { AnonymousUserService } from '../user/anonymous-user.service';
 import { CryptoUtil } from '../common/crypto.util';
 

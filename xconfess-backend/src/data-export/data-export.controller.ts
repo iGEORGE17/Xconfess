@@ -1,11 +1,11 @@
-// src/data-export/data-export.controller.ts
 import { Controller, Get, Param, Query, Res, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { Response } from 'express';
 import * as crypto from 'crypto';
+import { DataExportService } from './data-export.service';
 
 @Controller('data-export')
 export class DataExportController {
-  constructor(private readonly exportService: DataExportService) {}
+  constructor(private readonly exportService: DataExportService) { }
 
   @Get('download/:id')
   async download(
@@ -24,7 +24,7 @@ export class DataExportController {
     const secret = process.env.APP_SECRET;
     const dataToVerify = `${id}:${userId}:${expires}`;
     const expectedSignature = crypto
-      .createHmac('sha256', secret)
+      .createHmac('sha256', secret || 'APP_SECRET_NOT_SET')
       .update(dataToVerify)
       .digest('hex');
 
@@ -32,11 +32,8 @@ export class DataExportController {
       throw new UnauthorizedException('Invalid download signature.');
     }
 
-    // 3. Fetch from DB (Only if signature is valid)
-    const exportReq = await this.exportRepository.findOne({
-      where: { id, userId },
-      select: ['fileData', 'status'], // Explicitly select bytea column
-    });
+    // 3. Fetch from Service (Only if signature is valid)
+    const exportReq = await this.exportService.getExportFile(id, userId);
 
     if (!exportReq || !exportReq.fileData) {
       throw new BadRequestException('File not found or expired.');

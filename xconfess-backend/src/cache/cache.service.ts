@@ -6,7 +6,7 @@ import { Cache } from 'cache-manager';
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
 
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) { }
 
   async get<T>(key: string): Promise<T | null> {
     try {
@@ -43,7 +43,8 @@ export class CacheService {
 
   async delPattern(pattern: string): Promise<void> {
     try {
-      const store = this.cacheManager.store as any;
+      const manager = this.cacheManager as any;
+      const store = manager.store || (manager.stores && manager.stores[0]);
       if (store && store.keys) {
         const keys = await store.keys(`${pattern}*`);
         if (keys && keys.length > 0) {
@@ -58,7 +59,12 @@ export class CacheService {
 
   async reset(): Promise<void> {
     try {
-      await this.cacheManager.reset();
+      const manager = this.cacheManager as any;
+      if (typeof manager.reset === 'function') {
+        await manager.reset();
+      } else if (typeof manager.clear === 'function') {
+        await manager.clear();
+      }
       this.logger.warn('Cache RESET: All keys deleted');
     } catch (error) {
       this.logger.error('Cache reset error:', error);

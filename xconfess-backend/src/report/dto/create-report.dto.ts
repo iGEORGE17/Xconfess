@@ -1,13 +1,12 @@
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ReportReason } from '../enums/report-reason.enum';
+import { ReportType } from '../../admin/entities/report.entity';
 
 export class CreateReportDto {
-  @IsEnum(ReportReason)
-  reason: ReportReason;
+  @IsEnum(ReportType)
+  type: ReportType;
 
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  details?: string;
+  reason?: string;
 }
-
