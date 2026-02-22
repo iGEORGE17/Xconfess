@@ -159,8 +159,7 @@ export class AuthService {
       if (!user) {
         // For security, we don't reveal whether the user exists or not
         this.logger.warn(`Password reset attempted for non-existent user`, {
-          email: forgotPasswordDto.email,
-          userId: forgotPasswordDto.userId,
+          maskedUserId: forgotPasswordDto.userId ? maskUserId(forgotPasswordDto.userId) : undefined,
           ipAddress,
         });
         return { message: 'If the user exists, a password reset email has been sent.' };
@@ -185,8 +184,8 @@ export class AuthService {
 
       this.logger.log(`Password reset email sent successfully`, {
         maskedUserId: maskUserId(user.id),
-        email: user.email,
         ipAddress,
+        userAgent,
       });
 
       return { message: 'If the user exists, a password reset email has been sent.' };
@@ -198,7 +197,6 @@ export class AuthService {
       }
 
       this.logger.error(`Forgot password process failed: ${errorMessage}`, {
-        email: forgotPasswordDto.email,
         maskedUserId: forgotPasswordDto.userId ? maskUserId(forgotPasswordDto.userId) : undefined,
         ipAddress,
         error: errorMessage,
