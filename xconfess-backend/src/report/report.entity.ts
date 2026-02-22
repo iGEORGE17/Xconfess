@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../user/entities/user.entity';
+import { ReportReason } from './enums/report-reason.enum';
 
 export enum ReportStatus {
   PENDING = 'pending',
@@ -27,8 +28,11 @@ export class Report {
   @Column({ nullable: true })
   reporterId?: number;
 
-  @Column()
-  reason: string;
+  @Column({
+    type: 'enum',
+    enum: ReportReason,
+  })
+  reason: ReportReason;
 
   @Column({ nullable: true })
   details?: string;
