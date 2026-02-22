@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Report, ReportStatus } from '../admin/entities/report.entity';
+import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
+import { ReportReason } from './enums/report-reason.enum';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { GetReportsQueryDto } from './dto/get-reports-query.dto';
 import { PaginatedReportsResponseDto } from './dto/get-reports-response.dto';
@@ -24,6 +25,19 @@ function isDuplicateReportConstraintViolation(err: unknown): boolean {
   const code = (err as { code?: string; driverError?: { code?: string } })?.code
     ?? (err as { driverError?: { code?: string } })?.driverError?.code;
   return code === '23505';
+}
+
+/** Map API ReportReason to DB ReportType for admin entity */
+function reportReasonToType(reason: ReportReason): ReportType {
+  const map: Partial<Record<ReportReason, ReportType>> = {
+    [ReportReason.SPAM]: ReportType.SPAM,
+    [ReportReason.HARASSMENT]: ReportType.HARASSMENT,
+    [ReportReason.HATE_SPEECH]: ReportType.HATE_SPEECH,
+    [ReportReason.INAPPROPRIATE]: ReportType.INAPPROPRIATE_CONTENT,
+    [ReportReason.COPYRIGHT]: ReportType.COPYRIGHT,
+    [ReportReason.OTHER]: ReportType.OTHER,
+  };
+  return map[reason] ?? ReportType.OTHER;
 }
 
 @Injectable()
@@ -61,7 +75,7 @@ export class ReportsService {
         .getRepository(Report)
         .createQueryBuilder('report')
         .where('report.confessionId = :confessionId', { confessionId })
-        .andWhere('report.created_at > :since', { since });
+        .andWhere('report.createdAt > :since', { since });
 
       if (reporterId === null) {
         qb.andWhere('report.reporterId IS NULL');
@@ -80,8 +94,8 @@ export class ReportsService {
       const report = manager.getRepository(Report).create({
         confessionId,
         reporterId: reporterId ?? undefined,
-        type: dto.type,
-        reason: dto.reason,
+        type: reportReasonToType(dto.reason),
+        reason: dto.details ?? dto.reason,
         status: ReportStatus.PENDING,
       });
 
@@ -102,7 +116,7 @@ export class ReportsService {
           'confession',
           confessionId,
           reporterId.toString(),
-          dto.reason,
+          dto.details ?? dto.reason,
           {
             ipAddress: context?.ipAddress,
             userAgent: context?.userAgent,
@@ -250,7 +264,7 @@ export class ReportsService {
     
     const query = this.reportRepository.createQueryBuilder('report')
       .leftJoinAndSelect('report.resolvedBy', 'resolvedBy')
-      .orderBy('report.created_at', 'DESC');
+      .orderBy('report.createdAt', 'DESC');
 
     if (status) {
       query.andWhere('report.status = :status', { status });

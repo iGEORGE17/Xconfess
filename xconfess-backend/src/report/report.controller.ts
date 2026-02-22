@@ -15,8 +15,10 @@ import {
 import { CreateReportDto } from './dto/create-report.dto';
 import { UpdateReportStatusDto } from './dto/update-report.dto';
 import { AdminGuard } from '../auth/admin.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { GetUser } from '../auth/get-user.decorator';
 import { ReportStatus } from './report.entity';
-import { ReportsService } from './report.service';
+import { ReportsService } from './reports.service';
 
 // ---------------------------------------------------------------------------
 // Public routes
@@ -30,20 +32,21 @@ export class ReportController {
    * Any user (authenticated or anonymous) can report a confession.
    */
   @Post(':id/report')
+  @UseGuards(OptionalJwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async reportConfession(
     @Param('id') confessionId: string,
-    @Req() req: any,
+    @GetUser('id') reporterId: number | null,
     @Body() dto: CreateReportDto,
+    @Req() req: { ip?: string; headers?: { 'user-agent'?: string } },
   ) {
-    const reporterId: number | null = req.user?.id ?? null;
     const context = {
       ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
+      userAgent: req.headers?.['user-agent'],
     };
     return this.reportsService.createReport(
       confessionId,
-      reporterId,
+      reporterId ?? null,
       dto,
       context,
     );

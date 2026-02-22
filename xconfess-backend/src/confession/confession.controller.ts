@@ -1,6 +1,6 @@
 import { Controller, Post, UsePipes, ValidationPipe, Body, Get, Query, Param, Put, Delete, Req } from "@nestjs/common";
 import { Request } from "express";
-import { AnchorConfessionDto } from "src/stellar/dto/anchor-confession.dto";
+import { AnchorConfessionDto } from "../stellar/dto/anchor-confession.dto";
 import { ConfessionService } from "./confession.service";
 import { CreateConfessionDto } from "./dto/create-confession.dto";
 import { GetConfessionsByTagDto } from "./dto/get-confessions-by-tag.dto";

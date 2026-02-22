@@ -23,7 +23,7 @@ import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { CryptoUtil } from '../common/crypto.util';
 
 // Add decrypted email to the response type for API output
-export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: number };
+export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: string };
 
 @Controller('users')
 export class UserController {
