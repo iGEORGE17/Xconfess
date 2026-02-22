@@ -50,7 +50,7 @@ export class ConfessionService {
     private readonly stellarService: StellarService,
     private readonly cacheService: CacheService,
     private readonly tagService: TagService,
-  ) {}
+  ) { }
 
   private sanitizeMessage(message: string): string {
     return sanitizeHtml(message, {
@@ -78,8 +78,8 @@ export class ConfessionService {
       // Step 1.5: Create an AnonymousUser to associate with this confession
       const anonymousUser = manager
         ? await manager
-            .getRepository(AnonymousUser)
-            .save(manager.getRepository(AnonymousUser).create())
+          .getRepository(AnonymousUser)
+          .save(manager.getRepository(AnonymousUser).create())
         : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
@@ -217,7 +217,7 @@ export class ConfessionService {
         'confession.moderationStatus',
         'reactions.id',
         'reactions.emoji',
-        'reactions.created_at',
+        'reactions.createdAt',
         'reactionUser.id',
       ]);
 
@@ -368,7 +368,7 @@ export class ConfessionService {
         reactions: {
           id: true,
           emoji: true,
-          created_at: true,
+          createdAt: true,
           anonymousUser: {
             id: true,
           },

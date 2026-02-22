@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,7 +10,7 @@ import { UserAnonymousUser } from '../src/user/entities/user-anonymous-link.enti
 import { Report } from '../src/report/report.entity';
 import { UserRole } from '../src/user/entities/user.entity';
 import { ReportReason } from '../src/report/enums/report-reason.enum';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 describe('Backend Improvements (e2e)', () => {
   let app: INestApplication;
