@@ -76,7 +76,7 @@ export class Report {
   @Column({ name: 'resolved_at', nullable: true })
   resolvedAt: Date | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'resolution_reason', type: 'text', nullable: true })
   resolutionNotes: string | null;
 
   @CreateDateColumn()
