@@ -56,7 +56,7 @@ export const ReactionButton = ({
         "transition-all duration-200 ease-out",
         "bg-zinc-800 hover:bg-zinc-700",
         "active:scale-95",
-        active && type !== "like" ? "bg-pink-600 text-white" : "bg-blue-600 text-white",
+        active && (type !== "like" ? "bg-pink-600 text-white" : "bg-blue-600 text-white"),
         isAnimating && "animate-reaction-bounce",
         type !== "like" ? "hover:bg-pink-700" : " hover:bg-blue-700"
       )}
