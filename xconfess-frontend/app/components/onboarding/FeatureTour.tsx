@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Joyride, { CallBackProps, STATUS, Step } from "react-joyride";
+import { useEffect, useState } from "react";
 import { ONBOARDING_STEPS } from "@/app/lib/types/onboarding.types";
 import { useOnboardingStore } from "@/app/lib/store/onboardingStore";
 
@@ -14,61 +13,31 @@ interface Props {
 export const FeatureTour = ({ run, onComplete, onSkip }: Props) => {
   const { setCurrentStep, completeStep } = useOnboardingStore();
   const [stepIndex, setStepIndex] = useState(0);
+  const step = ONBOARDING_STEPS[stepIndex];
+  const isLastStep = stepIndex === ONBOARDING_STEPS.length - 1;
 
-  const steps: Step[] = ONBOARDING_STEPS.map((step) => ({
-    target: step.target,
-    content: (
-      <div className="p-2 rounded-lg bg-zinc-800 font-sans">
-        <h3 className="font-bold text-lg text-white">{step.title}</h3>
-        <p className="mt-1 text-sm text-gray-200">{step.description}</p>
-      </div>
-    ),
-    placement: step.placement as any,
-    disableBeacon: step.disableBeacon,
-    spotlightClicks: step.spotlightClicks,
-    styles: {
-      options: {
-        zIndex: 10000,
-        overlayColor: "rgba(0,0,0,0.8)",
-        primaryColor: "#7c3aed",
-        textColor: "#fff",
-        width: 380,
-        arrowColor: "#7c3aed",
-        spotlightShadow: "0 0 20px rgba(124, 58, 237, 0.6)",
-      },
-      buttonNext: {
-        backgroundColor: "#7c3aed",
-        borderRadius: "8px",
-        color: "#fff",
-        padding: "6px 14px",
-        fontWeight: "bold",
-      },
-      buttonBack: {
-        backgroundColor: "#555",
-        borderRadius: "8px",
-        color: "#fff",
-        padding: "6px 14px",
-      },
-      buttonSkip: {
-        color: "#aaa",
-        fontWeight: "bold",
-      },
-    },
-  }));
+  useEffect(() => {
+    if (!run || !step) return;
 
-  const handleJoyrideCallback = (data: CallBackProps) => {
-    const { status, index, type } = data;
+    const target = document.querySelector(step.target);
+    if (!target) return;
 
-    if (type === "step:after") {
-      completeStep(ONBOARDING_STEPS[index].id);
-      setCurrentStep(index + 1);
-      setStepIndex(index + 1);
-    }
+    target.classList.add("ring-2", "ring-purple-500", "rounded-lg");
+    (target as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
 
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+    return () => {
+      target.classList.remove("ring-2", "ring-purple-500", "rounded-lg");
+    };
+  }, [run, step]);
+
+  if (!run || !step) return null;
+
+  const handleNext = () => {
+    completeStep(step.id);
+    setCurrentStep(stepIndex + 1);
+
+    if (isLastStep) {
       onComplete();
-
-      // Focus Post Confession button after tour ends
       const postButton = document.querySelector<HTMLButtonElement>(
         ".create-confession-button",
       );
@@ -76,20 +45,53 @@ export const FeatureTour = ({ run, onComplete, onSkip }: Props) => {
         postButton.classList.add("animate-pulse");
         postButton.focus();
       }
+      return;
     }
+
+    setStepIndex((prev) => prev + 1);
+  };
+
+  const handleBack = () => {
+    setStepIndex((prev) => Math.max(prev - 1, 0));
   };
 
   return (
-    <Joyride
-      steps={steps}
-      run={run}
-      stepIndex={stepIndex}
-      continuous
-      showSkipButton
-      showProgress
-      disableScrolling={false}
-      spotlightPadding={10}
-      callback={handleJoyrideCallback}
-    />
+    <div className="fixed inset-0 z-[10000] bg-black/70 flex items-end md:items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+        <p className="text-xs uppercase tracking-wide text-zinc-400 mb-2">
+          Step {stepIndex + 1} of {ONBOARDING_STEPS.length}
+        </p>
+        <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+        <p className="mt-2 text-sm text-zinc-300">{step.description}</p>
+
+        <div className="mt-5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            Skip tour
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={stepIndex === 0}
+              className="px-3 py-2 text-sm rounded-md bg-zinc-700 text-white disabled:opacity-40"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="px-3 py-2 text-sm rounded-md bg-purple-600 text-white hover:bg-purple-500"
+            >
+              {isLastStep ? "Finish" : "Next"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };

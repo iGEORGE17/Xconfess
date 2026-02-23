@@ -11,9 +11,9 @@ import {
 } from '@nestjs/common';
 import { NotificationService } from './services/notification.service';
 import { UpdateNotificationPreferenceDto, NotificationQueryDto } from './dto/notification.dto';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-@Controller('api/notifications')
+@Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}

@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
-import { ReportReason } from './enums/report-reason.enum';
 import { ResolveReportDto } from './dto/resolve-report.dto';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { GetReportsQueryDto } from './dto/get-reports-query.dto';
@@ -27,19 +26,6 @@ function isDuplicateReportConstraintViolation(err: unknown): boolean {
   const code = (err as { code?: string; driverError?: { code?: string } })?.code
     ?? (err as { driverError?: { code?: string } })?.driverError?.code;
   return code === '23505';
-}
-
-/** Map ReportReason (create DTO) to ReportType (admin entity) */
-function reportReasonToType(reason: ReportReason): ReportType {
-  const map: Partial<Record<ReportReason, ReportType>> = {
-    [ReportReason.SPAM]: ReportType.SPAM,
-    [ReportReason.HARASSMENT]: ReportType.HARASSMENT,
-    [ReportReason.HATE_SPEECH]: ReportType.HATE_SPEECH,
-    [ReportReason.INAPPROPRIATE]: ReportType.INAPPROPRIATE_CONTENT,
-    [ReportReason.COPYRIGHT]: ReportType.COPYRIGHT,
-    [ReportReason.OTHER]: ReportType.OTHER,
-  };
-  return map[reason] ?? ReportType.OTHER;
 }
 
 @Injectable()
@@ -96,8 +82,8 @@ export class ReportsService {
       const report = manager.getRepository(Report).create({
         confessionId,
         reporterId: reporterId ?? undefined,
-        type: reportReasonToType(dto.reason),
-        reason: dto.details ?? dto.reason,
+        type: dto.type ?? ReportType.OTHER,
+        reason: dto.reason ?? null,
         status: ReportStatus.PENDING,
       });
 
@@ -118,7 +104,7 @@ export class ReportsService {
           'confession',
           confessionId,
           reporterId.toString(),
-          dto.details ?? dto.reason,
+          dto.reason ?? 'unspecified',
           {
             ipAddress: context?.ipAddress,
             userAgent: context?.userAgent,
