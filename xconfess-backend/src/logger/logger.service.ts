@@ -1,9 +1,15 @@
 // src/logger/logger.service.ts
-import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
-import { UserIdMasker } from 'src/utils/mask-user-id';
+import {
+  Injectable,
+  Logger,
+  LoggerService as NestLoggerService,
+} from '@nestjs/common';
+import { UserIdMasker } from '../utils/mask-user-id';
 
 @Injectable()
 export class AppLogger implements NestLoggerService {
+  private readonly nestLogger = new Logger('AppLogger');
+
   /**
    * Sanitizes log message by masking any user IDs
    */
@@ -26,34 +32,40 @@ export class AppLogger implements NestLoggerService {
     return parts.length > 0 ? `[${parts.join('][')}]` : '[App]';
   }
 
+  private toLogPayload(
+    message: any,
+    context?: string,
+    requestId?: string,
+  ): { prefix: string; data: any } {
+    return {
+      prefix: this.formatPrefix(context, requestId),
+      data: this.sanitize(message),
+    };
+  }
+
   log(message: any, context?: string, requestId?: string) {
-    console.log(this.formatPrefix(context, requestId), this.sanitize(message));
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.log(payload, context);
   }
 
   error(message: any, trace?: string, context?: string, requestId?: string) {
-    console.error(
-      this.formatPrefix(context, requestId),
-      this.sanitize(message),
-      trace || '',
-    );
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.error(payload, trace, context);
   }
 
   warn(message: any, context?: string, requestId?: string) {
-    console.warn(this.formatPrefix(context, requestId), this.sanitize(message));
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.warn(payload, context);
   }
 
   debug(message: any, context?: string, requestId?: string) {
-    console.debug(
-      this.formatPrefix(context, requestId),
-      this.sanitize(message),
-    );
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.debug(payload, context);
   }
 
   verbose(message: any, context?: string, requestId?: string) {
-    console.log(
-      `[VERBOSE]${this.formatPrefix(context, requestId)}`,
-      this.sanitize(message),
-    );
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.verbose(payload, context);
   }
 
   /**

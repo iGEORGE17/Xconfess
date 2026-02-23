@@ -2,32 +2,34 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { NotificationQueue } from './notification.queue';
+import { RecipientResolver } from './recipient-resolver.service';
+
+const addMock = jest.fn();
+const closeQueueMock = jest.fn();
+const closeWorkerMock = jest.fn();
+const onWorkerMock = jest.fn();
 
 jest.mock('bullmq', () => {
   return {
     Queue: jest.fn().mockImplementation(() => ({
-      add: jest.fn(),
-      close: jest.fn(),
+      add: addMock,
+      close: closeQueueMock,
     })),
     Worker: jest.fn().mockImplementation(() => ({
-      on: jest.fn(),
-      close: jest.fn(),
+      on: onWorkerMock,
+      close: closeWorkerMock,
     })),
   };
 });
 
 describe('NotificationQueue', () => {
   let service: NotificationQueue;
-  let emailService: EmailService;
 
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue: any) => {
-      const config = {
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: 6379,
-        FRONTEND_URL: 'http://localhost:3000',
-      };
-      return config[key] || defaultValue;
+      if (key === 'REDIS_HOST') return 'localhost';
+      if (key === 'REDIS_PORT') return 6379;
+      return defaultValue;
     }),
   };
 
@@ -35,20 +37,13 @@ describe('NotificationQueue', () => {
     sendCommentNotification: jest.fn(),
   };
 
-  const mockConfession: any = {
-    id: '123',
-    message: 'Test confession',
-    created_at: new Date(),
-  };
-
-  const mockComment: any = {
-    id: 1,
-    content: 'Test comment',
-    createdAt: new Date(),
-    confession: mockConfession,
+  const mockRecipientResolver = {
+    resolveRecipient: jest.fn(),
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationQueue,
@@ -60,52 +55,55 @@ describe('NotificationQueue', () => {
           provide: EmailService,
           useValue: mockEmailService,
         },
+        {
+          provide: RecipientResolver,
+          useValue: mockRecipientResolver,
+        },
       ],
     }).compile();
 
     service = module.get<NotificationQueue>(NotificationQueue);
-    emailService = module.get<EmailService>(EmailService);
   });
 
   afterEach(async () => {
     await service.onModuleDestroy();
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  it('should enqueue a comment notification (queue.add)', async () => {
-    const payload = {
-      confession: mockConfession,
-      comment: mockComment,
-      recipientEmail: 'test@example.com',
-    };
-
-    await service.enqueueCommentNotification(payload);
-    // In unit tests we mock BullMQ; we just verify enqueue was called successfully.
-    expect(true).toBe(true);
-  });
-
-  it('should create an anonymized preview of the comment', async () => {
-    const longComment = {
-      ...mockComment,
-      content: 'This is a very long comment that should be truncated to create a preview. It contains more than 100 characters to test the truncation functionality.',
-    };
-
-    const payload = {
-      confession: mockConfession,
-      comment: longComment,
-      recipientEmail: 'test@example.com',
-    };
-
-    // Call the internal processor directly for deterministic unit testing.
-    await (service as any).processNotification(payload);
-
-    expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith({
-      to: 'test@example.com',
-      confessionId: mockConfession.id,
-      commentPreview: expect.stringMatching(/^This is a very long comment.*\.\.\.$/),
+  it('should enqueue a comment notification', async () => {
+    await service.enqueueCommentNotification({
+      confession: { id: 'conf-1' } as any,
+      comment: { id: 1, content: 'hello there' } as any,
+      recipientUserId: 42,
     });
+
+    expect(addMock).toHaveBeenCalledWith(
+      'comment-notification',
+      expect.objectContaining({
+        recipientUserId: 42,
+      }),
+      expect.objectContaining({
+        attempts: 3,
+      }),
+    );
   });
-}); 
+
+  it('should process and send comment notifications when recipient is resolvable', async () => {
+    mockRecipientResolver.resolveRecipient.mockResolvedValue({
+      email: 'test@example.com',
+      canNotify: true,
+    });
+
+    await (service as any).processCommentNotification({
+      confession: { id: 'conf-1' },
+      comment: { id: 1, content: 'A comment content for preview' },
+      recipientUserId: 42,
+    });
+
+    expect(mockEmailService.sendCommentNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'test@example.com',
+        confessionId: 'conf-1',
+      }),
+    );
+  });
+});

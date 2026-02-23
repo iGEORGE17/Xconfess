@@ -1,18 +1,26 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { LoggerService } from './logger.service';
+import { AppLogger } from './logger.service';
 
-describe('LoggerService', () => {
-  let service: LoggerService;
+describe('AppLogger', () => {
+  let service: AppLogger;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [LoggerService],
-    }).compile();
-
-    service = module.get<LoggerService>(LoggerService);
+  beforeEach(() => {
+    service = new AppLogger();
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('should mask user ids inside object payloads', () => {
+    const payload = { userId: '1234567890abcdef', action: 'test' };
+    const sanitized = (service as any).sanitize(payload);
+
+    expect(sanitized).toEqual(
+      expect.objectContaining({
+        userId: expect.any(String),
+        action: 'test',
+      }),
+    );
+    expect(sanitized.userId).not.toBe(payload.userId);
   });
 });

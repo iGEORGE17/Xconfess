@@ -52,6 +52,24 @@ export class UserService {
     }
   }
 
+  async findByUsername(username: string): Promise<User | null> {
+    try {
+      this.logger.debug(`Finding user by username`);
+      const normalizedUsername = username.trim();
+      const user = await this.userRepository.findOne({
+        where: { username: normalizedUsername },
+      });
+      return user;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error finding user by username: ${errorMessage}`);
+      throw new InternalServerErrorException(
+        `Error finding user: ${errorMessage}`,
+      );
+    }
+  }
+
   async findById(id: number): Promise<User | null> {
     try {
       this.logger.debug(`Finding user by ID: ${id}`);
