@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../../user/user.service';
 import { Logger } from '@nestjs/common';
+import { UserRole } from '../../user/entities/user.entity';
 
 @WebSocketGateway({
   namespace: 'admin',
@@ -23,7 +24,7 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
-  ) {}
+  ) { }
 
   async handleConnection(@ConnectedSocket() client: Socket) {
     try {
@@ -47,7 +48,7 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const user = await this.userService.findById(userId);
-      if (!user?.isAdmin) {
+      if (user?.role !== UserRole.ADMIN) {
         client.disconnect(true);
         return;
       }

@@ -7,7 +7,7 @@ import {
   getStats,
 } from "../controllers/user.controller";
 
-const router = Router();
+const router: Router = Router();
 
 router.get("/profile", requireAuth, getProfile);
 router.get("/:id/public-profile", getPublicProfile);

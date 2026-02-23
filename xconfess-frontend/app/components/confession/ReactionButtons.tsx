@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/app/lib/utils/cn";
+import { Heart, ThumbsUp } from "lucide-react";
 import { useReactions } from "@/app/lib/hooks/useReactions";
 import type { ReactionType } from "@/app/lib/types/reaction";
 
@@ -64,7 +65,7 @@ export const ReactionButton = ({
       setError("An unexpected error occurred");
     }
   };
-
+  const Icon = type === "like" ? ThumbsUp : Heart;
   return (
     <div className="relative">
       <button
