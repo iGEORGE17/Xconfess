@@ -65,17 +65,41 @@ npm run test:cov
 Copy `.env.example` to `.env` and update the values:
 
 ```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/xconfess
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_NAME=xconfess
 JWT_SECRET=your-secret-key
 PORT=5000
+NODE_ENV=development
+APP_ENV=local
+TYPEORM_SYNCHRONIZE=false
 STELLAR_NETWORK=testnet
 STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 ```
 
+### TypeORM Synchronize Policy
+
+- Default is `false` in all environments.
+- Sync is enabled only when both conditions are true:
+  - environment is local/dev (`NODE_ENV` or `APP_ENV` is `local`/`dev`/`development`)
+  - `TYPEORM_SYNCHRONIZE=true`
+- In non-dev environments, schema sync remains disabled even if the flag is set.
+
 ## Database Migrations
 
+Migrations are the authoritative schema-evolution mechanism for non-dev environments.
+
 ```bash
+# generate a migration from local entity changes
+npm run migration:generate -- ./migrations/<migration-name>
+
+# apply pending migrations
 npm run migration:run
+
+# revert the latest migration (if needed)
+npm run migration:revert
 ```
 
 ## API Documentation
