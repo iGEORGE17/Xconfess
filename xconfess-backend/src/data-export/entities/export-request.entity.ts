@@ -13,8 +13,8 @@ export class ExportRequest {
   status: string;
 
   // Storing the actual ZIP file in the DB
-  @Column({ type: 'byte', nullable: true, select: false }) 
-  fileData: Buffer; 
+  @Column({ type: 'bytea', nullable: true, select: false })
+  fileData: Buffer | null;
 
   @CreateDateColumn()
   createdAt: Date;

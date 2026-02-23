@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/app/lib/api/client';
-import { AUTH_TOKEN_KEY, USER_DATA_KEY } from '@/app/lib/api/constants';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY, ANONYMOUS_USER_ID_KEY } from '@/app/lib/api/constants';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function LoginPage() {
     try {
       // Best-effort real login. If your backend expects different fields, use Mock Admin Login.
       const res = await apiClient.post('/api/users/login', { email, password });
-      const { access_token, user } = res.data ?? {};
+      const { access_token, user, anonymousUserId } = res.data ?? {};
 
       if (!access_token) {
         throw new Error('Missing access token');
@@ -42,6 +42,9 @@ export default function LoginPage() {
       localStorage.setItem(AUTH_TOKEN_KEY, access_token);
       if (user) {
         localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
+      }
+      if (anonymousUserId) {
+        localStorage.setItem(ANONYMOUS_USER_ID_KEY, anonymousUserId);
       }
 
       router.push('/admin/dashboard');

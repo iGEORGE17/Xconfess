@@ -1,18 +1,19 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Report } from '../admin/entities/report.entity';
+import { ReportsService } from './reports.service';
+import { Report } from '../admin/entities/report.entity'; // Using admin Report entity
+import { ReportsController } from './reports.controller';
+import { AdminReportsController } from './admin-reports.controller';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
-import { ReportController } from './report.controller';
-import { ReportsService } from './reports.service'; 
 import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Report, AnonymousConfession]),
-    AuditLogModule, 
+    AuditLogModule,
   ],
-  controllers: [ReportController],
-  providers: [ReportsService], 
-  exports: [ReportsService], 
+  providers: [ReportsService],
+  controllers: [ReportsController, AdminReportsController],
+  exports: [ReportsService],
 })
-export class ReportModule {}
+export class ReportModule { }

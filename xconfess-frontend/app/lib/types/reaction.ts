@@ -1,8 +1,11 @@
 /**
  * Shared reaction types for API contracts and UI
+ * Uses constants from shared constants file
  */
 
-export type ReactionType = "like" | "love";
+import type { ReactionType as SharedReactionType } from "../constants/reactions";
+
+export type ReactionType = SharedReactionType;
 
 export interface ReactionCounts {
   like: number;
