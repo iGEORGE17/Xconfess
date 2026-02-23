@@ -67,7 +67,7 @@ rustup target add wasm32-unknown-unknown
 
 2. **Navigate to contracts directory**
    ```bash
-   cd contracts/soroban-xconfess/confession-anchor
+   cd xconfess-contracts/contracts/confession-anchor
    ```
 
 3. **Build contracts**
@@ -144,7 +144,7 @@ For complete examples and integration guides, see [docs/SOROBAN_SETUP.md](docs/S
 ### 📦 Smart Contract Architecture
 
 ```
-contracts/soroban-xconfess/
+xconfess-contracts/contracts/
 ├── confession-anchor/     # Anchoring confession hashes
 ├── reputation-badges/     # NFT badge minting & management
 └── anonymous-tipping/     # XLM tipping functionality
@@ -166,8 +166,9 @@ contracts/soroban-xconfess/
 - **JWT**: Secure session management
 
 ### Frontend
-- **Next.js 14**: React framework with App Router
-- **TailwindCSS**: Utility-first styling
+- **Next.js 16**: Latest React framework with App Router
+- **React 19**: Modern component architecture
+- **TailwindCSS 4**: Advanced styling & CSS-first approach
 - **Stellar SDK**: Blockchain interactions
 - **Freighter Integration**: Wallet connectivity
 
@@ -494,13 +495,13 @@ Stellar Wave is a contributor rewards program that funds open-source development
 - [x] Emoji reactions
 - [x] Real-time updates
 - [x] Modern UI/UX
-- [ ] Complete backend API
+- [x] Complete backend API
 
 ### 🚧 Phase 2: Stellar Integration (In Progress)
-- [ ] Soroban smart contract development
-- [ ] Confession anchoring on Stellar
+- [x] Soroban smart contract development
+- [x] Confession anchoring on Stellar
+- [x] XLM tipping functionality
 - [ ] Freighter wallet integration
-- [ ] XLM tipping functionality
 - [ ] Deploy to Stellar Testnet
 
 ### 🔮 Phase 3: Advanced Features (Q2 2026)
@@ -525,8 +526,8 @@ Stellar Wave is a contributor rewards program that funds open-source development
 xconfess/
 ├── xconfess-backend/          # NestJS backend
 │   ├── src/
-│   │   ├── confessions/       # Confession module
-│   │   ├── reactions/         # Reactions module
+│   │   ├── confession/        # Confession module
+│   │   ├── reaction/          # Reactions module
 │   │   ├── stellar/           # Stellar integration
 │   │   └── auth/              # Authentication
 │   └── test/
@@ -537,8 +538,8 @@ xconfess/
 │   │   ├── lib/               # Utilities
 │   │   └── stellar/           # Stellar SDK integration
 │   └── public/
-├── contracts/                 # Soroban smart contracts
-│   └── soroban-xconfess/
+├── xconfess-contracts/        # Soroban smart contracts
+│   └── contracts/
 │       ├── confession-anchor/
 │       ├── reputation-badges/
 │       └── anonymous-tipping/
