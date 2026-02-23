@@ -1,8 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { MessagesService } from '../src/messages/messages.service';
 import { User } from '../src/user/entities/user.entity';
+import { NotificationQueue } from '../src/notification/notification.queue';
+
+jest.mock('bullmq', () => ({
+    Queue: jest.fn().mockImplementation(() => ({
+        add: jest.fn(),
+        close: jest.fn(),
+    })),
+    Worker: jest.fn().mockImplementation(() => ({
+        on: jest.fn(),
+        close: jest.fn(),
+    })),
+}));
 
 /**
  * E2E tests for message flow ownership and reply constraints.
@@ -22,24 +34,21 @@ describe('Message Flow E2E – Ownership & Reply Constraints', () => {
 
     // Mock users
     const authorUser: Partial<User> = {
-        id: 'author-uuid-001',
-        email: 'author@example.com',
+        id: 1,
     };
 
     const senderUser: Partial<User> = {
-        id: 'sender-uuid-002',
-        email: 'sender@example.com',
+        id: 2,
     };
 
     const outsiderUser: Partial<User> = {
-        id: 'outsider-uuid-003',
-        email: 'outsider@example.com',
+        id: 3,
     };
 
     // Mock confession and message IDs
-    const confessionId = 'confession-uuid-100';
+    const confessionId = '11111111-1111-4111-8111-111111111111';
     const messageId = 1;
-    const senderAnonId = 'anon-sender-001';
+    const senderAnonId = '22222222-2222-4222-8222-222222222222';
 
     // Mock service
     const mockMessagesService = {
@@ -62,7 +71,7 @@ describe('Message Flow E2E – Ownership & Reply Constraints', () => {
             providers: [
                 { provide: MessagesService, useValue: mockMessagesService },
                 {
-                    provide: 'NotificationQueue',
+                    provide: NotificationQueue,
                     useValue: mockNotificationQueue,
                 },
             ],
@@ -131,6 +140,14 @@ describe('Message Flow E2E – Ownership & Reply Constraints', () => {
                 .post('/api/messages')
                 .send({ confession_id: confessionId, content: 'No auth!' })
                 .expect(403);
+        });
+
+        it('should reject malformed confession UUID', async () => {
+            await request(app.getHttpServer())
+                .post('/api/messages')
+                .set('x-test-user', 'sender')
+                .send({ confession_id: 'not-a-uuid', content: 'Hello author!' })
+                .expect(400);
         });
     });
 
@@ -246,6 +263,14 @@ describe('Message Flow E2E – Ownership & Reply Constraints', () => {
             expect(res.body.message).toContain(
                 'You are not part of this conversation',
             );
+        });
+
+        it('should reject malformed confession UUID in query', async () => {
+            await request(app.getHttpServer())
+                .get('/api/messages')
+                .set('x-test-user', 'sender')
+                .query({ confession_id: 'invalid-id', sender_id: senderAnonId })
+                .expect(400);
         });
     });
 

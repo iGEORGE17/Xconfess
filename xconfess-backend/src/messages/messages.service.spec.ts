@@ -128,7 +128,9 @@ describe('MessagesService', () => {
       jest.spyOn(userAnonRepo, 'find').mockResolvedValue([{ anonymousUserId: mockAnonId }] as any);
       const mockSave = jest.fn().mockImplementation((m) => Promise.resolve({ ...m }));
       const mockManager = { save: mockSave };
-      jest.spyOn(messageRepo.manager, 'transaction').mockImplementation(async (fn) => fn(mockManager) as any);
+      jest
+        .spyOn(messageRepo.manager as any, 'transaction')
+        .mockImplementation(async (fn: any) => fn(mockManager));
 
       await service.reply({ message_id: 1, reply: 'Got it!' }, mockUser);
       expect(message.hasReply).toBe(true);

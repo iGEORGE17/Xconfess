@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 
-const ENCRYPTION_KEY = process.env.EMAIL_ENCRYPTION_KEY || 'default_key_32_bytes_long_1234567890!';
+const ENCRYPTION_KEY =
+  process.env.EMAIL_ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 

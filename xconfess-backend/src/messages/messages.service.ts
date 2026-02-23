@@ -30,7 +30,7 @@ export class MessagesService {
     user: User,
   ): Promise<Message> {
     const confession = await this.confessionRepository.findOne({
-      where: { id: String(createMessageDto.confession_id) },
+      where: { id: createMessageDto.confession_id },
       relations: ['anonymousUser'],
     });
     if (!confession) throw new NotFoundException('Confession not found');
