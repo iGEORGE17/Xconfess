@@ -7,6 +7,7 @@ export interface AuditLogContext {
   userId?: string | null;
   ipAddress?: string;
   userAgent?: string;
+  requestId?: string;
 }
 
 export interface CreateAuditLogDto {
@@ -22,7 +23,7 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
-  ) {}
+  ) { }
 
   /**
    * Log a sensitive action to the audit log
@@ -33,7 +34,12 @@ export class AuditLogService {
       const auditLog = this.auditLogRepository.create({
         userId: dto.context?.userId || null,
         actionType: dto.actionType,
-        metadata: dto.metadata || {},
+        metadata: {
+          ...(dto.metadata || {}),
+          ...(dto.context?.requestId
+            ? { requestId: dto.context.requestId }
+            : {}),
+        },
         ipAddress: dto.context?.ipAddress || null,
         userAgent: dto.context?.userAgent || null,
       });
@@ -206,7 +212,7 @@ export class AuditLogService {
         .andWhere("audit_log.metadata->>'entityId' = :entityId", { entityId })
         .orderBy('audit_log.timestamp', 'DESC')
         .getMany();
-      
+
       return logs;
     } catch (error) {
       this.logger.error(`Failed to find audit logs by entity: ${error.message}`);
