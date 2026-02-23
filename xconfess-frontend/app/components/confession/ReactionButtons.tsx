@@ -52,13 +52,13 @@ export const ReactionButton = ({
       aria-label={`React with ${type}`}
       className={cn(
         "relative flex items-center gap-2 px-4 py-2 rounded-full justify-center touch-manipulation",
-        "min-w-11 min-h-11 touch-manipulation",
+        "min-w-11 min-h-11",
         "transition-all duration-200 ease-out",
         "bg-zinc-800 hover:bg-zinc-700",
         "active:scale-95",
-        active && "bg-pink-600 text-white",
+        active && type !== "like" ? "bg-pink-600 text-white" : "bg-blue-600 text-white",
         isAnimating && "animate-reaction-bounce",
-         type !== "like" ? "hover:bg-pink-700" : " hover:bg-blue-700"
+        type !== "like" ? "hover:bg-pink-700" : " hover:bg-blue-700"
       )}
     >
       <span className="text-lg select-none text-inherit">
