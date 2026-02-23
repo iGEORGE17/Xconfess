@@ -59,6 +59,12 @@ export class AnonymousConfession {
   @Column({ default: false })
   isDeleted: boolean;
 
+  @Column({ name: 'deleted_at', type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
+  @Column({ name: 'deleted_by', type: 'varchar', nullable: true })
+  deletedBy: string | null;
+
   @OneToMany(() => Comment, (comment) => comment.confession)
   comments: Comment[];
 

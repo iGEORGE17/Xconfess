@@ -1,4 +1,4 @@
-// src/services/logger.service.ts
+// src/logger/logger.service.ts
 import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
 import { UserIdMasker } from 'src/utils/mask-user-id';
 
@@ -19,32 +19,54 @@ export class AppLogger implements NestLoggerService {
     return message;
   }
 
-  log(message: any, context?: string) {
-    console.log(`[${context || 'App'}]`, this.sanitize(message));
+  private formatPrefix(context?: string, requestId?: string): string {
+    const parts: string[] = [];
+    if (context) parts.push(context);
+    if (requestId) parts.push(`req:${requestId}`);
+    return parts.length > 0 ? `[${parts.join('][')}]` : '[App]';
   }
 
-  error(message: any, trace?: string, context?: string) {
-    console.error(`[${context || 'App'}]`, this.sanitize(message), trace || '');
+  log(message: any, context?: string, requestId?: string) {
+    console.log(this.formatPrefix(context, requestId), this.sanitize(message));
   }
 
-  warn(message: any, context?: string) {
-    console.warn(`[${context || 'App'}]`, this.sanitize(message));
+  error(message: any, trace?: string, context?: string, requestId?: string) {
+    console.error(
+      this.formatPrefix(context, requestId),
+      this.sanitize(message),
+      trace || '',
+    );
   }
 
-  debug(message: any, context?: string) {
-    console.debug(`[${context || 'App'}]`, this.sanitize(message));
+  warn(message: any, context?: string, requestId?: string) {
+    console.warn(this.formatPrefix(context, requestId), this.sanitize(message));
   }
 
-  verbose(message: any, context?: string) {
-    console.log(`[VERBOSE][${context || 'App'}]`, this.sanitize(message));
+  debug(message: any, context?: string, requestId?: string) {
+    console.debug(
+      this.formatPrefix(context, requestId),
+      this.sanitize(message),
+    );
+  }
+
+  verbose(message: any, context?: string, requestId?: string) {
+    console.log(
+      `[VERBOSE]${this.formatPrefix(context, requestId)}`,
+      this.sanitize(message),
+    );
   }
 
   /**
    * Log with explicit user context (auto-masks)
    */
-  logWithUser(message: string, userId: string | number, context?: string) {
+  logWithUser(
+    message: string,
+    userId: string | number,
+    context?: string,
+    requestId?: string,
+  ) {
     const maskedId = UserIdMasker.mask(userId);
-    this.log(`${message} [${maskedId}]`, context);
+    this.log(`${message} [${maskedId}]`, context, requestId);
   }
 
   /**
@@ -55,8 +77,28 @@ export class AppLogger implements NestLoggerService {
     userId: string | number,
     trace?: string,
     context?: string,
+    requestId?: string,
   ) {
     const maskedId = UserIdMasker.mask(userId);
-    this.error(`${message} [${maskedId}]`, trace, context);
+    this.error(`${message} [${maskedId}]`, trace, context, requestId);
+  }
+
+  /**
+   * Log with request-id context only (no user)
+   */
+  logWithRequestId(message: string, requestId: string, context?: string) {
+    this.log(message, context, requestId);
+  }
+
+  /**
+   * Log error with request-id context only (no user)
+   */
+  errorWithRequestId(
+    message: string,
+    requestId: string,
+    trace?: string,
+    context?: string,
+  ) {
+    this.error(message, trace, context, requestId);
   }
 }
