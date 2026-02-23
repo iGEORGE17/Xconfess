@@ -82,6 +82,6 @@ npm run migration:run
 
 When running locally, Swagger docs are available at `/api/api-docs`.
 
-## License
+## 📄 License
 
 [MIT licensed](../LICENSE)
