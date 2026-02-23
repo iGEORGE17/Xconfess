@@ -58,7 +58,7 @@ export const ReactionButton = ({
         "active:scale-95",
         active && (type !== "like" ? "bg-pink-600 text-white" : "bg-blue-600 text-white"),
         isAnimating && "animate-reaction-bounce",
-        type !== "like" ? "hover:bg-pink-700" : " hover:bg-blue-700"
+        type !== "like" ? "hover:bg-pink-700" : "hover:bg-blue-700"
       )}
     >
       <span className="text-lg select-none text-inherit">
