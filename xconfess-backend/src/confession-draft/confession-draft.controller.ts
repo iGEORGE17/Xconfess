@@ -3,11 +3,8 @@ import {
   Controller,
   Delete,
   Get,
-  UnauthorizedException,
   Post,
-  Put,
   Param,
-  Req,
   UseGuards,
   Patch,
 } from '@nestjs/common';
@@ -17,13 +14,8 @@ import { ScheduleConfessionDraftDto } from './dto/schedule-confession-draft.dto'
 import { UpdateConfessionDraftDto } from './dto/update-confession-draft.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
-import { RequestUser } from '../auth/interfaces/jwt-payload.interface';
 
-interface RequestWithUser extends Request {
-  user?: RequestUser;
-}
-
-@Controller('api/confessions/drafts')
+@Controller('confessions/drafts')
 @UseGuards(JwtAuthGuard)
 export class ConfessionDraftController {
   constructor(private readonly service: ConfessionDraftService) {}
