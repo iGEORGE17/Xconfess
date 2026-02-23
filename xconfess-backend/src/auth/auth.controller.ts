@@ -20,21 +20,23 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { GetUser } from './get-user.decorator';
 import { User } from '../user/entities/user.entity';
 import { CryptoUtil } from '../common/crypto.util';
+import { RateLimit } from './guard/rate-limit.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
 
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @RateLimit(5, 300)
   async login(
     @Body() loginDto: LoginDto,
   ): Promise<{ access_token: string; user: any }> {
     try {
       const result = await this.authService.login(loginDto.email, loginDto.password);
-      
+
       if (!result) {
         throw new UnauthorizedException('Invalid credentials');
       }
@@ -79,14 +81,15 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @RateLimit(3, 300)
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,
     @Req() request: Request,
   ): Promise<{ message: string }> {
     try {
-      const ipAddress = request.ip || 
-                       (request.headers['x-forwarded-for'] as string)?.split(',')[0] || 
-                       request.connection.remoteAddress;
+      const ipAddress = request.ip ||
+        (request.headers['x-forwarded-for'] as string)?.split(',')[0] ||
+        request.connection.remoteAddress;
       const userAgent = request.headers['user-agent'];
 
       return await this.authService.forgotPassword(

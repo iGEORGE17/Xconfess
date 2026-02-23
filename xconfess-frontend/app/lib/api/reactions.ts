@@ -1,5 +1,7 @@
 import { normalizeApiError, type ApiError } from "./errors";
 import type { ReactionType, ReactionCounts } from "../types/reaction";
+import { isValidReactionType } from "../constants/reactions";
+import { ANONYMOUS_USER_ID_KEY } from "./constants";
 
 const API_BASE = "";
 
@@ -28,10 +30,27 @@ export async function addReaction(
       error: { message: "Confession ID is required.", code: "VALIDATION_ERROR" },
     };
   }
-  if (!type || !["like", "love"].includes(type)) {
+  
+  // Use shared validation function
+  if (!type || !isValidReactionType(type)) {
     return {
       ok: false,
       error: { message: "Invalid reaction type.", code: "VALIDATION_ERROR" },
+    };
+  }
+
+  // Get anonymousUserId from localStorage
+  const anonymousUserId = typeof window !== "undefined" 
+    ? localStorage.getItem(ANONYMOUS_USER_ID_KEY)
+    : null;
+
+  if (!anonymousUserId) {
+    return {
+      ok: false,
+      error: { 
+        message: "Anonymous user ID not found. Please log in again.", 
+        code: "AUTH_ERROR" 
+      },
     };
   }
 
@@ -40,7 +59,10 @@ export async function addReaction(
       `${API_BASE}/api/confessions/${confessionId}/react`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-anonymous-user-id": anonymousUserId,
+        },
         body: JSON.stringify({ type }),
         signal,
       }

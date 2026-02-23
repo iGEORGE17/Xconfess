@@ -6,7 +6,7 @@ import {
   RegisterResponse,
   User,
 } from '../types/auth';
-import { AUTH_TOKEN_KEY, USER_DATA_KEY } from './constants';
+import { AUTH_TOKEN_KEY, USER_DATA_KEY, ANONYMOUS_USER_ID_KEY } from './constants';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -44,6 +44,7 @@ apiClient.interceptors.response.use(
       // Token expired or invalid - clear auth data
       localStorage.removeItem(AUTH_TOKEN_KEY);
       localStorage.removeItem(USER_DATA_KEY);
+      localStorage.removeItem(ANONYMOUS_USER_ID_KEY);
       
       // Redirect to login if not already there
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
@@ -115,6 +116,7 @@ export const authApi = {
   logout(): void {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
+    localStorage.removeItem(ANONYMOUS_USER_ID_KEY);
   },
 };
 
