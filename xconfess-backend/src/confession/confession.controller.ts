@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
-import { AnchorConfessionDto } from 'src/stellar/dto/anchor-confession.dto';
+import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
 import { ConfessionService } from './confession.service';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { GetConfessionsByTagDto } from './dto/get-confessions-by-tag.dto';

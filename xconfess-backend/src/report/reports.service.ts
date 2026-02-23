@@ -77,7 +77,7 @@ export class ReportsService {
         .getRepository(Report)
         .createQueryBuilder('report')
         .where('report.confessionId = :confessionId', { confessionId })
-        .andWhere('report.created_at > :since', { since });
+        .andWhere('report.createdAt > :since', { since });
 
       if (reporterId === null) {
         qb.andWhere('report.reporterId IS NULL');
@@ -118,7 +118,7 @@ export class ReportsService {
           'confession',
           confessionId,
           reporterId.toString(),
-          dto.reason || dto.type,
+          dto.details ?? dto.reason,
           {
             ipAddress: context?.ipAddress,
             userAgent: context?.userAgent,
@@ -227,7 +227,7 @@ export class ReportsService {
     report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
     report.resolutionNotes = options?.reason ?? 'Report dismissed'; // Consistent default
-    
+
     const updatedReport = await this.reportRepository.save(report);
 
     // Log report dismissal (truly non-blocking - no await)
