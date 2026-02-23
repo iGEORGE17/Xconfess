@@ -247,3 +247,9 @@ DB_DATABASE=xconfess
 JWT_SECRET=your-jwt-secret
 JWT_EXPIRES_IN=3600s
 ``` 
+
+## Auth Policy
+
+Scenario,Header,Result
+Authenticated,Authorization: Bearer <JWT>,Report is linked to your account (reporterId saved).
+Anonymous,(None),Report is accepted as anonymous (reporterId is null).

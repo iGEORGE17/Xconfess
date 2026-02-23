@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
-import { User } from '../../user/entities/user.entity';
+import { AnonymousUser } from '../../user/entities/anonymous-user.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
 
 @Entity('messages')
@@ -7,9 +7,9 @@ export class Message {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
+  @ManyToOne(() => AnonymousUser, { nullable: false, onDelete: 'CASCADE' })
  @JoinColumn({ name: 'senderId' })
-  sender: User;
+  sender: AnonymousUser;
 
   @ManyToOne(() => AnonymousConfession, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'confessionId' })

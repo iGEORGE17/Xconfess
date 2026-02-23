@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsString, IsOptional, IsEnum, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEnum,
+  MaxLength,
+  IsArray,
+  ArrayMaxSize,
+} from 'class-validator';
 import { Gender } from './get-confessions.dto';
 
 export class CreateConfessionDto {
@@ -10,4 +18,24 @@ export class CreateConfessionDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(5000)
+  body: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'Maximum 3 tags allowed per confession' })
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsString()
+  stellarTxHash?: string;
 }

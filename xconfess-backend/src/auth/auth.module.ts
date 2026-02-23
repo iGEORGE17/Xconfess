@@ -28,6 +28,6 @@ import { PasswordReset } from './entities/password-reset.entity';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, PasswordResetService],
-  exports: [AuthService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

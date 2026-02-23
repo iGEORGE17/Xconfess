@@ -5,16 +5,13 @@ import { UserService } from '../user/user.service';
 import { EmailService } from '../email/email.service';
 import { PasswordResetService } from './password-reset.service';
 import { AnonymousUserService } from '../user/anonymous-user.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UserResponse } from '../user/user.controller';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { CryptoUtil } from '../common/crypto.util';
-
-interface JwtPayload {
-  email: string;
-  sub: string;
-}
+import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { UserRole } from '../user/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -57,7 +54,9 @@ export class AuthService {
     const anonymousUser = await this.anonymousUserService.getOrCreateForUserSession(user.id);
     const payload: JwtPayload = {
       email: user.email,
-      sub: user.id.toString(),
+      sub: user.id, // Keep as number for consistency
+      username: user.username,
+      role: user.role || UserRole.USER,
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -118,6 +117,17 @@ export class AuthService {
     }
   }
 
+  async validateUserById(userId: number): Promise<UserResponse | null> {
+    const user = await this.userService.findById(userId);
+    if (user && user.is_active) {
+      // Decrypt email for response
+      const decryptedEmail = CryptoUtil.decrypt(user.emailEncrypted, user.emailIv, user.emailTag);
+      const { password: _, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+      return { ...result, email: decryptedEmail };
+    }
+    return null;
+  }
+
   async forgotPassword(
     forgotPasswordDto: ForgotPasswordDto,
     ipAddress?: string,
@@ -149,8 +159,7 @@ export class AuthService {
       if (!user) {
         // For security, we don't reveal whether the user exists or not
         this.logger.warn(`Password reset attempted for non-existent user`, {
-          email: forgotPasswordDto.email,
-          userId: forgotPasswordDto.userId,
+          maskedUserId: forgotPasswordDto.userId ? maskUserId(forgotPasswordDto.userId) : undefined,
           ipAddress,
         });
         return { message: 'If the user exists, a password reset email has been sent.' };
@@ -175,8 +184,8 @@ export class AuthService {
 
       this.logger.log(`Password reset email sent successfully`, {
         maskedUserId: maskUserId(user.id),
-        email: user.email,
         ipAddress,
+        userAgent,
       });
 
       return { message: 'If the user exists, a password reset email has been sent.' };
@@ -188,7 +197,6 @@ export class AuthService {
       }
 
       this.logger.error(`Forgot password process failed: ${errorMessage}`, {
-        email: forgotPasswordDto.email,
         maskedUserId: forgotPasswordDto.userId ? maskUserId(forgotPasswordDto.userId) : undefined,
         ipAddress,
         error: errorMessage,

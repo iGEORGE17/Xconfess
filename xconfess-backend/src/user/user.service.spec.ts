@@ -4,7 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InternalServerErrorException, ConflictException, NotFoundException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { EmailService } from '../email/email.service';
 import { CryptoUtil } from '../common/crypto.util';
 
@@ -21,6 +21,7 @@ describe('UserService', () => {
     emailTag: '',
     emailHash: '',
     password: 'hashedpassword',
+    isAdmin: false,
     is_active: true,
     resetPasswordToken: null,
     resetPasswordExpires: null,
@@ -72,7 +73,7 @@ describe('UserService', () => {
 
       expect(result).toEqual(mockUser);
       expect(mockRepository.findOne).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' },
+        where: { emailHash: CryptoUtil.hash('test@example.com') },
       });
     });
 
@@ -253,7 +254,10 @@ describe('UserService', () => {
       expect(result).toEqual(mockUser);
       expect(bcrypt.hash).toHaveBeenCalledWith(validUserData.password, 10);
       expect(mockRepository.create).toHaveBeenCalledWith({
-        email: validUserData.email,
+        emailEncrypted: expect.any(String),
+        emailIv: expect.any(String),
+        emailTag: expect.any(String),
+        emailHash: CryptoUtil.hash(validUserData.email),
         password: 'hashedpassword',
         username: validUserData.username,
       });
@@ -317,8 +321,15 @@ describe('UserService', () => {
       const result = await service.create(validUserData.email, validUserData.password, '');
 
       expect(result.username).toBe('');
+      expect(result.emailEncrypted).toBeDefined();
+      expect(result.emailIv).toBeDefined();
+      expect(result.emailTag).toBeDefined();
+      expect(result.emailHash).toBe(CryptoUtil.hash(validUserData.email));
       expect(mockRepository.create).toHaveBeenCalledWith({
-        email: validUserData.email,
+        emailEncrypted: expect.any(String),
+        emailIv: expect.any(String),
+        emailTag: expect.any(String),
+        emailHash: CryptoUtil.hash(validUserData.email),
         password: 'hashedpassword',
         username: '',
       });
@@ -333,8 +344,15 @@ describe('UserService', () => {
       const result = await service.create(validUserData.email, validUserData.password, specialUsername);
 
       expect(result.username).toBe(specialUsername);
+      expect(result.emailEncrypted).toBeDefined();
+      expect(result.emailIv).toBeDefined();
+      expect(result.emailTag).toBeDefined();
+      expect(result.emailHash).toBe(CryptoUtil.hash(validUserData.email));
       expect(mockRepository.create).toHaveBeenCalledWith({
-        email: validUserData.email,
+        emailEncrypted: expect.any(String),
+        emailIv: expect.any(String),
+        emailTag: expect.any(String),
+        emailHash: CryptoUtil.hash(validUserData.email),
         password: 'hashedpassword',
         username: specialUsername,
       });
