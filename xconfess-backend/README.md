@@ -4,75 +4,50 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-The robust NestJS-based backend for **xConfess**, an anonymous confession platform built on the Stellar blockchain.
+> NestJS-based backend for the xConfess anonymous confession platform.
 
-## 🚀 Overview
+## Active Modules
 
-The backend handles the core business logic, real-time interactions, and blockchain integration for the xConfess ecosystem. It provides a secure, scalable API for managing anonymous confessions, reactions, and micro-tips.
+| Module | Path | Description |
+|--------|------|-------------|
+| Auth | `src/auth/` | JWT authentication, guards, decorators |
+| User | `src/user/` | User + anonymous user management |
+| Confession | `src/confession/` | Confession CRUD, search, tags, encryption |
+| Reaction | `src/reaction/` | Emoji reactions with WebSocket |
+| Comment | `src/comment/` | Nested commenting system |
+| Messages | `src/messages/` | Anonymous messaging (author-reply) |
+| Report | `src/report/` | Report creation & resolution |
+| Admin | `src/admin/` | Admin panel with RBAC |
+| Moderation | `src/moderation/` | AI content moderation (OpenAI) |
+| Audit Log | `src/audit-log/` | Comprehensive audit trail |
+| Logger | `src/logger/` | Structured logging with PII masking |
+| Stellar | `src/stellar/` | Stellar blockchain integration |
+| Tipping | `src/tipping/` | XLM micro-tipping |
+| Encryption | `src/encryption/` | Field-level confession encryption |
+| Cache | `src/cache/` | Redis/in-memory caching |
+| Analytics | `src/analytics/` | View counts, trending |
+| Data Export | `src/data-export/` | GDPR data export |
+| WebSocket | `src/websocket/` | Real-time event gateway |
+| Notifications | `src/notifications/` | Notification system (Bull/Redis — disabled by default) |
 
-## 🛠️ Tech Stack
-
-- **Framework**: [NestJS](https://github.com/nestjs/nest) (v10+)
-- **Language**: TypeScript
-- **Database**: PostgreSQL with TypeORM
-- **Real-time**: Socket.io (WebSockets)
-- **Caching**: Redis
-- **Blockchain**: Stellar SDK & Soroban Integration
-- **Validation**: Zod / Class-validator
-
-## 📁 Key Modules
-
-- **`confession`**: Manages the creation and retrieval of anonymous confessions.
-- **`reaction`**: Handles real-time emoji reactions to confessions.
-- **`stellar`**: Core service for Stellar blockchain and Soroban contract interactions.
-- **`tipping`**: Manages XLM tipping logic and on-chain verification.
-- **`admin`**: Secure dashboard for community moderation.
-- **`data-export`**: GDPR-compliant personal data export with secure signed URLs.
-- **`report`**: Community reporting system for content moderation.
-
-## ⚙️ Development Setup
-
-### Prerequisites
-
-- Node.js (v18+)
-- PostgreSQL (v14+)
-- Redis (optional, for caching)
-
-### Installation
+## Project Setup
 
 ```bash
-# Install dependencies
 npm install
 ```
 
-### Environment Variables
-
-Create a `.env` file in the root:
-
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/xconfess
-JWT_SECRET=your-secret
-PORT=5000
-
-# Stellar
-STELLAR_NETWORK=testnet
-STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
-```
-
-### Run Project
+## Compile and Run
 
 ```bash
 # development
-npm run start
-
-# watch mode
 npm run start:dev
 
 # production mode
+npm run build
 npm run start:prod
 ```
 
-## 🧪 Testing
+## Run Tests
 
 ```bash
 # unit tests
@@ -80,13 +55,33 @@ npm run test
 
 # e2e tests
 npm run test:e2e
+
+# test coverage
+npm run test:cov
 ```
 
-## 📜 API Documentation
+## Environment Variables
 
-Once the server is running, access the Swagger documentation at:
-`http://localhost:5000/api/docs`
+Copy `.env.example` to `.env` and update the values:
+
+```env
+DATABASE_URL=postgresql://user:pass@localhost:5432/xconfess
+JWT_SECRET=your-secret-key
+PORT=5000
+STELLAR_NETWORK=testnet
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+```
+
+## Database Migrations
+
+```bash
+npm run migration:run
+```
+
+## API Documentation
+
+When running locally, Swagger docs are available at `/api/api-docs`.
 
 ## 📄 License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+[MIT licensed](../LICENSE)
