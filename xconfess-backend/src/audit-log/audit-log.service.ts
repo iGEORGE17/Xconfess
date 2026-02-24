@@ -39,6 +39,9 @@ export class AuditLogService {
           ...(dto.context?.requestId
             ? { requestId: dto.context.requestId }
             : {}),
+          ...(dto.metadata?.templateKey && dto.metadata?.templateVersion
+            ? { templateKey: dto.metadata.templateKey, templateVersion: dto.metadata.templateVersion }
+            : {}),
         },
         ipAddress: dto.context?.ipAddress || null,
         userAgent: dto.context?.userAgent || null,

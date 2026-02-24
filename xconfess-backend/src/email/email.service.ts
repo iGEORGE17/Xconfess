@@ -1,3 +1,13 @@
+  // Allow switching active version (operator action)
+  setActiveTemplateVersion(key: string, version: string): void {
+    const reg = this.templateRegistry?.[key];
+    if (reg && reg.versions[version]) {
+      reg.activeVersion = version;
+      this.logger.log(`Switched ${key} template to version ${version}`);
+    } else {
+      throw new Error(`Template or version not found: ${key} v${version}`);
+    }
+  }
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
@@ -6,7 +16,44 @@ import {
   CircuitBreakerConfig,
   EmailProviderConfig,
   MailConfig,
+  EmailTemplateRegistry,
+  EmailTemplateVersion,
 } from './email.config';
+// Helper: Render template with variable validation
+function renderTemplate(
+  template: EmailTemplateVersion,
+  vars: Record<string, string>
+): { subject: string; html: string; text: string } {
+  // Validate required variables
+  for (const key of template.requiredVars) {
+    if (!(key in vars)) {
+      throw new Error(
+        `Missing required template variable: ${key} (template: ${template.version})`
+      );
+    }
+  }
+  // Simple variable replacement
+  const replaceVars = (str: string) =>
+    str.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k) => vars[k] || '');
+  return {
+    subject: replaceVars(template.subject),
+    html: replaceVars(template.html),
+    text: replaceVars(template.text),
+  };
+}
+  // Template registry reference
+  private get templateRegistry(): EmailTemplateRegistry {
+    return this.configService.get('mail.templateRegistry');
+  }
+
+  // Get active template version for a key
+  private getActiveTemplate(
+    key: string
+  ): EmailTemplateVersion | undefined {
+    const reg = this.templateRegistry?.[key];
+    if (!reg) return undefined;
+    return reg.versions[reg.activeVersion];
+  }
 
 // ── Circuit breaker states ────────────────────────────────────────────────────
 
@@ -241,14 +288,16 @@ export class EmailService implements OnModuleInit {
     html: string,
     text: string,
     channel = 'email_generic',
+    templateMeta?: { templateKey: string; templateVersion: string },
   ): Promise<void> {
     const startedAt = Date.now();
     const provider = this.resolveProvider();
 
     if (!provider) {
       const reason = 'circuit_open_no_fallback';
+      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
       this.logger.error(
-        `Email blocked — circuit OPEN, no fallback. to=${to} channel=${channel}`,
+        `Email blocked — circuit OPEN, no fallback. to=${maskedTo} channel=${channel}`,
       );
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
         channel,
@@ -281,6 +330,10 @@ export class EmailService implements OnModuleInit {
     }
 
     try {
+      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
+      const maskedSubject = UserIdMasker.maskObject({ msg: subject }).msg;
+      const maskedHtml = UserIdMasker.maskObject({ msg: html }).msg;
+      const maskedText = UserIdMasker.maskObject({ msg: text }).msg;
       const info = await provider.transporter.sendMail({
         from: provider.from,
         to,
@@ -294,7 +347,8 @@ export class EmailService implements OnModuleInit {
       }
 
       this.logger.log(
-        `Email sent via ${provider.label} to ${to}: ${info.messageId} | channel=${channel}`,
+        `Email sent via ${provider.label} to ${maskedTo}: ${info.messageId} | channel=${channel}` +
+        (templateMeta ? ` | template=${templateMeta.templateKey}@${templateMeta.templateVersion}` : ''),
       );
 
       this.onSendSuccess(provider);
@@ -312,10 +366,12 @@ export class EmailService implements OnModuleInit {
         },
       );
     } catch (error) {
+      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        error instanceof Error ? UserIdMasker.maskObject({ msg: error.message }).msg : 'Unknown error';
       this.logger.error(
-        `Failed to send email via ${provider.label} to ${to}: ${errorMessage} | channel=${channel}`,
+        `Failed to send email via ${provider.label} to ${maskedTo}: ${errorMessage} | channel=${channel}` +
+        (templateMeta ? ` | template=${templateMeta.templateKey}@${templateMeta.templateVersion}` : ''),
       );
 
       this.onSendFailure(
@@ -433,13 +489,18 @@ export class EmailService implements OnModuleInit {
   // ── Public email methods (unchanged signatures) ───────────────────────────────
 
   async sendWelcomeEmail(email: string, username: string): Promise<void> {
-    const subject = 'Welcome to XConfess! 🎉';
+    const templateKey = 'welcome';
+    const template = this.getActiveTemplate(templateKey);
+    if (!template) throw new Error('No active template for welcome');
+    const vars = { username };
+    const rendered = renderTemplate(template, vars);
     await this.sendEmail(
       email,
-      subject,
-      this.generateWelcomeEmailTemplate(username),
-      this.generateWelcomeEmailText(username),
+      rendered.subject,
+      rendered.html,
+      rendered.text,
       'email_welcome',
+      { templateKey, templateVersion: template.version }
     );
   }
 

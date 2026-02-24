@@ -26,7 +26,7 @@ export class AppLogger implements NestLoggerService {
   // ── Sanitization ─────────────────────────────────────────────────────────────
 
   private sanitize(message: any): any {
-    if (typeof message === 'string') return message;
+    if (typeof message === 'string') return UserIdMasker.maskObject({ msg: message }).msg;
     if (typeof message === 'object' && message !== null) {
       return UserIdMasker.maskObject(message);
     }
