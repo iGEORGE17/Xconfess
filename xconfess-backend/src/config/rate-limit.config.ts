@@ -15,3 +15,12 @@ export const getRateLimitConfig = (
   getLimit: configService.get<number>('RATE_LIMIT_GET_MAX', 50),
   getWindow: configService.get<number>('RATE_LIMIT_GET_WINDOW', 60), // seconds
 });
+
+export const rateLimitConfig = {
+  notification: {
+    dedupeTtlSeconds: parseInt(
+      process.env.NOTIFICATION_DEDUPE_TTL_SECONDS ?? '60',
+      10,
+    ),
+  },
+};
