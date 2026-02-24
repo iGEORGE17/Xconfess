@@ -1,5 +1,11 @@
 import apiClient from './client';
 import { mockAdminData } from './admin.mock';
+import type {
+  FailedNotificationJob,
+  FailedJobsResponse,
+  FailedJobsFilter,
+  ReplayJobResponse,
+} from '../types/notification-jobs';
 
 function isMockAdminEnabled(): boolean {
   // build-time flag for local testing
@@ -275,6 +281,90 @@ export const adminApi = {
       };
     }
     const response = await apiClient.get('/api/admin/audit-logs', { params });
+    return response.data;
+  },
+
+  // Failed Notification Jobs
+  getFailedNotificationJobs: async (filter?: FailedJobsFilter): Promise<FailedJobsResponse> => {
+    if (isMockAdminEnabled()) {
+      // Mock data for testing
+      const mockJobs: FailedNotificationJob[] = [
+        {
+          id: 'job-1',
+          name: 'comment-notification',
+          attemptsMade: 3,
+          maxAttempts: 3,
+          failedReason: 'SMTP connection timeout',
+          failedAt: new Date(Date.now() - 3600000).toISOString(),
+          createdAt: new Date(Date.now() - 7200000).toISOString(),
+          channel: 'email',
+          recipientEmail: 'user@example.com',
+        },
+        {
+          id: 'job-2',
+          name: 'comment-notification',
+          attemptsMade: 2,
+          maxAttempts: 3,
+          failedReason: 'Invalid email address',
+          failedAt: new Date(Date.now() - 1800000).toISOString(),
+          createdAt: new Date(Date.now() - 3600000).toISOString(),
+          channel: 'email',
+          recipientEmail: 'invalid@test',
+        },
+      ];
+
+      const page = filter?.page ?? 1;
+      const limit = filter?.limit ?? 20;
+      const offset = (page - 1) * limit;
+
+      let filtered = [...mockJobs];
+      
+      if (filter?.startDate) {
+        filtered = filtered.filter(j => j.failedAt && new Date(j.failedAt) >= new Date(filter.startDate!));
+      }
+      if (filter?.endDate) {
+        filtered = filtered.filter(j => j.failedAt && new Date(j.failedAt) <= new Date(filter.endDate!));
+      }
+      if (filter?.minRetries !== undefined) {
+        filtered = filtered.filter(j => j.attemptsMade >= filter.minRetries!);
+      }
+
+      return {
+        jobs: filtered.slice(offset, offset + limit),
+        total: filtered.length,
+        page,
+        limit,
+      };
+    }
+
+    const params: Record<string, any> = {
+      page: filter?.page ?? 1,
+      limit: filter?.limit ?? 20,
+    };
+
+    if (filter?.startDate) {
+      params.failedAfter = new Date(filter.startDate).toISOString();
+    }
+    if (filter?.endDate) {
+      params.failedBefore = new Date(filter.endDate).toISOString();
+    }
+
+    const response = await apiClient.get('/admin/notifications/dlq', { params });
+    return response.data;
+  },
+
+  replayFailedNotificationJob: async (jobId: string, reason?: string): Promise<ReplayJobResponse> => {
+    if (isMockAdminEnabled()) {
+      return {
+        success: true,
+        message: 'Job replayed successfully (mock)',
+        jobId,
+      };
+    }
+
+    const response = await apiClient.post(`/admin/notifications/dlq/${jobId}/replay`, {
+      reason,
+    });
     return response.data;
   },
 };

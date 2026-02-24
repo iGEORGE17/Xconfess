@@ -29,6 +29,7 @@ export default function AdminLayout({
       { href: '/admin/dashboard', label: 'Dashboard' },
       { href: '/admin/reports', label: 'Reports' },
       { href: '/admin/users', label: 'Users' },
+      { href: '/admin/notifications', label: 'Notifications' },
       { href: '/admin/audit-logs', label: 'Audit Logs' },
     ],
     [],
