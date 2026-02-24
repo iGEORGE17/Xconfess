@@ -11,6 +11,7 @@ import { RedisHealthIndicator } from './health/redis.health';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { AdminGuard } from './auth/admin.guard';
 import { NotificationQueue } from './notification/notification.queue';
+// import { RedisHealthIndicator } from './health/redis.health';
 
 @ApiTags('App')
 @Controller()
@@ -22,6 +23,8 @@ export class AppController {
     private redis: RedisHealthIndicator,
     private readonly notificationQueue: NotificationQueue,
   ) {}
+    // private redis: RedisHealthIndicator,
+  ) { }
 
   @Get()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
@@ -47,7 +50,7 @@ export class AppController {
     return this.health.check([
       async () => ({ app: { status: 'up' } }),
       async () => this.db.pingCheck('database'),
-      async () => this.redis.isHealthy('redis'),
+      // async () => this.redis.isHealthy('redis'),
     ]);
   }
 

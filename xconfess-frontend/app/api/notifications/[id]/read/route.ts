@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } } //  Correct type
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params; // no need to await
+    const { id } = await context.params;
     const token = request.headers.get("authorization")?.replace("Bearer ", "");
 
     const response = await fetch(

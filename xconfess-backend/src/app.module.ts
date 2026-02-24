@@ -9,8 +9,10 @@ import { AuthModule } from './auth/auth.module';
 import { ConfessionModule } from './confession/confession.module';
 import { ReactionModule } from './reaction/reaction.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { TerminusModule } from '@nestjs/terminus';
 import { APP_GUARD } from '@nestjs/core';
 import throttleConfig from './config/throttle.config';
+import { RedisHealthIndicator } from './health/redis.health';
 import { MessagesModule } from './messages/messages.module';
 import { AdminModule } from './admin/admin.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -49,6 +51,7 @@ import { NotificationModule } from './notification/notification.module';
       useFactory: getTypeOrmConfig,
     }),
     EventEmitterModule.forRoot(),
+    TerminusModule,
     UserModule,
     AuthModule,
     ConfessionModule,
@@ -68,6 +71,7 @@ import { NotificationModule } from './notification/notification.module';
   controllers: [AppController],
   providers: [
     AppService,
+    RedisHealthIndicator,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

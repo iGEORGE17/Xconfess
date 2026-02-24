@@ -23,20 +23,59 @@ import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { CryptoUtil } from '../common/crypto.util';
 
 // Add decrypted email to the response type for API output
-export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: number };
+export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: string };
 
 @Controller('users')
 export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly authService: AuthService,
-  ) {}
+  ) { }
 
   // Helper method to keep DRY (Don't Repeat Yourself)
   private formatUserResponse(user: User): UserResponse {
     const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
     const email = CryptoUtil.decrypt(emailEncrypted, emailIv, emailTag);
     return { ...result, email } as unknown as UserResponse;
+  }
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() registerDto: RegisterDto): Promise<{ user: UserResponse }> {
+    const existingEmail = await this.userService.findByEmail(registerDto.email);
+    if (existingEmail) {
+      throw new ConflictException('Email already in use');
+    }
+
+    const existingUsername = await this.userService.findByUsername(registerDto.username);
+    if (existingUsername) {
+      throw new ConflictException('Username already in use');
+    }
+
+    const user = await this.userService.create(
+      registerDto.email,
+      registerDto.password,
+      registerDto.username,
+    );
+
+    return { user: this.formatUserResponse(user) };
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() loginDto: LoginDto,
+  ): Promise<{ access_token: string; user: UserResponse; anonymousUserId: string }> {
+    try {
+      const result = await this.authService.login(loginDto.email, loginDto.password);
+      return result;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException('Login failed: ' + message);
+    }
   }
 
   @Get('profile')
@@ -47,7 +86,7 @@ export class UserController {
       if (!user) throw new UnauthorizedException();
       return this.formatUserResponse(user);
     } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       throw new BadRequestException('Failed to get profile: ' + message);
     }
   }

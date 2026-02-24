@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { User } from "@/app/lib/types/user";
-import { AUTH_TOKEN_KEY, USER_DATA_KEY } from "@/app/lib/api/constants";
+import { AUTH_TOKEN_KEY, USER_DATA_KEY, ANONYMOUS_USER_ID_KEY } from "@/app/lib/api/constants";
 
 export interface AuthStoreState {
   user: User | null;
@@ -44,6 +44,7 @@ export const useAuthStore = create<AuthStoreState>()(
         if (typeof window !== "undefined") {
           localStorage.removeItem(AUTH_TOKEN_KEY);
           localStorage.removeItem(USER_DATA_KEY);
+          localStorage.removeItem(ANONYMOUS_USER_ID_KEY);
         }
         set({
           user: null,

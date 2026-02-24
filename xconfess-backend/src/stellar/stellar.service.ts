@@ -4,16 +4,36 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import { StellarConfigService } from './stellar-config.service';
 import { TransactionBuilderService } from './transaction-builder.service';
 import { ITransactionResult } from './interfaces/stellar-config.interface';
+import * as crypto from 'crypto';
+
+export interface AnchorData {
+  stellarTxHash: string;
+  stellarHash: string;
+  anchoredAt: Date;
+}
 
 @Injectable()
 export class StellarService {
   private readonly logger = new Logger(StellarService.name);
+  private readonly contractId: string;
+  private readonly network: string;
+  private readonly horizonUrl: string;
 
   constructor(
+    private readonly configService: ConfigService,
     private stellarConfig: StellarConfigService,
     private txBuilder: TransactionBuilderService,
-    private configService: ConfigService,
-  ) {}
+  ) {
+    this.contractId = this.configService.get<string>(
+      'CONFESSION_ANCHOR_CONTRACT',
+      'CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD7E7IGV74ZP5XFB',
+    );
+    this.network = this.configService.get<string>('STELLAR_NETWORK', 'testnet');
+    this.horizonUrl = this.configService.get<string>(
+      'STELLAR_HORIZON_URL',
+      'https://horizon-testnet.stellar.org',
+    );
+  }
 
   /**
    * Get account balance
@@ -25,9 +45,8 @@ export class StellarService {
     try {
       const server = this.stellarConfig.getServer();
       const account = await server.loadAccount(publicKey);
-      const native = account.balances.find(
-        (b) => b.asset_type === 'native',
-      )?.balance || '0';
+      const native =
+        account.balances.find((b) => b.asset_type === 'native')?.balance || '0';
       const assets = account.balances
         .filter((b) => b.asset_type !== 'native')
         .map((b: any) => ({
@@ -43,16 +62,16 @@ export class StellarService {
   }
 
   /**
-   * Verify transaction on-chain
+   * Verify transaction on-chain (full result)
    */
-  async verifyTransaction(txHash: string): Promise<ITransactionResult> {
+  async verifyTransactionFull(txHash: string): Promise<ITransactionResult> {
     try {
       const server = this.stellarConfig.getServer();
       const tx = await server.transactions().transaction(txHash).call();
       return {
         hash: tx.hash,
         success: tx.successful,
-        ledger: tx.ledger,
+        ledger: tx.ledger as any,
         createdAt: tx.created_at,
         envelope: tx.envelope_xdr,
         result: tx.result_xdr,
@@ -78,7 +97,6 @@ export class StellarService {
 
   /**
    * Get network configuration (safe for public exposure)
-   * Never expose secret keys or sensitive info
    */
   getNetworkConfig() {
     const config = this.stellarConfig.getConfig();
@@ -87,13 +105,11 @@ export class StellarService {
       horizonUrl: config.horizonUrl,
       sorobanRpcUrl: config.sorobanRpcUrl,
       contractIds: config.contractIds,
-      // Never expose secret keys!
     };
   }
 
   /**
-   * Send payment (for testing/admin purposes)
-   * WARNING: Only use for admin/test flows. Never expose server secret.
+   * Send payment
    */
   async sendPayment(
     destinationPublicKey: string,
@@ -101,14 +117,11 @@ export class StellarService {
     memo?: string,
   ): Promise<ITransactionResult> {
     try {
-      // Get server secret from config (never expose!)
       const serverSecret = this.configService.get('STELLAR_SERVER_SECRET');
       if (!serverSecret) {
         throw new Error('Server secret key not configured');
       }
-      // Security: never log or return secret
       const serverKeypair = StellarSDK.Keypair.fromSecret(serverSecret);
-      // Build payment transaction
       const tx = await this.txBuilder.buildPaymentTransaction(
         serverKeypair.publicKey(),
         destinationPublicKey,
@@ -116,9 +129,7 @@ export class StellarService {
         StellarSDK.Asset.native(),
         { memo },
       );
-      // Sign transaction
       const signedTx = this.txBuilder.signTransaction(tx, serverSecret);
-      // Submit transaction
       const result = await this.txBuilder.submitTransaction(signedTx);
       return {
         hash: result.hash,
@@ -128,35 +139,6 @@ export class StellarService {
       this.logger.error(`Payment failed: ${error.message}`);
       throw error;
     }
-  }
-
-  // TODO: Add more granular admin guards and logging for all blockchain actions
-}import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
-
-export interface AnchorData {
-  stellarTxHash: string;
-  stellarHash: string;
-  anchoredAt: Date;
-}
-
-@Injectable()
-export class StellarService {
-  private readonly contractId: string;
-  private readonly network: string;
-  private readonly horizonUrl: string;
-
-  constructor(private readonly configService: ConfigService) {
-    this.contractId = this.configService.get<string>(
-      'CONFESSION_ANCHOR_CONTRACT',
-      'CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD7E7IGV74ZP5XFB',
-    );
-    this.network = this.configService.get<string>('STELLAR_NETWORK', 'testnet');
-    this.horizonUrl = this.configService.get<string>(
-      'STELLAR_HORIZON_URL',
-      'https://horizon-testnet.stellar.org',
-    );
   }
 
   /**
@@ -175,7 +157,6 @@ export class StellarService {
     if (!txHash || typeof txHash !== 'string') {
       return false;
     }
-    // Stellar transaction hashes are 64 character hex strings
     return /^[a-fA-F0-9]{64}$/.test(txHash);
   }
 
@@ -199,7 +180,6 @@ export class StellarService {
 
   /**
    * Verify a transaction exists on the Stellar network
-   * Returns true if transaction is found and successful
    */
   async verifyTransaction(txHash: string): Promise<boolean> {
     if (!this.isValidTxHash(txHash)) {
@@ -215,14 +195,13 @@ export class StellarService {
       const data = await response.json();
       return data.successful === true;
     } catch (error) {
-      console.error('Error verifying Stellar transaction:', error);
+      this.logger.error('Error verifying Stellar transaction:', error);
       return false;
     }
   }
 
   /**
    * Process anchoring data from frontend
-   * Validates and prepares data for storage
    */
   processAnchorData(
     confessionContent: string,

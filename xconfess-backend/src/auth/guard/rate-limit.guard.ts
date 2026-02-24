@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import { getRateLimitConfig } from 'src/config/rate-limit.config';
+import { getRateLimitConfig } from '../../config/rate-limit.config';
 
 interface RateLimitEntry {
   count: number;
@@ -37,8 +37,14 @@ export class RateLimitGuard implements CanActivate {
     const clientId = this.getClientId(request);
     const key = `${clientId}:${method}`;
 
-    // Determine rate limit based on HTTP method
-    const { limit, window } = this.getRateLimitForMethod(method);
+    // Get custom rate limit if defined for the endpoint
+    const customRateLimit = this.reflector.get<{ limit: number; window: number }>(
+      'rateLimit',
+      context.getHandler(),
+    );
+
+    // Determine rate limit based on endpoint decorator or HTTP method fallback
+    const { limit, window } = customRateLimit || this.getRateLimitForMethod(method);
 
     const now = Date.now();
     const entry = this.rateLimitStore.get(key);

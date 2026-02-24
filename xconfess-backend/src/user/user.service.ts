@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { EmailService } from '../email/email.service';
 import { CryptoUtil } from '../common/crypto.util';
@@ -46,6 +46,24 @@ export class UserService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error finding user by email: ${errorMessage}`);
+      throw new InternalServerErrorException(
+        `Error finding user: ${errorMessage}`,
+      );
+    }
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    try {
+      this.logger.debug(`Finding user by username`);
+      const normalizedUsername = username.trim();
+      const user = await this.userRepository.findOne({
+        where: { username: normalizedUsername },
+      });
+      return user;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error finding user by username: ${errorMessage}`);
       throw new InternalServerErrorException(
         `Error finding user: ${errorMessage}`,
       );

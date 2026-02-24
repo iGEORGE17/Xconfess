@@ -7,13 +7,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Report, ReportStatus } from '../admin/entities/report.entity';
+import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
+import { ResolveReportDto } from './dto/resolve-report.dto';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { GetReportsQueryDto } from './dto/get-reports-query.dto';
 import { PaginatedReportsResponseDto } from './dto/get-reports-response.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { User, UserRole } from '../user/entities/user.entity';
+import { RequestUser } from '../auth/interfaces/jwt-payload.interface';
 
 /** Message returned when user attempts a duplicate report */
 export const DUPLICATE_REPORT_MESSAGE =
@@ -36,7 +38,7 @@ export class ReportsService {
     @InjectRepository(AnonymousConfession)
     private readonly confessionRepository: Repository<AnonymousConfession>,
     private readonly auditLogService: AuditLogService,
-  ) {}
+  ) { }
 
   async createReport(
     confessionId: string,
@@ -61,7 +63,7 @@ export class ReportsService {
         .getRepository(Report)
         .createQueryBuilder('report')
         .where('report.confessionId = :confessionId', { confessionId })
-        .andWhere('report.created_at > :since', { since });
+        .andWhere('report.createdAt > :since', { since });
 
       if (reporterId === null) {
         qb.andWhere('report.reporterId IS NULL');
@@ -80,8 +82,8 @@ export class ReportsService {
       const report = manager.getRepository(Report).create({
         confessionId,
         reporterId: reporterId ?? undefined,
-        type: dto.type,
-        reason: dto.reason,
+        type: dto.type ?? ReportType.OTHER,
+        reason: dto.reason ?? null,
         status: ReportStatus.PENDING,
       });
 
@@ -98,11 +100,11 @@ export class ReportsService {
       // 4️⃣ Log report creation (non-blocking - no await)
       if (reporterId) {
         this.auditLogService.logReport(
-          savedReport.id.toString(),
+          savedReport.id,
           'confession',
           confessionId,
           reporterId.toString(),
-          dto.reason,
+          dto.reason ?? 'unspecified',
           {
             ipAddress: context?.ipAddress,
             userAgent: context?.userAgent,
@@ -118,10 +120,10 @@ export class ReportsService {
   }
 
   async resolveReport(
-    reportId: number,
+    reportId: string,
     admin: User,
-    options?: { 
-      reason?: string; 
+    options?: {
+      reason?: string;
       ipAddress?: string;
       userAgent?: string;
     },
@@ -131,7 +133,7 @@ export class ReportsService {
       where: { id: reportId },
       lock: { mode: 'pessimistic_write' },
     });
-    
+
     if (!report) {
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
@@ -145,18 +147,18 @@ export class ReportsService {
     }
 
     const previousStatus = report.status;
-    
+
     // Update report status
     report.status = ReportStatus.RESOLVED;
     report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason || 'Report resolved'; // Consistent default
-    
+    report.resolutionNotes = options?.reason || 'Report resolved'; // Consistent default
+
     const updatedReport = await this.reportRepository.save(report);
 
     // Log report resolution (truly non-blocking - no await)
     this.auditLogService.logReportResolved(
-      reportId.toString(),
+      reportId,
       admin.id.toString(),
       {
         previousStatus,
@@ -173,15 +175,15 @@ export class ReportsService {
     });
 
     this.logger.log(`Report ${reportId} resolved by admin ${admin.id}`);
-    
+
     return updatedReport;
   }
 
   async dismissReport(
-    reportId: number,
+    reportId: string,
     admin: User,
-    options?: { 
-      reason?: string; 
+    options?: {
+      reason?: string;
       ipAddress?: string;
       userAgent?: string;
     },
@@ -191,7 +193,7 @@ export class ReportsService {
       where: { id: reportId },
       lock: { mode: 'pessimistic_write' },
     });
-    
+
     if (!report) {
       throw new NotFoundException(`Report with ID ${reportId} not found`);
     }
@@ -205,18 +207,18 @@ export class ReportsService {
     }
 
     const previousStatus = report.status;
-    
+
     // Update report status
     report.status = ReportStatus.DISMISSED;
     report.resolvedBy = admin.id;
     report.resolvedAt = new Date();
-    report.resolutionReason = options?.reason || 'Report dismissed'; // Consistent default
-    
+    report.resolutionNotes = options?.reason ?? 'Report dismissed'; // Consistent default
+
     const updatedReport = await this.reportRepository.save(report);
 
     // Log report dismissal (truly non-blocking - no await)
     this.auditLogService.logReportDismissed(
-      reportId.toString(),
+      reportId,
       admin.id.toString(),
       {
         previousStatus,
@@ -233,12 +235,87 @@ export class ReportsService {
     });
 
     this.logger.log(`Report ${reportId} dismissed by admin ${admin.id}`);
-    
+
     return updatedReport;
   }
 
-  async getReportAuditLogs(reportId: number): Promise<any> {
-    return this.auditLogService.findByEntity('report', reportId.toString());
+  /**
+   * Single endpoint for resolving or dismissing a report by id (UUID).
+   * Invalid action is rejected by DTO validation (400). Only admin can access (403 via AdminGuard).
+   */
+  async actionReport(
+    id: string,
+    admin: RequestUser,
+    dto: ResolveReportDto,
+    context?: { ipAddress?: string; userAgent?: string },
+  ): Promise<Report> {
+    const report = await this.reportRepository.findOne({
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!report) {
+      throw new NotFoundException(`Report with ID ${id} not found`);
+    }
+
+    if (report.status === ReportStatus.RESOLVED || report.status === ReportStatus.DISMISSED) {
+      throw new BadRequestException(`Report is already ${report.status}`);
+    }
+
+    const action = dto.action;
+    const previousStatus = report.status;
+    const status = action === 'resolved' ? ReportStatus.RESOLVED : ReportStatus.DISMISSED;
+    const defaultNote = action === 'resolved' ? 'Report resolved' : 'Report dismissed';
+
+    report.status = status;
+    report.resolvedBy = admin.id;
+    report.resolvedAt = new Date();
+    report.resolutionNotes = dto.note ?? defaultNote;
+
+    const updatedReport = await this.reportRepository.save(report);
+
+    if (action === 'resolved') {
+      this.auditLogService.logReportResolved(
+        id,
+        admin.id.toString(),
+        {
+          previousStatus,
+          reason: dto.note,
+          confessionId: report.confessionId,
+          resolvedBy: admin.username,
+        },
+        {
+          ipAddress: context?.ipAddress,
+          userAgent: context?.userAgent,
+        },
+      ).catch(error => {
+        this.logger.error(`Failed to log report resolution: ${error.message}`);
+      });
+    } else {
+      this.auditLogService.logReportDismissed(
+        id,
+        admin.id.toString(),
+        {
+          previousStatus,
+          reason: dto.note,
+          confessionId: report.confessionId,
+          dismissedBy: admin.username,
+        },
+        {
+          ipAddress: context?.ipAddress,
+          userAgent: context?.userAgent,
+        },
+      ).catch(error => {
+        this.logger.error(`Failed to log report dismissal: ${error.message}`);
+      });
+    }
+
+    this.logger.log(`Report ${id} ${action} by admin ${admin.id}`);
+    return updatedReport;
+  }
+
+  async getReportAuditLogs(reportId: string): Promise<any> {
+    return this.auditLogService.findByEntity('report', reportId);
   }
 
   async findAll(options?: {
@@ -247,10 +324,10 @@ export class ReportsService {
     limit?: number;
   }): Promise<{ items: Report[]; total: number }> {
     const { status, page = 1, limit = 20 } = options || {};
-    
+
     const query = this.reportRepository.createQueryBuilder('report')
-      .leftJoinAndSelect('report.resolvedBy', 'resolvedBy')
-      .orderBy('report.created_at', 'DESC');
+      .leftJoinAndSelect('report.resolver', 'resolver')
+      .orderBy('report.createdAt', 'DESC');
 
     if (status) {
       query.andWhere('report.status = :status', { status });
@@ -264,10 +341,10 @@ export class ReportsService {
     return { items, total };
   }
 
-  async findOne(id: number): Promise<Report> {
+  async findOne(id: string): Promise<Report> {
     const report = await this.reportRepository.findOne({
       where: { id },
-      relations: ['resolvedBy'],
+      relations: ['resolver'],
     });
 
     if (!report) {

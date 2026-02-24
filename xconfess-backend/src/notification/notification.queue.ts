@@ -62,6 +62,10 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
   ) {
+    this.initializeWorkers();
+  }
+
+  private initializeWorkers() {
     const redisConfig = {
       host: this.configService.get('REDIS_HOST', 'localhost'),
       port: this.configService.get('REDIS_PORT', 6379),
@@ -124,8 +128,17 @@ export class NotificationQueue implements OnModuleDestroy {
 
       this.updateQueueDepthMetrics().catch(() => undefined);
     });
+
+    // Store queues and workers for cleanup
+    (this as any).commentQueue = commentQueue;
+    (this as any).commentWorker = commentWorker;
   }
 
+  /**
+   * Enqueue a comment notification for processing.
+   * 
+   * @param payload - Contains confession, comment, and recipient user ID
+   */
   async enqueueCommentNotification(payload: CommentNotificationPayload): Promise<void> {
     const channel = this.getChannel(payload);
     this.appLogger.incrementCounter('notification_enqueued_total', 1, {
@@ -144,18 +157,62 @@ export class NotificationQueue implements OnModuleDestroy {
     await this.updateQueueDepthMetrics();
   }
 
-  private async processNotification(payload: CommentNotificationPayload): Promise<void> {
-    const { confession, comment, recipientEmail } = payload;
+  /**
+   * Process a comment notification.
+   * Resolves recipient email and sends notification if available.
+   */
+  private async processCommentNotification(payload: CommentNotificationPayload): Promise<void> {
+    const { confession, comment, recipientUserId } = payload;
+    
+    const logContext = {
+      service: 'NotificationQueue',
+      action: 'processCommentNotification',
+      confessionId: confession?.id,
+      commentId: comment?.id,
+      recipientUserId,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.logger.debug('Processing comment notification', logContext);
+
+    // Resolve recipient email using the centralized helper
+    const recipient = await this.recipientResolver.resolveRecipient(recipientUserId);
+
+    // Handle missing recipient gracefully
+    if (!recipient.canNotify) {
+      this.logger.warn(`Skipping comment notification: ${recipient.reason}`, {
+        ...logContext,
+        reason: recipient.reason,
+        userId: recipientUserId,
+      });
+      // Non-fatal - don't throw error, just skip
+      return;
+    }
 
     // Create an anonymized preview of the comment
     const commentPreview = this.createAnonymizedPreview(comment.content);
 
     // Send email notification
-    await this.emailService.sendCommentNotification({
-      to: recipientEmail,
-      confessionId: confession.id,
-      commentPreview,
-    });
+    try {
+      await this.emailService.sendCommentNotification({
+        to: recipient.email!,
+        confessionId: confession.id,
+        commentPreview,
+      });
+
+      this.logger.log(`Comment notification sent to user ${recipientUserId}`, {
+        ...logContext,
+        email: this.maskEmail(recipient.email!),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send comment notification: ${errorMessage}`, {
+        ...logContext,
+        error: errorMessage,
+      });
+      // Re-throw to trigger BullMQ retry mechanism
+      throw error;
+    }
   }
 
   private getChannel(payload: CommentNotificationPayload): string {
@@ -163,7 +220,6 @@ export class NotificationQueue implements OnModuleDestroy {
   }
 
   private createAnonymizedPreview(content: string): string {
-    // Truncate long comments and ensure anonymity
     const maxLength = 100;
     const preview = content.length > maxLength
       ? `${content.substring(0, maxLength)}...`
@@ -406,7 +462,12 @@ export class NotificationQueue implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.queue.close();
-    await this.worker.close();
+    const commentQueue = (this as any).commentQueue as Queue;
+    const commentWorker = (this as any).commentWorker as Worker;
+    
+    if (commentQueue) await commentQueue.close();
+    if (commentWorker) await commentWorker.close();
+    
+    this.logger.log('NotificationQueue shutdown complete');
   }
 }

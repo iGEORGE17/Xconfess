@@ -17,6 +17,17 @@ export class AppLogger implements NestLoggerService {
   private readonly counters = new Map<string, number>();
   private readonly gauges = new Map<string, number>();
   private readonly timers = new Map<string, TimerAggregate>();
+// src/logger/logger.service.ts
+import {
+  Injectable,
+  Logger,
+  LoggerService as NestLoggerService,
+} from '@nestjs/common';
+import { UserIdMasker } from '../utils/mask-user-id';
+
+@Injectable()
+export class AppLogger implements NestLoggerService {
+  private readonly nestLogger = new Logger('AppLogger');
 
   /**
    * Sanitizes log message by masking any user IDs
@@ -33,24 +44,47 @@ export class AppLogger implements NestLoggerService {
     return message;
   }
 
-  log(message: any, context?: string) {
-    console.log(`[${context || 'App'}]`, this.sanitize(message));
+  private formatPrefix(context?: string, requestId?: string): string {
+    const parts: string[] = [];
+    if (context) parts.push(context);
+    if (requestId) parts.push(`req:${requestId}`);
+    return parts.length > 0 ? `[${parts.join('][')}]` : '[App]';
   }
 
-  error(message: any, trace?: string, context?: string) {
-    console.error(`[${context || 'App'}]`, this.sanitize(message), trace || '');
+  private toLogPayload(
+    message: any,
+    context?: string,
+    requestId?: string,
+  ): { prefix: string; data: any } {
+    return {
+      prefix: this.formatPrefix(context, requestId),
+      data: this.sanitize(message),
+    };
   }
 
-  warn(message: any, context?: string) {
-    console.warn(`[${context || 'App'}]`, this.sanitize(message));
+  log(message: any, context?: string, requestId?: string) {
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.log(payload, context);
   }
 
-  debug(message: any, context?: string) {
-    console.debug(`[${context || 'App'}]`, this.sanitize(message));
+  error(message: any, trace?: string, context?: string, requestId?: string) {
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.error(payload, trace, context);
   }
 
-  verbose(message: any, context?: string) {
-    console.log(`[VERBOSE][${context || 'App'}]`, this.sanitize(message));
+  warn(message: any, context?: string, requestId?: string) {
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.warn(payload, context);
+  }
+
+  debug(message: any, context?: string, requestId?: string) {
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.debug(payload, context);
+  }
+
+  verbose(message: any, context?: string, requestId?: string) {
+    const payload = this.toLogPayload(message, context, requestId);
+    this.nestLogger.verbose(payload, context);
   }
 
   private normalizeLabelValue(value: string | number | boolean): string {
@@ -157,9 +191,14 @@ export class AppLogger implements NestLoggerService {
   /**
    * Log with explicit user context (auto-masks)
    */
-  logWithUser(message: string, userId: string | number, context?: string) {
+  logWithUser(
+    message: string,
+    userId: string | number,
+    context?: string,
+    requestId?: string,
+  ) {
     const maskedId = UserIdMasker.mask(userId);
-    this.log(`${message} [${maskedId}]`, context);
+    this.log(`${message} [${maskedId}]`, context, requestId);
   }
 
   /**
@@ -170,8 +209,28 @@ export class AppLogger implements NestLoggerService {
     userId: string | number,
     trace?: string,
     context?: string,
+    requestId?: string,
   ) {
     const maskedId = UserIdMasker.mask(userId);
-    this.error(`${message} [${maskedId}]`, trace, context);
+    this.error(`${message} [${maskedId}]`, trace, context, requestId);
+  }
+
+  /**
+   * Log with request-id context only (no user)
+   */
+  logWithRequestId(message: string, requestId: string, context?: string) {
+    this.log(message, context, requestId);
+  }
+
+  /**
+   * Log error with request-id context only (no user)
+   */
+  errorWithRequestId(
+    message: string,
+    requestId: string,
+    trace?: string,
+    context?: string,
+  ) {
+    this.error(message, trace, context, requestId);
   }
 }

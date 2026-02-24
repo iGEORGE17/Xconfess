@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Report, ReportStatus, ReportType } from '../entities/report.entity';
 import { AnonymousConfession } from '../../confession/entities/confession.entity';
-import { User } from '../../user/entities/user.entity';
+import { User, UserRole } from '../../user/entities/user.entity';
 import { ModerationService } from './moderation.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { Request } from 'express';
@@ -24,8 +24,7 @@ export class AdminService {
       return decryptConfession(message);
     } catch (e) {
       this.logger.warn(
-        `Failed to decrypt confession message (returning raw). Reason: ${
-          e instanceof Error ? e.message : 'unknown'
+        `Failed to decrypt confession message (returning raw). Reason: ${e instanceof Error ? e.message : 'unknown'
         }`,
       );
       return message;
@@ -42,7 +41,7 @@ export class AdminService {
     @InjectRepository(UserAnonymousUser)
     private readonly userAnonRepository: Repository<UserAnonymousUser>,
     private readonly moderationService: ModerationService,
-  ) {}
+  ) { }
 
   // Reports
   async getReports(
@@ -408,12 +407,12 @@ export class AdminService {
     const anonIds = Array.from(new Set(links.map((l) => l.anonymousUserId)));
     const confessions = anonIds.length
       ? await this.confessionRepository
-          .createQueryBuilder('confession')
-          .leftJoin('confession.anonymousUser', 'anon')
-          .where('anon.id IN (:...anonIds)', { anonIds })
-          .orderBy('confession.created_at', 'DESC')
-          .take(200)
-          .getMany()
+        .createQueryBuilder('confession')
+        .leftJoin('confession.anonymousUser', 'anon')
+        .where('anon.id IN (:...anonIds)', { anonIds })
+        .orderBy('confession.created_at', 'DESC')
+        .take(200)
+        .getMany()
       : [];
 
     // Decrypt confession messages for admin visibility
@@ -427,7 +426,7 @@ export class AdminService {
       user: {
         id: user.id,
         username: user.username,
-        isAdmin: user.isAdmin,
+        isAdmin: user.role === UserRole.ADMIN,
         is_active: user.is_active,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,

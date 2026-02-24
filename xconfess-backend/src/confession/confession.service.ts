@@ -50,7 +50,7 @@ export class ConfessionService {
     private readonly stellarService: StellarService,
     private readonly cacheService: CacheService,
     private readonly tagService: TagService,
-  ) {}
+  ) { }
 
   private sanitizeMessage(message: string): string {
     return sanitizeHtml(message, {
@@ -78,8 +78,8 @@ export class ConfessionService {
       // Step 1.5: Create an AnonymousUser to associate with this confession
       const anonymousUser = manager
         ? await manager
-            .getRepository(AnonymousUser)
-            .save(manager.getRepository(AnonymousUser).create())
+          .getRepository(AnonymousUser)
+          .save(manager.getRepository(AnonymousUser).create())
         : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
@@ -217,7 +217,7 @@ export class ConfessionService {
         'confession.moderationStatus',
         'reactions.id',
         'reactions.emoji',
-        'reactions.created_at',
+        'reactions.createdAt',
         'reactionUser.id',
       ]);
 
@@ -300,13 +300,57 @@ export class ConfessionService {
     return updated;
   }
 
-  async remove(id: string) {
+  async remove(id: string, deletedBy?: string) {
     const existing = await this.confessionRepo.findOne({
       where: { id, isDeleted: false },
     });
     if (!existing) throw new NotFoundException(`Confession ${id} not found`);
-    await this.confessionRepo.update(id, { isDeleted: true });
-    return { message: 'Confession soft‑deleted' };
+    await this.confessionRepo.update(id, {
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: deletedBy || null,
+    });
+    return { message: 'Confession soft-deleted', id };
+  }
+
+  /**
+   * Restore a soft-deleted confession (admin only).
+   */
+  async restore(id: string) {
+    const existing = await this.confessionRepo.findOne({
+      where: { id, isDeleted: true },
+    });
+    if (!existing)
+      throw new NotFoundException(
+        `Soft-deleted confession ${id} not found`,
+      );
+    await this.confessionRepo.update(id, {
+      isDeleted: false,
+      deletedAt: null,
+      deletedBy: null,
+    });
+    return { message: 'Confession restored', id };
+  }
+
+  /**
+   * List soft-deleted confessions for admin review.
+   */
+  async getDeletedConfessions(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.confessionRepo.findAndCount({
+      where: { isDeleted: true },
+      order: { created_at: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      data: data.map((c) => ({
+        ...c,
+        message: decryptConfession(c.message),
+      })),
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async search(dto: SearchConfessionDto) {
@@ -368,7 +412,7 @@ export class ConfessionService {
         reactions: {
           id: true,
           emoji: true,
-          created_at: true,
+          createdAt: true,
           anonymousUser: {
             id: true,
           },
