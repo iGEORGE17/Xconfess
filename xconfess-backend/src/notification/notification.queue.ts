@@ -115,8 +115,9 @@ export class NotificationQueue implements OnModuleDestroy {
     );
 
     this.worker.on('completed', (job) => {
+      const maskedJobId = job.id;
       this.appLogger.log(
-        `Job ${job.id} completed successfully`,
+        `Job ${maskedJobId} completed successfully`,
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_job_completed_total', 1, {
@@ -127,8 +128,10 @@ export class NotificationQueue implements OnModuleDestroy {
     });
 
     this.worker.on('failed', (job, error) => {
+      const maskedJobId = job?.id;
+      const maskedError = error && typeof error.message === 'string' ? UserIdMasker.maskObject({ msg: error.message }).msg : error;
       this.appLogger.error(
-        `Job ${job?.id} failed: ${error.message}`,
+        `Job ${maskedJobId} failed: ${maskedError}`,
         undefined,
         'NotificationQueue',
       );
@@ -242,13 +245,19 @@ export class NotificationQueue implements OnModuleDestroy {
       queue: this.queueName,
     });
 
-    await this.queue.add('comment-notification', payload, {
+    // Attach template key/version if present in payload
+    let jobOpts: any = {
       attempts: 3,
       backoff: {
         type: 'exponential',
         delay: 1000,
       },
-    });
+    };
+    if ((payload as any).templateKey && (payload as any).templateVersion) {
+      jobOpts.templateKey = (payload as any).templateKey;
+      jobOpts.templateVersion = (payload as any).templateVersion;
+    }
+    await this.queue.add('comment-notification', payload, jobOpts);
 
     await this.updateQueueDepthMetrics();
   }
@@ -265,13 +274,13 @@ export class NotificationQueue implements OnModuleDestroy {
     const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
 
     this.appLogger.debug(
-      `Processing comment notification [${logContext}]`,
+      UserIdMasker.maskObject({ msg: `Processing comment notification [${logContext}]` }).msg,
       'NotificationQueue',
     );
 
     if (!recipientEmail) {
       this.appLogger.warn(
-        `Skipping comment notification: no recipient email [${logContext}]`,
+        UserIdMasker.maskObject({ msg: `Skipping comment notification: no recipient email [${logContext}]` }).msg,
         'NotificationQueue',
       );
       return;
@@ -281,13 +290,13 @@ export class NotificationQueue implements OnModuleDestroy {
 
     try {
       await this.emailService.sendCommentNotification({
-        to: recipientEmail,
+        to: UserIdMasker.maskObject({ email: recipientEmail }).email,
         confessionId: confession.id,
-        commentPreview,
+        commentPreview: UserIdMasker.maskObject({ msg: commentPreview }).msg,
       });
 
       this.appLogger.log(
-        `Comment notification sent [${logContext}]`,
+        UserIdMasker.maskObject({ msg: `Comment notification sent [${logContext}]` }).msg,
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_send_success_total', 1, {
@@ -298,7 +307,7 @@ export class NotificationQueue implements OnModuleDestroy {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.appLogger.error(
-        `Failed to send comment notification: ${errorMessage} [${logContext}]`,
+        UserIdMasker.maskObject({ msg: `Failed to send comment notification: ${errorMessage} [${logContext}]` }).msg,
         undefined,
         'NotificationQueue',
       );
