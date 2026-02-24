@@ -194,6 +194,37 @@ export class AuditLogService {
   }
 
   /**
+   * Log notification DLQ replay actions performed by operators/admins.
+   */
+  async logNotificationDlqReplay(
+    adminId: string,
+    metadata: {
+      replayType: 'single' | 'bulk';
+      queue: string;
+      jobId?: string;
+      filters?: Record<string, any>;
+      summary?: {
+        attempted: number;
+        replayed: number;
+        failed: number;
+      };
+      reason?: string | null;
+      replayedAt?: string;
+    },
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.NOTIFICATION_DLQ_REPLAY,
+      metadata: {
+        entityType: 'notification_dlq',
+        ...metadata,
+        replayedAt: metadata.replayedAt || new Date().toISOString(),
+      },
+      context: { ...context, userId: adminId },
+    });
+  }
+
+  /**
    * Find audit logs by entity (backward compatible with the requested feature)
    */
   async findByEntity(entityType: string, entityId: string): Promise<AuditLog[]> {

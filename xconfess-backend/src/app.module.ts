@@ -22,6 +22,7 @@ import { CacheModule } from './cache/cache.module';
 import { TippingModule } from './tipping/tipping.module';
 import { LoggerModule } from './logger/logger.module';
 import { EncryptionModule } from './encryption/encryption.module';
+import { NotificationModule } from './notification/notification.module';
 // TODO: NotificationModule requires Bull/Redis configuration - temporarily disabled
 // import { NotificationModule } from './notifications/notifications.module';
 
@@ -61,6 +62,7 @@ import { EncryptionModule } from './encryption/encryption.module';
     TippingModule,
     LoggerModule,
     EncryptionModule,
+    NotificationModule,
     CacheModule,
   ],
   controllers: [AppController],

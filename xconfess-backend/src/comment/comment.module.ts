@@ -3,10 +3,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommentController } from './comment.controller';
 import { CommentService } from './comment.service';
 import { Comment } from './entities/comment.entity';
-import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { AnonymousContextMiddleware } from '../middleware/anonymous-context.middleware';
-import { NotificationQueue } from '../notification/notification.queue';
 import { ModerationComment } from './entities/moderation-comment.entity';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -14,9 +13,10 @@ import { ModerationComment } from './entities/moderation-comment.entity';
       Comment,
       ModerationComment,
     ]),
+    NotificationModule,
   ],
   controllers: [CommentController],
-  providers: [CommentService, NotificationQueue],
+  providers: [CommentService],
   exports: [CommentService],
 })
 export class CommentModule implements NestModule {

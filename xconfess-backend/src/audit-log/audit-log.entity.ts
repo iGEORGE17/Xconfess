@@ -23,6 +23,7 @@ export enum AuditActionType {
   // New report moderation actions
   REPORT_RESOLVED = 'report_resolved',
   REPORT_DISMISSED = 'report_dismissed',
+  NOTIFICATION_DLQ_REPLAY = 'notification_dlq_replay',
 }
 
 @Entity('audit_logs')

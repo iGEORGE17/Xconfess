@@ -2,12 +2,24 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { NotificationQueue } from './notification.queue';
+import { AppLogger } from '../logger/logger.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 jest.mock('bullmq', () => {
   return {
     Queue: jest.fn().mockImplementation(() => ({
       add: jest.fn(),
       close: jest.fn(),
+      getJobCounts: jest.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        completed: 0,
+      }),
+      getFailedCount: jest.fn().mockResolvedValue(0),
+      getJobs: jest.fn().mockResolvedValue([]),
+      getJob: jest.fn().mockResolvedValue(null),
     })),
     Worker: jest.fn().mockImplementation(() => ({
       on: jest.fn(),
@@ -35,6 +47,21 @@ describe('NotificationQueue', () => {
     sendCommentNotification: jest.fn(),
   };
 
+  const mockAppLogger = {
+    incrementCounter: jest.fn(),
+    setGauge: jest.fn(),
+    observeTimer: jest.fn(),
+    getMetricsSnapshot: jest.fn().mockReturnValue({
+      counters: [],
+      gauges: [],
+      timers: [],
+    }),
+  };
+
+  const mockAuditLogService = {
+    logNotificationDlqReplay: jest.fn(),
+  };
+
   const mockConfession: any = {
     id: '123',
     message: 'Test confession',
@@ -59,6 +86,14 @@ describe('NotificationQueue', () => {
         {
           provide: EmailService,
           useValue: mockEmailService,
+        },
+        {
+          provide: AppLogger,
+          useValue: mockAppLogger,
+        },
+        {
+          provide: AuditLogService,
+          useValue: mockAuditLogService,
         },
       ],
     }).compile();
