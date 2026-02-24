@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AppService } from './app.service';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -7,6 +7,10 @@ import {
   HealthCheckService,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
+import { RedisHealthIndicator } from './health/redis.health';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { AdminGuard } from './auth/admin.guard';
+import { NotificationQueue } from './notification/notification.queue';
 // import { RedisHealthIndicator } from './health/redis.health';
 
 @ApiTags('App')
@@ -16,6 +20,9 @@ export class AppController {
     private readonly appService: AppService,
     private health: HealthCheckService,
     private db: TypeOrmHealthIndicator,
+    private redis: RedisHealthIndicator,
+    private readonly notificationQueue: NotificationQueue,
+  ) {}
     // private redis: RedisHealthIndicator,
   ) { }
 
@@ -45,5 +52,16 @@ export class AppController {
       async () => this.db.pingCheck('database'),
       // async () => this.redis.isHealthy('redis'),
     ]);
+  }
+
+  @Get('diagnostics/notifications')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiOperation({ summary: 'Notification delivery metrics and queue health diagnostics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns queue depth, DLQ depth, counters, and timer metrics for notification processing',
+  })
+  async getNotificationDiagnostics() {
+    return this.notificationQueue.getDiagnostics();
   }
 }

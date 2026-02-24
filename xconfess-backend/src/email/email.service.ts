@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 import { MailConfig } from '../config/email.config';
+import { AppLogger } from '../logger/logger.service';
 
 @Injectable()
 export class EmailService implements OnModuleInit {
@@ -9,7 +10,10 @@ export class EmailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
   private from: string;
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    @Optional() private readonly appLogger?: AppLogger,
+  ) {}
 
   onModuleInit() {
     const mailConfig = this.configService.get<MailConfig>('mail');
@@ -44,9 +48,21 @@ export class EmailService implements OnModuleInit {
     }
   }
 
-  private async sendEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+    channel = 'email_generic',
+  ): Promise<void> {
+    const startedAt = Date.now();
     if (!this.transporter) {
       this.logger.warn('Email transporter not initialized yet. Email not sent.');
+      this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
+        channel,
+        outcome: 'terminal',
+        reason: 'transporter_not_initialized',
+      });
       return;
     }
 
@@ -66,9 +82,26 @@ export class EmailService implements OnModuleInit {
       }
       
       this.logger.log(`Email sent to ${to}: ${info.messageId}`);
+      this.appLogger?.incrementCounter('notification_send_success_total', 1, {
+        channel,
+      });
+      this.appLogger?.observeTimer(
+        'notification_send_duration_ms',
+        Date.now() - startedAt,
+        { channel },
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send email to ${to}: ${errorMessage}`);
+      this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
+        channel,
+        outcome: 'transient',
+      });
+      this.appLogger?.observeTimer(
+        'notification_send_duration_ms',
+        Date.now() - startedAt,
+        { channel },
+      );
       throw new Error(`Failed to send email: ${errorMessage}`);
     }
   }
@@ -78,7 +111,7 @@ export class EmailService implements OnModuleInit {
     const html = this.generateWelcomeEmailTemplate(username);
     const text = this.generateWelcomeEmailText(username);
     
-    await this.sendEmail(email, subject, html, text);
+    await this.sendEmail(email, subject, html, text, 'email_welcome');
   }
 
   async sendReactionNotification(
@@ -92,7 +125,7 @@ export class EmailService implements OnModuleInit {
     const html = this.generateReactionEmailTemplate(username, reactorName, confessionContent, emoji);
     const text = this.generateReactionEmailText(username, reactorName, confessionContent, emoji);
     
-    await this.sendEmail(toEmail, subject, html, text);
+    await this.sendEmail(toEmail, subject, html, text, 'email_reaction');
   }
 
   async sendPasswordResetEmail(email: string, token: string, username?: string): Promise<void> {
@@ -101,7 +134,7 @@ export class EmailService implements OnModuleInit {
     const html = this.generateResetEmailTemplate(username || 'User', resetUrl, token);
     const text = this.generateResetEmailText(username || 'User', resetUrl);
     
-    await this.sendEmail(email, subject, html, text);
+    await this.sendEmail(email, subject, html, text, 'email_password_reset');
   }
 
   async sendCommentNotification(data: {
@@ -122,7 +155,7 @@ export class EmailService implements OnModuleInit {
       </a>
     `;
 
-    await this.sendEmail(to, subject, html, '');
+    await this.sendEmail(to, subject, html, '', 'email_comment_notification');
   }
 
   private generateWelcomeEmailTemplate(username: string): string {

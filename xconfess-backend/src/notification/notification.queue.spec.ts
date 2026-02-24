@@ -2,18 +2,24 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { NotificationQueue } from './notification.queue';
-import { RecipientResolver } from './recipient-resolver.service';
-
-const addMock = jest.fn();
-const closeQueueMock = jest.fn();
-const closeWorkerMock = jest.fn();
-const onWorkerMock = jest.fn();
+import { AppLogger } from '../logger/logger.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 jest.mock('bullmq', () => {
   return {
     Queue: jest.fn().mockImplementation(() => ({
-      add: addMock,
-      close: closeQueueMock,
+      add: jest.fn(),
+      close: jest.fn(),
+      getJobCounts: jest.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        delayed: 0,
+        failed: 0,
+        completed: 0,
+      }),
+      getFailedCount: jest.fn().mockResolvedValue(0),
+      getJobs: jest.fn().mockResolvedValue([]),
+      getJob: jest.fn().mockResolvedValue(null),
     })),
     Worker: jest.fn().mockImplementation(() => ({
       on: onWorkerMock,
@@ -37,8 +43,32 @@ describe('NotificationQueue', () => {
     sendCommentNotification: jest.fn(),
   };
 
-  const mockRecipientResolver = {
-    resolveRecipient: jest.fn(),
+  const mockAppLogger = {
+    incrementCounter: jest.fn(),
+    setGauge: jest.fn(),
+    observeTimer: jest.fn(),
+    getMetricsSnapshot: jest.fn().mockReturnValue({
+      counters: [],
+      gauges: [],
+      timers: [],
+    }),
+  };
+
+  const mockAuditLogService = {
+    logNotificationDlqReplay: jest.fn(),
+  };
+
+  const mockConfession: any = {
+    id: '123',
+    message: 'Test confession',
+    created_at: new Date(),
+  };
+
+  const mockComment: any = {
+    id: 1,
+    content: 'Test comment',
+    createdAt: new Date(),
+    confession: mockConfession,
   };
 
   beforeEach(async () => {
@@ -56,8 +86,12 @@ describe('NotificationQueue', () => {
           useValue: mockEmailService,
         },
         {
-          provide: RecipientResolver,
-          useValue: mockRecipientResolver,
+          provide: AppLogger,
+          useValue: mockAppLogger,
+        },
+        {
+          provide: AuditLogService,
+          useValue: mockAuditLogService,
         },
       ],
     }).compile();
@@ -106,4 +140,4 @@ describe('NotificationQueue', () => {
       }),
     );
   });
-});
+}); 

@@ -11,8 +11,11 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('User is not authenticated');
     }
 
+    const userRole = String(request.user.role || '').toLowerCase();
+    const isAdmin = userRole === UserRole.ADMIN || userRole === 'admin';
+
     // Check if user has admin role
-    if (request.user.role !== UserRole.ADMIN) {
+    if (!isAdmin) {
       throw new ForbiddenException('Only admins can access this endpoint');
     }
 
