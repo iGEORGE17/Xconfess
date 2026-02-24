@@ -6,6 +6,9 @@ import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Comment } from '../comment/entities/comment.entity';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { rateLimitConfig } from '../config/rate-limit.config';
+import * as crypto from 'crypto';
+import Redis from 'ioredis';
 
 export interface CommentNotificationPayload {
   confession: AnonymousConfession;
@@ -50,11 +53,25 @@ export interface ReplayResult {
   }>;
 }
 
+/**
+ * Fields used to construct the idempotency key.
+ * Only stable, non-sensitive identifiers — never email addresses or content.
+ */
+interface IdempotencyFields {
+  eventType: string; // e.g. 'comment-notification'
+  recipientEmail: string;
+  entityId: string; // confession ID
+}
+
+const DEDUPE_KEY_PREFIX = 'notif:dedupe:';
+
 @Injectable()
 export class NotificationQueue implements OnModuleDestroy {
   private readonly queueName = 'comment-notifications';
-  private readonly queue: Queue;
-  private readonly worker: Worker;
+  private queue: Queue;
+  private worker: Worker;
+  private redisClient: Redis;
+  private readonly dedupeTtl: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -62,14 +79,20 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
   ) {
+    this.dedupeTtl = rateLimitConfig.notification.dedupeTtlSeconds;
     this.initializeWorkers();
   }
 
   private initializeWorkers() {
     const redisConfig = {
       host: this.configService.get('REDIS_HOST', 'localhost'),
-      port: this.configService.get('REDIS_PORT', 6379),
+      port: this.configService.get<number>('REDIS_PORT', 6379),
     };
+
+    // Dedicated ioredis client for idempotency key management.
+    // Kept separate from BullMQ's internal connection so Bull's
+    // subscribe/blocking commands don't interfere.
+    this.redisClient = new Redis(redisConfig);
 
     this.queue = new Queue(this.queueName, {
       connection: redisConfig,
@@ -80,7 +103,7 @@ export class NotificationQueue implements OnModuleDestroy {
       async (job: Job<CommentNotificationPayload>) => {
         const channel = this.getChannel(job.data);
         const startedAt = Date.now();
-        await this.processNotification(job.data);
+        await this.processCommentNotification(job.data);
 
         this.appLogger.observeTimer(
           'notification_job_processing_duration_ms',
@@ -92,7 +115,10 @@ export class NotificationQueue implements OnModuleDestroy {
     );
 
     this.worker.on('completed', (job) => {
-      console.log(`Job ${job.id} completed successfully`);
+      this.appLogger.log(
+        `Job ${job.id} completed successfully`,
+        'NotificationQueue',
+      );
       this.appLogger.incrementCounter('notification_job_completed_total', 1, {
         channel: this.getChannel(job.data as CommentNotificationPayload),
         queue: this.queueName,
@@ -101,11 +127,13 @@ export class NotificationQueue implements OnModuleDestroy {
     });
 
     this.worker.on('failed', (job, error) => {
-      console.error(`Job ${job?.id} failed:`, error);
+      this.appLogger.error(
+        `Job ${job?.id} failed: ${error.message}`,
+        undefined,
+        'NotificationQueue',
+      );
 
-      if (!job) {
-        return;
-      }
+      if (!job) return;
 
       const channel = this.getChannel(job.data as CommentNotificationPayload);
       const attemptsMade = job.attemptsMade ?? 0;
@@ -122,25 +150,93 @@ export class NotificationQueue implements OnModuleDestroy {
         this.appLogger.incrementCounter('notification_retry_attempt_total', 1, {
           channel,
           queue: this.queueName,
-          attempt: attemptsMade,
+          attempt: String(attemptsMade),
         });
       }
 
       this.updateQueueDepthMetrics().catch(() => undefined);
     });
+  }
 
-    // Store queues and workers for cleanup
-    (this as any).commentQueue = commentQueue;
-    (this as any).commentWorker = commentWorker;
+  // ---------------------------------------------------------------------------
+  // Idempotency helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build a deterministic, opaque idempotency key from stable, non-sensitive
+   * fields. The SHA-256 hash means the Redis key never exposes user data.
+   *
+   * Key space: eventType + recipientEmail + confessionId
+   * Collision probability across the TTL window is negligible for this scale.
+   */
+  buildIdempotencyKey(fields: IdempotencyFields): string {
+    const raw = `${fields.eventType}:${fields.recipientEmail}:${fields.entityId}`;
+    const hash = crypto.createHash('sha256').update(raw).digest('hex');
+    return `${DEDUPE_KEY_PREFIX}${hash}`;
   }
 
   /**
-   * Enqueue a comment notification for processing.
-   * 
-   * @param payload - Contains confession, comment, and recipient user ID
+   * Attempt to claim the idempotency slot for this notification.
+   *
+   * Uses Redis SET NX EX — atomic: only one caller can set the key; all
+   * concurrent callers racing on the same key will get null back.
+   *
+   * Returns true if the slot was claimed (caller should enqueue).
+   * Returns false if a duplicate was detected (caller should skip).
    */
-  async enqueueCommentNotification(payload: CommentNotificationPayload): Promise<void> {
+  private async claimIdempotencySlot(key: string): Promise<boolean> {
+    const result = await this.redisClient.set(
+      key,
+      '1',
+      'EX',
+      this.dedupeTtl,
+      'NX',
+    );
+    return result === 'OK';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public enqueue API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enqueue a comment notification for processing.
+   *
+   * Idempotency guarantee: duplicate calls with the same confession ID,
+   * recipient email, and event type within the dedupe TTL window will be
+   * collapsed — only the first call results in a queued job.
+   */
+  async enqueueCommentNotification(
+    payload: CommentNotificationPayload,
+  ): Promise<void> {
     const channel = this.getChannel(payload);
+
+    const idempotencyFields: IdempotencyFields = {
+      eventType: 'comment-notification',
+      recipientEmail: payload.recipientEmail,
+      entityId: String(payload.confession?.id ?? ''),
+    };
+
+    const idempotencyKey = this.buildIdempotencyKey(idempotencyFields);
+    const claimed = await this.claimIdempotencySlot(idempotencyKey);
+
+    if (!claimed) {
+      // Duplicate detected — log for debugging without exposing payload data
+      this.appLogger.warn(
+        'Duplicate notification enqueue suppressed (idempotency)',
+        'NotificationQueue',
+      );
+      this.appLogger.incrementCounter(
+        'notification_dedupe_suppressed_total',
+        1,
+        {
+          channel,
+          queue: this.queueName,
+        },
+      );
+      return;
+    }
+
     this.appLogger.incrementCounter('notification_enqueued_total', 1, {
       channel,
       queue: this.queueName,
@@ -157,63 +253,62 @@ export class NotificationQueue implements OnModuleDestroy {
     await this.updateQueueDepthMetrics();
   }
 
-  /**
-   * Process a comment notification.
-   * Resolves recipient email and sends notification if available.
-   */
-  private async processCommentNotification(payload: CommentNotificationPayload): Promise<void> {
-    const { confession, comment, recipientUserId } = payload;
-    
-    const logContext = {
-      service: 'NotificationQueue',
-      action: 'processCommentNotification',
-      confessionId: confession?.id,
-      commentId: comment?.id,
-      recipientUserId,
-      timestamp: new Date().toISOString(),
-    };
+  // ---------------------------------------------------------------------------
+  // Private processing
+  // ---------------------------------------------------------------------------
 
-    this.logger.debug('Processing comment notification', logContext);
+  private async processCommentNotification(
+    payload: CommentNotificationPayload,
+  ): Promise<void> {
+    const { confession, comment, recipientEmail } = payload;
 
-    // Resolve recipient email using the centralized helper
-    const recipient = await this.recipientResolver.resolveRecipient(recipientUserId);
+    const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
 
-    // Handle missing recipient gracefully
-    if (!recipient.canNotify) {
-      this.logger.warn(`Skipping comment notification: ${recipient.reason}`, {
-        ...logContext,
-        reason: recipient.reason,
-        userId: recipientUserId,
-      });
-      // Non-fatal - don't throw error, just skip
+    this.appLogger.debug(
+      `Processing comment notification [${logContext}]`,
+      'NotificationQueue',
+    );
+
+    if (!recipientEmail) {
+      this.appLogger.warn(
+        `Skipping comment notification: no recipient email [${logContext}]`,
+        'NotificationQueue',
+      );
       return;
     }
 
-    // Create an anonymized preview of the comment
     const commentPreview = this.createAnonymizedPreview(comment.content);
 
-    // Send email notification
     try {
       await this.emailService.sendCommentNotification({
-        to: recipient.email!,
+        to: recipientEmail,
         confessionId: confession.id,
         commentPreview,
       });
 
-      this.logger.log(`Comment notification sent to user ${recipientUserId}`, {
-        ...logContext,
-        email: this.maskEmail(recipient.email!),
+      this.appLogger.log(
+        `Comment notification sent [${logContext}]`,
+        'NotificationQueue',
+      );
+      this.appLogger.incrementCounter('notification_send_success_total', 1, {
+        channel: this.getChannel(payload),
+        queue: this.queueName,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to send comment notification: ${errorMessage}`, {
-        ...logContext,
-        error: errorMessage,
-      });
-      // Re-throw to trigger BullMQ retry mechanism
-      throw error;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.appLogger.error(
+        `Failed to send comment notification: ${errorMessage} [${logContext}]`,
+        undefined,
+        'NotificationQueue',
+      );
+      throw error; // re-throw to trigger BullMQ retry
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
 
   private getChannel(payload: CommentNotificationPayload): string {
     return payload.channel || 'email_comment_notification';
@@ -221,20 +316,29 @@ export class NotificationQueue implements OnModuleDestroy {
 
   private createAnonymizedPreview(content: string): string {
     const maxLength = 100;
-    const preview = content.length > maxLength
+    return content.length > maxLength
       ? `${content.substring(0, maxLength)}...`
       : content;
-
-    return preview;
   }
+
+  // ---------------------------------------------------------------------------
+  // DLQ / Admin
+  // ---------------------------------------------------------------------------
 
   async getDiagnostics() {
     const [counts, failedCount] = await Promise.all([
-      this.queue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed'),
+      this.queue.getJobCounts(
+        'waiting',
+        'active',
+        'delayed',
+        'failed',
+        'completed',
+      ),
       this.queue.getFailedCount(),
     ]);
 
-    const queueDepth = (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
+    const queueDepth =
+      (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
     const dlqDepth = failedCount || counts.failed || 0;
 
     this.appLogger.setGauge('notification_queue_depth', queueDepth, {
@@ -266,15 +370,12 @@ export class NotificationQueue implements OnModuleDestroy {
           labels: ['channel', 'queue', 'attempt'],
         },
         {
-          name: 'notification_queue_depth',
-          type: 'gauge',
-          labels: ['queue'],
+          name: 'notification_dedupe_suppressed_total',
+          type: 'counter',
+          labels: ['channel', 'queue'],
         },
-        {
-          name: 'notification_dlq_depth',
-          type: 'gauge',
-          labels: ['queue'],
-        },
+        { name: 'notification_queue_depth', type: 'gauge', labels: ['queue'] },
+        { name: 'notification_dlq_depth', type: 'gauge', labels: ['queue'] },
       ],
       labels: {
         channel: [
@@ -291,37 +392,45 @@ export class NotificationQueue implements OnModuleDestroy {
     };
   }
 
-  async listDlqJobs(page = 1, limit = 20, filter?: DlqJobFilter): Promise<DlqListResult> {
+  async listDlqJobs(
+    page = 1,
+    limit = 20,
+    filter?: DlqJobFilter,
+  ): Promise<DlqListResult> {
     const safePage = Math.max(1, page);
     const safeLimit = Math.max(1, Math.min(limit, 100));
 
     const failedJobs = await this.queue.getJobs(['failed'], 0, -1, false);
+
     const filteredJobs = failedJobs.filter((job) => {
       const failedAt = job.finishedOn ? new Date(job.finishedOn) : null;
-      const failedAfter = filter?.failedAfter ? new Date(filter.failedAfter) : null;
-      const failedBefore = filter?.failedBefore ? new Date(filter.failedBefore) : null;
+      const failedAfter = filter?.failedAfter
+        ? new Date(filter.failedAfter)
+        : null;
+      const failedBefore = filter?.failedBefore
+        ? new Date(filter.failedBefore)
+        : null;
       const search = filter?.search?.toLowerCase()?.trim();
       const serializedPayload = JSON.stringify(job.data ?? {}).toLowerCase();
       const failedReason = (job.failedReason ?? '').toLowerCase();
 
-      if (failedAfter && failedAt && failedAt < failedAfter) {
+      if (failedAfter && failedAt && failedAt < failedAfter) return false;
+      if (failedBefore && failedAt && failedAt > failedBefore) return false;
+      if (
+        search &&
+        !serializedPayload.includes(search) &&
+        !failedReason.includes(search)
+      )
         return false;
-      }
-
-      if (failedBefore && failedAt && failedAt > failedBefore) {
-        return false;
-      }
-
-      if (search && !serializedPayload.includes(search) && !failedReason.includes(search)) {
-        return false;
-      }
 
       return true;
     });
 
     const total = filteredJobs.length;
     const start = (safePage - 1) * safeLimit;
-    const jobs = filteredJobs.slice(start, start + safeLimit).map((job) => this.toDlqJobView(job));
+    const jobs = filteredJobs
+      .slice(start, start + safeLimit)
+      .map((job) => this.toDlqJobView(job));
 
     return { jobs, total, page: safePage, limit: safeLimit };
   }
@@ -332,10 +441,7 @@ export class NotificationQueue implements OnModuleDestroy {
     reason?: string,
   ): Promise<{ id: string; status: 'replayed'; enqueuedAt: string }> {
     const job = await this.queue.getJob(jobId);
-
-    if (!job) {
-      throw new Error(`DLQ job ${jobId} was not found`);
-    }
+    if (!job) throw new Error(`DLQ job ${jobId} was not found`);
 
     await job.retry();
     await this.updateQueueDepthMetrics();
@@ -389,7 +495,11 @@ export class NotificationQueue implements OnModuleDestroy {
 
       if (!queuedJob) {
         result.failed += 1;
-        result.details.push({ id: job.id, status: 'failed', reason: 'Job not found' });
+        result.details.push({
+          id: job.id,
+          status: 'failed',
+          reason: 'Job not found',
+        });
         continue;
       }
 
@@ -398,9 +508,14 @@ export class NotificationQueue implements OnModuleDestroy {
         result.replayed += 1;
         result.details.push({ id: job.id, status: 'replayed' });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown replay error';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown replay error';
         result.failed += 1;
-        result.details.push({ id: job.id, status: 'failed', reason: errorMessage });
+        result.details.push({
+          id: job.id,
+          status: 'failed',
+          reason: errorMessage,
+        });
       }
     }
 
@@ -424,17 +539,19 @@ export class NotificationQueue implements OnModuleDestroy {
       replayedAt: new Date().toISOString(),
     });
 
-    this.appLogger.incrementCounter('notification_dlq_replay_total', result.replayed, {
-      queue: this.queueName,
-      mode: 'bulk',
-    });
+    this.appLogger.incrementCounter(
+      'notification_dlq_replay_total',
+      result.replayed,
+      {
+        queue: this.queueName,
+        mode: 'bulk',
+      },
+    );
 
     return result;
   }
 
   private toDlqJobView(job: Job<CommentNotificationPayload>): DlqJobView {
-    const channel = this.getChannel(job.data as CommentNotificationPayload);
-
     return {
       id: String(job.id),
       name: job.name,
@@ -443,14 +560,20 @@ export class NotificationQueue implements OnModuleDestroy {
       failedReason: job.failedReason ?? null,
       failedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
       createdAt: job.timestamp ? new Date(job.timestamp).toISOString() : null,
-      channel,
+      channel: this.getChannel(job.data as CommentNotificationPayload),
       recipientEmail: job.data?.recipientEmail,
     };
   }
 
   private async updateQueueDepthMetrics(): Promise<void> {
-    const counts = await this.queue.getJobCounts('waiting', 'active', 'delayed', 'failed');
-    const queueDepth = (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
+    const counts = await this.queue.getJobCounts(
+      'waiting',
+      'active',
+      'delayed',
+      'failed',
+    );
+    const queueDepth =
+      (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
     const dlqDepth = counts.failed || 0;
 
     this.appLogger.setGauge('notification_queue_depth', queueDepth, {
@@ -462,12 +585,12 @@ export class NotificationQueue implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    const commentQueue = (this as any).commentQueue as Queue;
-    const commentWorker = (this as any).commentWorker as Worker;
-    
-    if (commentQueue) await commentQueue.close();
-    if (commentWorker) await commentWorker.close();
-    
-    this.logger.log('NotificationQueue shutdown complete');
+    await this.queue.close();
+    await this.worker.close();
+    await this.redisClient.quit();
+    this.appLogger.log(
+      'NotificationQueue shutdown complete',
+      'NotificationQueue',
+    );
   }
 }
