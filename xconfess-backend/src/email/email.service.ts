@@ -8,25 +8,36 @@ import {
   CircuitBreakerConfig,
   EmailProviderConfig,
   MailConfig,
-  EmailTemplateRegistry,
   EmailTemplateVersion,
+<<<<<<< HEAD
+  TemplateRegistry,
+  TemplateRolloutMap,
+  resolveTemplate,
+} from './email.config';
+import { UserIdMasker } from 'src/utils/mask-user-id';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
+import { AuditActionType } from 'src/audit-log/audit-log.entity';
+import { audit } from 'rxjs';
+
+// ── Template rendering ────────────────────────────────────────────────────────
+
+=======
 } from '../config/email.config';
 // Helper: Render template with variable validation
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
 function renderTemplate(
   template: EmailTemplateVersion,
-  vars: Record<string, string>
+  vars: Record<string, string>,
 ): { subject: string; html: string; text: string } {
-  // Validate required variables
   for (const key of template.requiredVars) {
     if (!(key in vars)) {
       throw new Error(
-        `Missing required template variable: ${key} (template: ${template.version})`
+        `Missing required template variable: ${key} (template: ${template.version})`,
       );
     }
   }
-  // Simple variable replacement
   const replaceVars = (str: string) =>
-    str.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k) => vars[k] || '');
+    str.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k) => vars[k] ?? '');
   return {
     subject: replaceVars(template.subject),
     html: replaceVars(template.html),
@@ -34,7 +45,11 @@ function renderTemplate(
   };
 }
 
+<<<<<<< HEAD
+// ── Circuit breaker types ─────────────────────────────────────────────────────
+=======
 // ── Circuit breaker states ────────────────────────────────────────────────────
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
 
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
@@ -42,11 +57,9 @@ interface CircuitBreakerState {
   state: CircuitState;
   consecutiveFailures: number;
   consecutiveProbeSuccesses: number;
-  openedAt: number | null; // epoch ms when circuit opened
+  openedAt: number | null;
   lastTransitionReason: string;
 }
-
-// ── Provider abstraction ──────────────────────────────────────────────────────
 
 interface MailSendOptions {
   from: string;
@@ -60,6 +73,14 @@ interface TransporterEntry {
   transporter: nodemailer.Transporter;
   from: string;
   label: 'primary' | 'fallback';
+}
+
+// ── Template meta attached to each send ──────────────────────────────────────
+
+export interface TemplateMeta {
+  templateKey: string;
+  templateVersion: string;
+  isCanary: boolean;
 }
 
 @Injectable()
@@ -83,10 +104,22 @@ export class EmailService implements OnModuleInit {
     probeSuccessThreshold: 2,
   };
 
+  /**
+   * Template registry and rollout map.
+   * Inject via module providers so operators can update rollout policies
+   * without redeploying (e.g. from a database or config service).
+   */
+  private templateRegistry: TemplateRegistry = {};
+  private rolloutMap: TemplateRolloutMap = {};
+
   constructor(
     private readonly configService: ConfigService,
     private readonly auditLogService: AuditLogService,
     @Optional() private readonly appLogger?: AppLogger,
+<<<<<<< HEAD
+    @Optional() private readonly auditLogService?: AuditLogService,
+  ) {}
+=======
   ) { }
 
   // ── Template Management ──────────────────────────────────────────────────────
@@ -215,17 +248,24 @@ export class EmailService implements OnModuleInit {
 
     return undefined;
   }
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   onModuleInit() {
     const mailConfig = this.configService.get<EmailProviderConfig>('mail');
     const cbConfig =
       this.configService.get<CircuitBreakerConfig>('circuitBreaker');
 
-    if (cbConfig) {
-      this.cbConfig = cbConfig;
-    }
+    if (cbConfig) this.cbConfig = cbConfig;
+
+    // Load template registry and rollout map from config if provided
+    const registry =
+      this.configService.get<TemplateRegistry>('templateRegistry');
+    const rollout =
+      this.configService.get<TemplateRolloutMap>('templateRolloutMap');
+    if (registry) this.templateRegistry = registry;
+    if (rollout) this.rolloutMap = rollout;
 
     if (!mailConfig?.primary?.host) {
       this.logger.warn(
@@ -246,6 +286,112 @@ export class EmailService implements OnModuleInit {
       );
     }
   }
+
+  // ── Rollout policy management ─────────────────────────────────────────────
+
+  /**
+   * Operators call this to update rollout policies at runtime without
+   * restarting the service. Safe to call from an admin endpoint.
+   */
+  updateRolloutMap(updates: TemplateRolloutMap): void {
+    this.rolloutMap = { ...this.rolloutMap, ...updates };
+    this.logger.log(
+      `Template rollout map updated: ${JSON.stringify(
+        Object.entries(updates).map(([k, v]) => ({
+          key: k,
+          active: v.activeVersion,
+          canary: v.canaryVersion,
+          pct: v.canaryPercent ?? 0,
+        })),
+      )}`,
+    );
+  }
+
+  /**
+   * Convenience: promote canary to active and clear canary fields.
+   */
+  promoteCanary(templateKey: string): void {
+    const policy = this.rolloutMap[templateKey];
+
+    if (!policy?.canaryVersion) {
+      this.logger.warn(`No canary configured for ${templateKey}`);
+      return;
+    }
+
+    this.rolloutMap[templateKey] = {
+      activeVersion: policy.canaryVersion,
+    };
+
+    this.auditLogService?.log({
+      actionType: AuditActionType.EMAIL_TEMPLATE_PROMOTED,
+      metadata: {
+        templateKey,
+        newActiveVersion: policy.canaryVersion,
+        promotedAt: new Date().toISOString(),
+      },
+    });
+
+    this.logger.log(
+      `Template '${templateKey}' promoted to ${policy.canaryVersion}`,
+    );
+  }
+
+  /**
+   * Rollback: clear canary from policy, all traffic returns to activeVersion.
+   */
+  rollbackCanary(templateKey: string): void {
+    const policy = this.rolloutMap[templateKey];
+    if (!policy) return;
+
+    this.rolloutMap[templateKey] = {
+      activeVersion: policy.activeVersion,
+    };
+
+    this.auditLogService?.log({
+      actionType: AuditActionType.EMAIL_TEMPLATE_ROLLED_BACK,
+      metadata: {
+        templateKey,
+        activeVersion: policy.activeVersion,
+        rolledBackAt: new Date().toISOString(),
+      },
+    });
+
+    this.logger.warn(`Canary rolled back for ${templateKey}`);
+  }
+
+  getRolloutMap(): Readonly<TemplateRolloutMap> {
+    return this.rolloutMap;
+  }
+
+  // ── Template resolution ───────────────────────────────────────────────────
+
+  /**
+   * Resolve and render a template for a specific recipient.
+   * Returns rendered content plus version metadata for audit/metrics.
+   */
+  resolveAndRender(
+    templateKey: string,
+    recipientEmail: string,
+    vars: Record<string, string>,
+  ): { subject: string; html: string; text: string; meta: TemplateMeta } {
+    const { template, isCanary } = resolveTemplate(
+      this.templateRegistry,
+      this.rolloutMap,
+      templateKey,
+      recipientEmail,
+    );
+    const rendered = renderTemplate(template, vars);
+    return {
+      ...rendered,
+      meta: {
+        templateKey,
+        templateVersion: template.version,
+        isCanary,
+      },
+    };
+  }
+
+  // ── Provider helpers ──────────────────────────────────────────────────────
 
   private buildTransporter(
     config: MailConfig,
@@ -281,42 +427,24 @@ export class EmailService implements OnModuleInit {
     });
   }
 
-  // ── Circuit breaker logic ────────────────────────────────────────────────────
+  // ── Circuit breaker ───────────────────────────────────────────────────────
 
-  /**
-   * Decide which provider to use for this send attempt.
-   * Returns null if circuit is OPEN and still in cooldown with no fallback.
-   */
   private resolveProvider(): TransporterEntry | null {
     const { state, openedAt } = this.cb;
     const { cooldownSeconds } = this.cbConfig;
 
-    if (state === 'CLOSED') {
-      return this.primary;
-    }
+    if (state === 'CLOSED') return this.primary;
 
     if (state === 'OPEN') {
-      const cooldownMs = cooldownSeconds * 1000;
       const elapsed = Date.now() - (openedAt ?? 0);
-
-      if (elapsed >= cooldownMs) {
-        // Cooldown complete — allow a probe attempt through primary
+      if (elapsed >= cooldownSeconds * 1000) {
         this.transitionTo('HALF_OPEN', 'cooldown_elapsed');
         return this.primary;
       }
-
-      // Still in cooldown — route to fallback if available
-      if (this.fallback) {
-        return this.fallback;
-      }
-
-      return null; // No fallback; caller will throw
+      return this.fallback ?? null;
     }
 
-    if (state === 'HALF_OPEN') {
-      // Always probe primary during HALF_OPEN
-      return this.primary;
-    }
+    if (state === 'HALF_OPEN') return this.primary;
 
     return this.primary;
   }
@@ -324,7 +452,6 @@ export class EmailService implements OnModuleInit {
   private onSendSuccess(provider: TransporterEntry): void {
     if (this.cb.state === 'HALF_OPEN') {
       this.cb.consecutiveProbeSuccesses += 1;
-
       if (
         this.cb.consecutiveProbeSuccesses >= this.cbConfig.probeSuccessThreshold
       ) {
@@ -336,20 +463,17 @@ export class EmailService implements OnModuleInit {
         this.cb.consecutiveProbeSuccesses = 0;
       }
     } else if (this.cb.state === 'CLOSED') {
-      // Reset failure counter on any success while closed
       this.cb.consecutiveFailures = 0;
     }
   }
 
   private onSendFailure(provider: TransporterEntry, error: Error): void {
     if (provider.label === 'fallback') {
-      // Fallback failures don't affect primary circuit state
       this.logger.error(`Fallback provider failed: ${error.message}`);
       return;
     }
 
     if (this.cb.state === 'HALF_OPEN') {
-      // Probe failed — re-open the circuit immediately
       this.cb.consecutiveProbeSuccesses = 0;
       this.transitionTo('OPEN', `probe_failed error=${error.message}`);
       this.cb.openedAt = Date.now();
@@ -358,7 +482,6 @@ export class EmailService implements OnModuleInit {
 
     if (this.cb.state === 'CLOSED') {
       this.cb.consecutiveFailures += 1;
-
       if (this.cb.consecutiveFailures >= this.cbConfig.failureThreshold) {
         this.cb.openedAt = Date.now();
         this.transitionTo(
@@ -373,9 +496,7 @@ export class EmailService implements OnModuleInit {
     const prev = this.cb.state;
     this.cb.state = next;
     this.cb.lastTransitionReason = reason;
-
     const msg = `Circuit breaker transition: ${prev} → ${next} | reason=${reason}`;
-
     if (next === 'OPEN') {
       this.logger.error(msg);
       this.appLogger?.incrementCounter('email_circuit_breaker_opened_total', 1);
@@ -387,7 +508,7 @@ export class EmailService implements OnModuleInit {
     }
   }
 
-  // ── Core send ────────────────────────────────────────────────────────────────
+  // ── Core send ─────────────────────────────────────────────────────────────
 
   private async sendEmail(
     to: string,
@@ -395,52 +516,22 @@ export class EmailService implements OnModuleInit {
     html: string,
     text: string,
     channel = 'email_generic',
-    templateMeta?: { templateKey: string; templateVersion: string },
+    templateMeta?: TemplateMeta,
   ): Promise<void> {
     const startedAt = Date.now();
     const provider = this.resolveProvider();
 
+    const versionLabel = templateMeta
+      ? `${templateMeta.templateKey}@${templateMeta.templateVersion}${
+          templateMeta.isCanary ? '[canary]' : ''
+        }`
+      : undefined;
+
     if (!provider) {
-      const reason = 'circuit_open_no_fallback';
-      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
-      this.logger.error(
-        `Email blocked — circuit OPEN, no fallback. to=${maskedTo} channel=${channel}`,
-      );
-      this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'terminal',
-        reason,
-      });
-      throw new Error(`Email service unavailable: ${reason}`);
-    }
-
-    if (!provider.transporter) {
-      this.logger.warn(
-        'Email transporter not initialized yet. Email not sent.',
-      );
-      this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'terminal',
-        reason: 'transporter_not_initialized',
-      });
-      return;
-    }
-
-    const usingFallback = provider.label === 'fallback';
-    if (usingFallback) {
-      this.logger.warn(
-        `Routing email via fallback provider | channel=${channel} circuit_state=${this.cb.state}`,
-      );
-      this.appLogger?.incrementCounter('email_fallback_send_total', 1, {
-        channel,
-      });
+      throw new Error('Email service unavailable (circuit open)');
     }
 
     try {
-      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
-      const maskedSubject = UserIdMasker.maskObject({ msg: subject }).msg;
-      const maskedHtml = UserIdMasker.maskObject({ msg: html }).msg;
-      const maskedText = UserIdMasker.maskObject({ msg: text }).msg;
       const info = await provider.transporter.sendMail({
         from: provider.from,
         to,
@@ -449,37 +540,47 @@ export class EmailService implements OnModuleInit {
         text,
       });
 
-      if (process.env.NODE_ENV !== 'production') {
-        this.logger.debug(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-      }
-
-      this.logger.log(
-        `Email sent via ${provider.label} to ${maskedTo}: ${info.messageId} | channel=${channel}` +
-        (templateMeta ? ` | template=${templateMeta.templateKey}@${templateMeta.templateVersion}` : ''),
-      );
-
       this.onSendSuccess(provider);
 
+      // ---- METRICS ----
       this.appLogger?.incrementCounter('notification_send_success_total', 1, {
         channel,
         provider: provider.label,
+        ...(templateMeta && {
+          template_key: templateMeta.templateKey,
+          template_version: templateMeta.templateVersion,
+          is_canary: String(templateMeta.isCanary),
+        }),
       });
+
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: provider.label,
-        },
+        { channel, provider: provider.label },
+      );
+
+      // ---- AUDIT ----
+      if (templateMeta) {
+        await this.auditLogService?.log({
+          actionType: AuditActionType.EMAIL_TEMPLATE_DELIVERED,
+          metadata: {
+            templateKey: templateMeta.templateKey,
+            templateVersion: templateMeta.templateVersion,
+            isCanary: templateMeta.isCanary,
+            provider: provider.label,
+            channel,
+            deliveredAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      this.logger.log(
+        `Email sent via ${provider.label} to ${to} | channel=${channel}` +
+          (versionLabel ? ` | template=${versionLabel}` : ''),
       );
     } catch (error) {
-      const maskedTo = UserIdMasker.maskObject({ email: to }).email;
       const errorMessage =
-        error instanceof Error ? UserIdMasker.maskObject({ msg: error.message }).msg : 'Unknown error';
-      this.logger.error(
-        `Failed to send email via ${provider.label} to ${maskedTo}: ${errorMessage} | channel=${channel}` +
-        (templateMeta ? ` | template=${templateMeta.templateKey}@${templateMeta.templateVersion}` : ''),
-      );
+        error instanceof Error ? error.message : 'Unknown error';
 
       this.onSendFailure(
         provider,
@@ -488,41 +589,40 @@ export class EmailService implements OnModuleInit {
 
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
         channel,
-        outcome: 'transient',
         provider: provider.label,
+        outcome: 'transient',
+        ...(templateMeta && {
+          template_key: templateMeta.templateKey,
+          template_version: templateMeta.templateVersion,
+          is_canary: String(templateMeta.isCanary),
+        }),
       });
+
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: provider.label,
-        },
+        { channel, provider: provider.label },
       );
 
-      // If primary failed and fallback is available, retry once on fallback
-      if (!usingFallback && this.fallback) {
-        this.logger.warn(
-          `Primary send failed — retrying on fallback | channel=${channel} error=${errorMessage}`,
-        );
-        return this.sendViaFallback(
-          to,
-          subject,
-          html,
-          text,
-          channel,
-          startedAt,
-        );
+      if (templateMeta) {
+        await this.auditLogService?.log({
+          actionType: AuditActionType.EMAIL_TEMPLATE_FAILED,
+          metadata: {
+            templateKey: templateMeta.templateKey,
+            templateVersion: templateMeta.templateVersion,
+            isCanary: templateMeta.isCanary,
+            provider: provider.label,
+            channel,
+            error: errorMessage,
+            failedAt: new Date().toISOString(),
+          },
+        });
       }
 
-      throw new Error(`Failed to send email: ${errorMessage}`);
+      throw error;
     }
   }
 
-  /**
-   * Attempt delivery directly via fallback — called when primary fails mid-send
-   * and the circuit just transitioned to OPEN.
-   */
   private async sendViaFallback(
     to: string,
     subject: string,
@@ -530,6 +630,7 @@ export class EmailService implements OnModuleInit {
     text: string,
     channel: string,
     startedAt: number,
+    templateMeta?: TemplateMeta,
   ): Promise<void> {
     if (!this.fallback) return;
 
@@ -551,14 +652,16 @@ export class EmailService implements OnModuleInit {
       this.appLogger?.incrementCounter('notification_send_success_total', 1, {
         channel,
         provider: 'fallback',
+        ...(templateMeta && {
+          template_key: templateMeta.templateKey,
+          template_version: templateMeta.templateVersion,
+          is_canary: String(templateMeta.isCanary),
+        }),
       });
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: 'fallback',
-        },
+        { channel, provider: 'fallback' },
       );
     } catch (fallbackError) {
       const msg =
@@ -577,7 +680,7 @@ export class EmailService implements OnModuleInit {
     }
   }
 
-  // ── Circuit breaker diagnostics (useful for health endpoints) ────────────────
+  // ── Circuit breaker diagnostics ───────────────────────────────────────────
 
   getCircuitState(): {
     state: CircuitState;
@@ -593,10 +696,16 @@ export class EmailService implements OnModuleInit {
     };
   }
 
-  // ── Public email methods (unchanged signatures) ───────────────────────────────
+  // ── Public email methods ──────────────────────────────────────────────────
 
   async sendWelcomeEmail(email: string, username: string): Promise<void> {
     const templateKey = 'welcome';
+<<<<<<< HEAD
+    const { subject, html, text, meta } = this.resolveAndRender(
+      templateKey,
+      email,
+      { username },
+=======
     const resolved = this.resolveTemplate(templateKey);
     if (!resolved) throw new Error('No valid template for welcome');
 
@@ -614,78 +723,9 @@ export class EmailService implements OnModuleInit {
         templateVersion: template.version,
         ...(isCanary ? { isCanary: true } : {})
       } as any
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
     );
-  }
-
-  private generateWelcomeEmailTemplate(username: string): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { text-align: center; padding: 20px 0; }
-            .content { padding: 20px; background-color: #f9f9f9; border-radius: 5px; }
-            .button {
-              display: inline-block;
-              padding: 12px 24px;
-              background-color: #4CAF50;
-              color: white;
-              text-decoration: none;
-              border-radius: 4px;
-              margin: 20px 0;
-            }
-            .footer { margin-top: 30px; font-size: 12px; color: #777; text-align: center; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Welcome to XConfess, ${username}! 🎉</h1>
-          </div>
-          <div class="content">
-            <p>Hello ${username},</p>
-            <p>Thank you for joining XConfess! We're excited to have you on board.</p>
-            <p>With XConfess, you can:</p>
-            <ul>
-              <li>Share your thoughts and confessions anonymously</li>
-              <li>React to others' confessions with emojis</li>
-              <li>Connect with a community of like-minded individuals</li>
-            </ul>
-            <p>Get started by exploring the latest confessions or share your own!</p>
-            <div style="text-align: center;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" class="button">
-                Start Exploring
-              </a>
-            </div>
-          </div>
-          <div class="footer">
-            <p>If you didn't create an account with us, please ignore this email.</p>
-            <p>© ${new Date().getFullYear()} XConfess. All rights reserved.</p>
-          </div>
-        </body>
-      </html>`;
-  }
-
-  private generateWelcomeEmailText(username: string): string {
-    return `
-Welcome to XConfess, ${username}! 🎉
-
-Thank you for joining XConfess! We're excited to have you on board.
-
-With XConfess, you can:
-- Share your thoughts and confessions anonymously
-- React to others' confessions with emojis
-- Connect with a community of like-minded individuals
-
-Get started by exploring the latest confessions or share your own!
-
-${process.env.FRONTEND_URL || 'http://localhost:3000'}
-
-If you didn't create an account with us, please ignore this email.
-
-© ${new Date().getFullYear()} XConfess. All rights reserved.
-    `.trim();
+    await this.sendEmail(email, subject, html, text, 'email_welcome', meta);
   }
 
   async sendReactionNotification(
@@ -774,11 +814,14 @@ If you didn't create an account with us, please ignore this email.
     }
   }
 
-  async sendCommentNotification(data: {
-    to: string;
-    confessionId: string;
-    commentPreview: string;
-  }): Promise<void> {
+  async sendCommentNotification(
+    data: {
+      to: string;
+      confessionId: string;
+      commentPreview: string;
+    },
+    templateMeta?: TemplateMeta,
+  ): Promise<void> {
     const { to, confessionId, commentPreview } = data;
     const templateKey = 'comment_notification';
     const resolved = this.resolveTemplate(templateKey);
@@ -810,9 +853,22 @@ If you didn't create an account with us, please ignore this email.
         View Confession
       </a>
     `;
+<<<<<<< HEAD
+    await this.sendEmail(
+      to,
+      subject,
+      html,
+      '',
+      'email_comment_notification',
+      templateMeta,
+    );
+=======
       await this.sendEmail(to, subject, html, '', 'email_comment_notification');
     }
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
   }
+
+  // ── Legacy template generators (used until templates migrate to registry) ──
 
   private generateReactionEmailTemplate(
     username: string,
@@ -825,55 +881,25 @@ If you didn't create an account with us, please ignore this email.
         ? `${confessionContent.substring(0, 100)}...`
         : confessionContent;
 
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { text-align: center; padding: 20px 0; }
-            .content { padding: 20px; background-color: #f9f9f9; border-radius: 5px; }
-            .emoji { font-size: 24px; margin: 0 5px; }
-            .confession {
-              background-color: #fff;
-              border-left: 4px solid #4CAF50;
-              padding: 10px 15px;
-              margin: 15px 0;
-              font-style: italic;
-            }
-            .button {
-              display: inline-block;
-              padding: 12px 24px;
-              background-color: #4CAF50;
-              color: white;
-              text-decoration: none;
-              border-radius: 4px;
-              margin: 20px 0;
-            }
-            .footer { margin-top: 30px; font-size: 12px; color: #777; text-align: center; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>New Reaction to Your Confession! <span class="emoji">${emoji}</span></h1>
-          </div>
-          <div class="content">
-            <p>Hello ${username},</p>
-            <p><strong>${reactorName}</strong> reacted with ${emoji} to your confession:</p>
-            <div class="confession">"${truncated}"</div>
-            <div style="text-align: center;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" class="button">
-                View on XConfess
-              </a>
-            </div>
-          </div>
-          <div class="footer">
-            <p>You're receiving this because someone reacted to your confession on XConfess.</p>
-            <p>© ${new Date().getFullYear()} XConfess. All rights reserved.</p>
-          </div>
-        </body>
-      </html>`;
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+      .emoji { font-size: 24px; margin: 0 5px; }
+      .confession { background-color: #fff; border-left: 4px solid #4CAF50; padding: 10px 15px; margin: 15px 0; font-style: italic; }
+      .button { display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>New Reaction! <span class="emoji">${emoji}</span></h1>
+    <p>Hello ${username},</p>
+    <p><strong>${reactorName}</strong> reacted with ${emoji} to your confession:</p>
+    <div class="confession">"${truncated}"</div>
+    <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" class="button">View on XConfess</a>
+    <p style="font-size:12px;color:#777;">© ${new Date().getFullYear()} XConfess. All rights reserved.</p>
+  </body>
+</html>`;
   }
 
   private generateReactionEmailText(
@@ -886,21 +912,7 @@ If you didn't create an account with us, please ignore this email.
       confessionContent.length > 100
         ? `${confessionContent.substring(0, 100)}...`
         : confessionContent;
-
-    return `
-New Reaction to Your Confession! ${emoji}
-
-Hello ${username},
-
-${reactorName} reacted with ${emoji} to your confession:
-
-"${truncated}"
-
-View it on XConfess: ${process.env.FRONTEND_URL || 'http://localhost:3000'}
-
-You're receiving this because someone reacted to your confession on XConfess.
-© ${new Date().getFullYear()} XConfess. All rights reserved.
-    `.trim();
+    return `New Reaction! ${emoji}\n\nHello ${username},\n\n${reactorName} reacted with ${emoji} to your confession:\n\n"${truncated}"\n\nView on XConfess: ${process.env.FRONTEND_URL || 'http://localhost:3000'}\n\n© ${new Date().getFullYear()} XConfess.`;
   }
 
   private generateResetEmailTemplate(
@@ -908,70 +920,20 @@ You're receiving this because someone reacted to your confession on XConfess.
     resetUrl: string,
     token: string,
   ): string {
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Password Reset - XConfess</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #f8f9fa; padding: 20px; text-align: center; }
-            .content { padding: 30px 20px; }
-            .button {
-              display: inline-block;
-              padding: 12px 24px;
-              background-color: #007bff;
-              color: white;
-              text-decoration: none;
-              border-radius: 5px;
-              margin: 20px 0;
-            }
-            .footer { background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>XConfess - Password Reset</h1>
-            </div>
-            <div class="content">
-              <h2>Hello ${username},</h2>
-              <p>We received a request to reset your password for your XConfess account.</p>
-              <p>Click the button below to reset your password:</p>
-              <a href="${resetUrl}" class="button">Reset My Password</a>
-              <p>Or copy and paste this link into your browser:</p>
-              <p><a href="${resetUrl}">${resetUrl}</a></p>
-              <p><strong>This link will expire in 15 minutes for security purposes.</strong></p>
-              <p>If you didn't request this, please ignore this email. Your password will remain unchanged.</p>
-              <p>For security purposes, your reset token is: <code>${token}</code></p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message from XConfess. Please do not reply to this email.</p>
-            </div>
-          </div>
-        </body>
-      </html>`;
+    return `<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Hello ${username},</h2>
+    <p>We received a request to reset your password.</p>
+    <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#007bff;color:white;text-decoration:none;border-radius:5px;">Reset My Password</a>
+    <p>Or copy: <a href="${resetUrl}">${resetUrl}</a></p>
+    <p><strong>This link expires in 15 minutes.</strong></p>
+    <p>Reset token: <code>${token}</code></p>
+  </body>
+</html>`;
   }
 
   private generateResetEmailText(username: string, resetUrl: string): string {
-    return `
-Hello ${username},
-
-We received a request to reset your password for your XConfess account.
-
-To reset your password, please visit the following link:
-${resetUrl}
-
-This link will expire in 15 minutes for security purposes.
-
-If you didn't request this password reset, please ignore this email.
-
-Best regards,
-The XConfess Team
-
-This is an automated message. Please do not reply to this email.
-    `.trim();
+    return `Hello ${username},\n\nReset your password: ${resetUrl}\n\nThis link expires in 15 minutes.`;
   }
 }
