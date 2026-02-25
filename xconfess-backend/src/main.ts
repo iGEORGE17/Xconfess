@@ -12,7 +12,7 @@ async function bootstrap() {
   // Request-ID middleware — must be first so all downstream code sees it
   const requestIdMiddleware = new RequestIdMiddleware();
   app.use(requestIdMiddleware.use.bind(requestIdMiddleware));
-
+  app.enableShutdownHooks();
   app.use(
     compression({
       filter: (req, res) => {
@@ -46,7 +46,10 @@ async function bootstrap() {
       .setVersion('1.0')
       .addBearerAuth()
       .addTag('Auth', 'Authentication endpoints')
-      .addTag('Confessions', 'Confession CRUD, search, tags, and Stellar anchoring')
+      .addTag(
+        'Confessions',
+        'Confession CRUD, search, tags, and Stellar anchoring',
+      )
       .addTag('Reactions', 'Emoji reactions on confessions')
       .addTag('Messages', 'Anonymous messaging between users')
       .addTag('Reports', 'Report creation and moderation')

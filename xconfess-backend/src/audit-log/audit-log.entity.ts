@@ -10,14 +10,23 @@ import {
 import { User } from '../user/entities/user.entity';
 
 export enum AuditActionType {
-  // Existing actions
-
-  // New report moderation actions
+  // Existing moderation actions
   REPORT_RESOLVED = 'report_resolved',
   REPORT_DISMISSED = 'report_dismissed',
+  REPORT_CREATED = 'report_created',
+  COMMENT_DELETED = 'comment_deleted',
+  CONFESSION_DELETED = 'confession_deleted',
+  NOTIFICATION_SUPPRESSED = 'notification_suppressed',
+  FAILED_LOGIN = 'failed_login',
   NOTIFICATION_DLQ_REPLAY = 'notification_dlq_replay',
   NOTIFICATION_DLQ_CLEANUP = 'notification_dlq_cleanup',
   MODERATION_ESCALATION = 'moderation_escalation',
+
+  // ✅ Email template rollout actions
+  EMAIL_TEMPLATE_DELIVERED = 'email_template_delivered',
+  EMAIL_TEMPLATE_FAILED = 'email_template_failed',
+  EMAIL_TEMPLATE_PROMOTED = 'email_template_promoted',
+  EMAIL_TEMPLATE_ROLLED_BACK = 'email_template_rolled_back',
 }
 
 @Entity('audit_logs')
@@ -53,7 +62,7 @@ export class AuditLog {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string | null;
 
-  // Optional: Add helper methods or computed fields if needed
+  // Optional helpers
   get entityId(): string | undefined {
     return this.metadata?.entityId || this.metadata?.reportId;
   }

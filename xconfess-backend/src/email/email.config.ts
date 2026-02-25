@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export interface MailAuth {
   user: string;
   pass: string;
@@ -13,17 +15,158 @@ export interface MailConfig {
 
 export interface EmailProviderConfig {
   primary: MailConfig;
-  fallback?: MailConfig; // optional — fallback only active if configured
+  fallback?: MailConfig;
 }
 
 export interface CircuitBreakerConfig {
-  // How many consecutive failures open the circuit
   failureThreshold: number;
-  // Seconds to wait in OPEN state before allowing a probe attempt
   cooldownSeconds: number;
-  // How many consecutive successes in HALF_OPEN close the circuit
   probeSuccessThreshold: number;
 }
+
+// ── Template versioning ───────────────────────────────────────────────────────
+
+export interface EmailTemplateVersion {
+  version: string;
+  subject: string;
+  html: string;
+  text: string;
+  requiredVars: string[];
+}
+
+/**
+ * Rollout policy for a single template key.
+ *
+ * - `activeVersion`  – the stable version sent to the majority of recipients.
+ * - `canaryVersion`  – optional; the version under test.
+ * - `canaryPercent`  – 0–100.  0 or absent means canary is disabled.
+ *                      100 means all traffic goes to canary (promotion).
+ *
+ * Routing is deterministic: the same recipient always gets the same version
+ * within a rollout window, avoiding flickering UX.
+ */
+export interface TemplateRolloutPolicy {
+  activeVersion: string;
+  canaryVersion?: string;
+  canaryPercent?: number; // 0–100, default 0
+}
+
+/**
+ * Registry: templateKey → list of available versions
+ */
+export type TemplateRegistry = Record<string, EmailTemplateVersion[]>;
+
+/**
+ * Rollout map: templateKey → rollout policy
+ */
+export type TemplateRolloutMap = Record<string, TemplateRolloutPolicy>;
+
+// ── Resolution helpers ────────────────────────────────────────────────────────
+
+/**
+ * Deterministically assign a recipient to a bucket 0–99.
+ *
+ * Uses HMAC-SHA256 keyed on templateKey so the same email produces
+ * different buckets for different templates (avoids correlated rollouts).
+ */
+export function recipientBucket(
+  recipientEmail: string,
+  templateKey: string,
+): number {
+  const hash = crypto
+    .createHmac('sha256', templateKey)
+    .update(recipientEmail.toLowerCase().trim())
+    .digest('hex');
+  // Use the first 4 bytes (8 hex chars) for good distribution
+  const value = parseInt(hash.slice(0, 8), 16);
+  return value % 100;
+}
+
+/**
+ * Resolve which template version to use for a given recipient.
+ *
+ * Rules:
+ *  1. If no rollout policy → use activeVersion.
+ *  2. canaryPercent === 0 or canaryVersion absent → use activeVersion.
+ *  3. canaryPercent === 100 → use canaryVersion (full promotion).
+ *  4. Otherwise → deterministic bucket routing.
+ */
+export function resolveTemplateVersion(
+  templateKey: string,
+  recipientEmail: string,
+  rolloutMap: TemplateRolloutMap,
+): { version: string; isCanary: boolean } {
+  const policy = rolloutMap[templateKey];
+
+  if (!policy) {
+    // No rollout configured → default to v1
+    return { version: 'v1', isCanary: false };
+  }
+
+  const { activeVersion, canaryVersion, canaryPercent = 0 } = policy;
+
+  // Canary disabled
+  if (!canaryVersion || canaryPercent <= 0) {
+    return { version: activeVersion, isCanary: false };
+  }
+
+  // Full promotion
+  if (canaryPercent >= 100) {
+    return { version: canaryVersion, isCanary: false };
+  }
+
+  // Deterministic routing
+  const bucket = recipientBucket(recipientEmail, templateKey);
+  const isCanary = bucket < canaryPercent;
+
+  return {
+    version: isCanary ? canaryVersion : activeVersion,
+    isCanary,
+  };
+}
+
+/**
+ * Look up a specific template version from the registry.
+ * Throws if templateKey or version is not found.
+ */
+export function getTemplateVersion(
+  registry: TemplateRegistry,
+  templateKey: string,
+  version: string,
+): EmailTemplateVersion {
+  const versions = registry[templateKey];
+  if (!versions?.length) {
+    throw new Error(`No templates registered for key: ${templateKey}`);
+  }
+  const tpl = versions.find((v) => v.version === version);
+  if (!tpl) {
+    throw new Error(
+      `Template version '${version}' not found for key '${templateKey}'. ` +
+        `Available: ${versions.map((v) => v.version).join(', ')}`,
+    );
+  }
+  return tpl;
+}
+
+/**
+ * Convenience: resolve version and return the template object in one call.
+ */
+export function resolveTemplate(
+  registry: TemplateRegistry,
+  rolloutMap: TemplateRolloutMap,
+  templateKey: string,
+  recipientEmail: string,
+): { template: EmailTemplateVersion; isCanary: boolean } {
+  const { version, isCanary } = resolveTemplateVersion(
+    templateKey,
+    recipientEmail,
+    rolloutMap,
+  );
+  const template = getTemplateVersion(registry, templateKey, version);
+  return { template, isCanary };
+}
+
+// ── Config factory ────────────────────────────────────────────────────────────
 
 export const emailConfig = (): {
   mail: EmailProviderConfig;
