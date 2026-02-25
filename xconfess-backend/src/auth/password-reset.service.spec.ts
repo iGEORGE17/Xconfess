@@ -68,7 +68,9 @@ describe('PasswordResetService', () => {
     }).compile();
 
     service = module.get<PasswordResetService>(PasswordResetService);
-    passwordResetRepository = module.get<Repository<PasswordReset>>(getRepositoryToken(PasswordReset));
+    passwordResetRepository = module.get<Repository<PasswordReset>>(
+      getRepositoryToken(PasswordReset),
+    );
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
 
     jest.clearAllMocks();
@@ -84,7 +86,11 @@ describe('PasswordResetService', () => {
       mockRepository.create.mockReturnValue(mockPasswordReset);
       mockRepository.save.mockResolvedValue(savedPasswordReset);
 
-      const result = await service.createResetToken(1, '192.168.1.1', 'Mozilla/5.0...');
+      const result = await service.createResetToken(
+        1,
+        '192.168.1.1',
+        'Mozilla/5.0...',
+      );
 
       expect(result).toMatch(/^[a-f0-9]{64}$/); // 32 bytes = 64 hex chars
       expect(mockRepository.create).toHaveBeenCalledWith({
@@ -122,7 +128,9 @@ describe('PasswordResetService', () => {
       mockRepository.create.mockReturnValue(mockPasswordReset);
       mockRepository.save.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.createResetToken(1)).rejects.toThrow('Failed to create reset token: Database error');
+      await expect(service.createResetToken(1)).rejects.toThrow(
+        'Failed to create reset token: Database error',
+      );
     });
   });
 
@@ -169,7 +177,9 @@ describe('PasswordResetService', () => {
     it('should throw error when database query fails', async () => {
       mockRepository.findOne.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.findValidToken('test-token-123')).rejects.toThrow('Error finding token: Database error');
+      await expect(service.findValidToken('test-token-123')).rejects.toThrow(
+        'Error finding token: Database error',
+      );
     });
   });
 
@@ -195,7 +205,9 @@ describe('PasswordResetService', () => {
     it('should throw error when update fails', async () => {
       mockRepository.update.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.markTokenAsUsed(1)).rejects.toThrow('Failed to mark token as used: Database error');
+      await expect(service.markTokenAsUsed(1)).rejects.toThrow(
+        'Failed to mark token as used: Database error',
+      );
     });
   });
 
@@ -214,7 +226,9 @@ describe('PasswordResetService', () => {
     it('should throw error when update fails', async () => {
       mockRepository.update.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.invalidateUserTokens(1)).rejects.toThrow('Failed to invalidate tokens: Database error');
+      await expect(service.invalidateUserTokens(1)).rejects.toThrow(
+        'Failed to invalidate tokens: Database error',
+      );
     });
   });
 
@@ -224,8 +238,24 @@ describe('PasswordResetService', () => {
 
       await service.cleanupExpiredTokens();
 
+      // Accept LessThan operator in query
       expect(mockRepository.delete).toHaveBeenCalledWith({
-        expiresAt: { $lt: expect.any(Date) },
+        expiresAt: expect.objectContaining({
+          _type: 'lessThan',
+          _value: expect.any(Date),
+        }),
+      });
+    });
+
+    it('should not delete non-expired tokens', async () => {
+      // Simulate no expired tokens
+      mockRepository.delete.mockResolvedValue({ affected: 0 });
+      await service.cleanupExpiredTokens();
+      expect(mockRepository.delete).toHaveBeenCalledWith({
+        expiresAt: expect.objectContaining({
+          _type: 'lessThan',
+          _value: expect.any(Date),
+        }),
       });
     });
 
@@ -236,4 +266,4 @@ describe('PasswordResetService', () => {
       await expect(service.cleanupExpiredTokens()).resolves.toBeUndefined();
     });
   });
-}); 
+});

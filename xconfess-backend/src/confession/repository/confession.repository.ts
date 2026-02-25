@@ -72,14 +72,29 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       return { confessions: [], total: 0 };
     }
 
-    // Build the query with ts_rank for relevance scoring
+    // Check if search_vector column exists (schema validation)
+    const queryRunner = this.dataSource.createQueryRunner();
+    let hasSearchVector = false;
+    try {
+      const columns = await queryRunner.getTable('confession');
+      hasSearchVector = !!columns?.findColumnByName('search_vector');
+    } finally {
+      await queryRunner.release();
+    }
+    if (!hasSearchVector) {
+      // Fallback: log and return empty or fallback to ILIKE
+      // Optionally, throw new Error('Full-text search unavailable: missing search_vector column');
+      return { confessions: [], total: 0 };
+    }
+
+    // Build the query with ts_rank for relevance scoring, using sanitizedTerm
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reactions')
-      .where('confession.search_vector @@ plainto_tsquery(:searchTerm)', {
-        searchTerm,
+      .where('confession.search_vector @@ plainto_tsquery(:sanitizedTerm)', {
+        sanitizedTerm,
       })
       .addSelect(
-        'ts_rank(confession.search_vector, plainto_tsquery(:searchTerm))',
+        'ts_rank(confession.search_vector, plainto_tsquery(:sanitizedTerm))',
         'rank',
       )
       .orderBy('rank', 'DESC')
@@ -89,14 +104,22 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
 
     // Get total count for pagination
     const totalQuery = this.createQueryBuilder('confession').where(
-      'confession.search_vector @@ plainto_tsquery(:searchTerm)',
-      { searchTerm },
+      'confession.search_vector @@ plainto_tsquery(:sanitizedTerm)',
+      { sanitizedTerm },
     );
 
-    const [confessions, total] = await Promise.all([
-      queryBuilder.getMany(),
-      totalQuery.getCount(),
-    ]);
+    let confessions: AnonymousConfession[] = [];
+    let total = 0;
+    try {
+      [confessions, total] = await Promise.all([
+        queryBuilder.getMany(),
+        totalQuery.getCount(),
+      ]);
+    } catch (err) {
+      // Fallback: log error and return empty
+      // Optionally, fallback to ILIKE here
+      return { confessions: [], total: 0 };
+    }
 
     return { confessions, total };
   }

@@ -61,6 +61,7 @@ export class ConfessionService {
   }
 
   async create(dto: CreateConfessionDto, manager?: EntityManager) {
+    // Only use 'message' as canonical field
     const msg = this.sanitizeMessage(dto.message);
     if (!msg) throw new BadRequestException('Invalid confession content');
 

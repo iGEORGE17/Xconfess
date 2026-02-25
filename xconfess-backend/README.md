@@ -1,3 +1,35 @@
+## DLQ Retention Policy & Cleanup
+
+The notification dead-letter queue (DLQ) is now protected by a retention policy and scheduled cleanup job.
+
+### Configuration
+
+Set these environment variables (or override in config):
+
+- `DLQ_RETENTION_DAYS` (default: 14) — How many days to retain failed jobs
+- `DLQ_CLEANUP_BATCH_SIZE` (default: 100) — Max jobs to process per cleanup run
+- `DLQ_CLEANUP_DRY_RUN` (default: false) — If true, cleanup only logs candidates
+
+### How it works
+
+- Every 6 hours, the backend scans the DLQ for jobs older than the retention window.
+- In dry-run mode, it logs which jobs would be deleted.
+- In active mode, it deletes jobs and emits an audit log entry for each batch.
+- Cleanup is idempotent and safe to rerun.
+
+#### Manual Cleanup
+
+You can trigger cleanup manually in code:
+
+```ts
+// In a service/controller:
+await notificationQueue.cleanupDlq({ dryRun: true }); // or dryRun: false
+```
+
+#### Audit Logging
+
+All cleanup activity is logged in the audit log with action type `NOTIFICATION_DLQ_CLEANUP`.
+
 # xConfess Backend
 
 <p align="center">
@@ -8,26 +40,26 @@
 
 ## Active Modules
 
-| Module | Path | Description |
-|--------|------|-------------|
-| Auth | `src/auth/` | JWT authentication, guards, decorators |
-| User | `src/user/` | User + anonymous user management |
-| Confession | `src/confession/` | Confession CRUD, search, tags, encryption |
-| Reaction | `src/reaction/` | Emoji reactions with WebSocket |
-| Comment | `src/comment/` | Nested commenting system |
-| Messages | `src/messages/` | Anonymous messaging (author-reply) |
-| Report | `src/report/` | Report creation & resolution |
-| Admin | `src/admin/` | Admin panel with RBAC |
-| Moderation | `src/moderation/` | AI content moderation (OpenAI) |
-| Audit Log | `src/audit-log/` | Comprehensive audit trail |
-| Logger | `src/logger/` | Structured logging with PII masking |
-| Stellar | `src/stellar/` | Stellar blockchain integration |
-| Tipping | `src/tipping/` | XLM micro-tipping |
-| Encryption | `src/encryption/` | Field-level confession encryption |
-| Cache | `src/cache/` | Redis/in-memory caching |
-| Analytics | `src/analytics/` | View counts, trending |
-| Data Export | `src/data-export/` | GDPR data export |
-| WebSocket | `src/websocket/` | Real-time event gateway |
+| Module        | Path                 | Description                                            |
+| ------------- | -------------------- | ------------------------------------------------------ |
+| Auth          | `src/auth/`          | JWT authentication, guards, decorators                 |
+| User          | `src/user/`          | User + anonymous user management                       |
+| Confession    | `src/confession/`    | Confession CRUD, search, tags, encryption              |
+| Reaction      | `src/reaction/`      | Emoji reactions with WebSocket                         |
+| Comment       | `src/comment/`       | Nested commenting system                               |
+| Messages      | `src/messages/`      | Anonymous messaging (author-reply)                     |
+| Report        | `src/report/`        | Report creation & resolution                           |
+| Admin         | `src/admin/`         | Admin panel with RBAC                                  |
+| Moderation    | `src/moderation/`    | AI content moderation (OpenAI)                         |
+| Audit Log     | `src/audit-log/`     | Comprehensive audit trail                              |
+| Logger        | `src/logger/`        | Structured logging with PII masking                    |
+| Stellar       | `src/stellar/`       | Stellar blockchain integration                         |
+| Tipping       | `src/tipping/`       | XLM micro-tipping                                      |
+| Encryption    | `src/encryption/`    | Field-level confession encryption                      |
+| Cache         | `src/cache/`         | Redis/in-memory caching                                |
+| Analytics     | `src/analytics/`     | View counts, trending                                  |
+| Data Export   | `src/data-export/`   | GDPR data export                                       |
+| WebSocket     | `src/websocket/`     | Real-time event gateway                                |
 | Notifications | `src/notifications/` | Notification system (Bull/Redis — disabled by default) |
 
 ## Project Setup
