@@ -13,6 +13,11 @@ import {
 } from '../config/dlq-retention.config';
 import * as crypto from 'crypto';
 import Redis from 'ioredis';
+import { AuditActionType } from 'src/audit-log/audit-log.entity';
+import { UserIdMasker } from 'src/utils/mask-user-id';
+import { NotificationCategory, User } from 'src/user/entities/user.entity';
+import { UserService } from 'src/user/user.service';
+import { Repository } from 'typeorm';
 
 export interface CommentNotificationPayload {
   confession: AnonymousConfession;
@@ -84,6 +89,8 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly emailService: EmailService,
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
+    private readonly userService: UserService,
+    private readonly userRepository: Repository<User>,
     @Inject('DLQ_RETENTION_CONFIG')
     dlqConfig: DlqRetentionConfig = dlqRetentionConfig,
   ) {
@@ -157,7 +164,7 @@ export class NotificationQueue implements OnModuleDestroy {
 
     // Audit log
     await this.auditLogService.log({
-      actionType: 'NOTIFICATION_DLQ_CLEANUP',
+      actionType: AuditActionType.NOTIFICATION_DLQ_CLEANUP,
       metadata: {
         entityType: 'notification_dlq',
         dryRun,
@@ -370,56 +377,31 @@ export class NotificationQueue implements OnModuleDestroy {
   ): Promise<void> {
     const { confession, comment, recipientEmail } = payload;
 
-    const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
+    if (!recipientEmail) return;
 
-    this.appLogger.debug(
-      UserIdMasker.maskObject({
-        msg: `Processing comment notification [${logContext}]`,
-      }).msg,
-      'NotificationQueue',
+    const commentPreview =
+      comment.content.length > 100
+        ? `${comment.content.substring(0, 100)}...`
+        : comment.content;
+
+    // ---- Resolve template version deterministically ----
+    const { subject, html, text, meta } = this.emailService.resolveAndRender(
+      'comment_notification',
+      recipientEmail,
+      {
+        confessionId: confession.id,
+        commentPreview,
+      },
     );
 
-    if (!recipientEmail) {
-      this.appLogger.warn(
-        UserIdMasker.maskObject({
-          msg: `Skipping comment notification: no recipient email [${logContext}]`,
-        }).msg,
-        'NotificationQueue',
-      );
-      return;
-    }
-
-    const commentPreview = this.createAnonymizedPreview(comment.content);
-
-    try {
-      await this.emailService.sendCommentNotification({
-        to: UserIdMasker.maskObject({ email: recipientEmail }).email,
-        confessionId: confession.id,
-        commentPreview: UserIdMasker.maskObject({ msg: commentPreview }).msg,
-      });
-
-      this.appLogger.log(
-        UserIdMasker.maskObject({
-          msg: `Comment notification sent [${logContext}]`,
-        }).msg,
-        'NotificationQueue',
-      );
-      this.appLogger.incrementCounter('notification_send_success_total', 1, {
-        channel: this.getChannel(payload),
-        queue: this.queueName,
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.appLogger.error(
-        UserIdMasker.maskObject({
-          msg: `Failed to send comment notification: ${errorMessage} [${logContext}]`,
-        }).msg,
-        undefined,
-        'NotificationQueue',
-      );
-      throw error; // re-throw to trigger BullMQ retry
-    }
+    await this.emailService['sendEmail'](
+      recipientEmail,
+      subject,
+      html,
+      text,
+      'email_comment_notification',
+      meta,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -667,6 +649,32 @@ export class NotificationQueue implements OnModuleDestroy {
     return result;
   }
 
+  private async shouldSendNotification(
+    userId: number,
+    category: NotificationCategory,
+  ): Promise<boolean> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) return false;
+
+    const enabled = user.isNotificationEnabled(category);
+
+    if (!enabled) {
+      await this.auditLogService.log({
+        actionType: AuditActionType.NOTIFICATION_SUPPRESSED,
+        metadata: {
+          userId,
+          category,
+          reason: 'user_preference_disabled',
+          suppressedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    return enabled;
+  }
   private toDlqJobView(job: Job<CommentNotificationPayload>): DlqJobView {
     return {
       id: String(job.id),

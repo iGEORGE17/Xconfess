@@ -32,6 +32,8 @@ All cleanup activity is logged in the audit log with action type `NOTIFICATION_D
 
 # xConfess Backend
 
+For operational details on managing email templates and rollouts, see the [Template Rollout Runbook](../docs/template-rollout-runbook.md).
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>

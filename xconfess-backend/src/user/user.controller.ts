@@ -10,7 +10,10 @@ import {
   Get,
   UseGuards,
   Put,
-  Request
+  Request,
+  Patch,
+  Req,
+  NotFoundException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
@@ -21,33 +24,48 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
 import { CryptoUtil } from '../common/crypto.util';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 
 // Add decrypted email to the response type for API output
-export type UserResponse = Omit<User, 'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'> & { email: string };
+export type UserResponse = Omit<
+  User,
+  'password' | 'emailEncrypted' | 'emailIv' | 'emailTag' | 'emailHash'
+> & { email: string };
 
 @Controller('users')
 export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly authService: AuthService,
-  ) { }
+  ) {}
 
   // Helper method to keep DRY (Don't Repeat Yourself)
   private formatUserResponse(user: User): UserResponse {
-    const { password, emailEncrypted, emailIv, emailTag, emailHash, ...result } = user;
+    const {
+      password,
+      emailEncrypted,
+      emailIv,
+      emailTag,
+      emailHash,
+      ...result
+    } = user;
     const email = CryptoUtil.decrypt(emailEncrypted, emailIv, emailTag);
     return { ...result, email } as unknown as UserResponse;
   }
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(@Body() registerDto: RegisterDto): Promise<{ user: UserResponse }> {
+  async register(
+    @Body() registerDto: RegisterDto,
+  ): Promise<{ user: UserResponse }> {
     const existingEmail = await this.userService.findByEmail(registerDto.email);
     if (existingEmail) {
       throw new ConflictException('Email already in use');
     }
 
-    const existingUsername = await this.userService.findByUsername(registerDto.username);
+    const existingUsername = await this.userService.findByUsername(
+      registerDto.username,
+    );
     if (existingUsername) {
       throw new ConflictException('Username already in use');
     }
@@ -63,11 +81,16 @@ export class UserController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(
-    @Body() loginDto: LoginDto,
-  ): Promise<{ access_token: string; user: UserResponse; anonymousUserId: string }> {
+  async login(@Body() loginDto: LoginDto): Promise<{
+    access_token: string;
+    user: UserResponse;
+    anonymousUserId: string;
+  }> {
     try {
-      const result = await this.authService.login(loginDto.email, loginDto.password);
+      const result = await this.authService.login(
+        loginDto.email,
+        loginDto.password,
+      );
       return result;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
@@ -93,16 +116,46 @@ export class UserController {
 
   @Post('deactivate')
   @UseGuards(JwtAuthGuard)
-  async deactivateAccount(@GetUser('id') userId: number): Promise<UserResponse> {
+  async deactivateAccount(
+    @GetUser('id') userId: number,
+  ): Promise<UserResponse> {
     const updatedUser = await this.userService.deactivateAccount(userId);
     return this.formatUserResponse(updatedUser);
   }
 
   @Post('reactivate')
   @UseGuards(JwtAuthGuard)
-  async reactivateAccount(@GetUser('id') userId: number): Promise<UserResponse> {
+  async reactivateAccount(
+    @GetUser('id') userId: number,
+  ): Promise<UserResponse> {
     const updatedUser = await this.userService.reactivateAccount(userId);
     return this.formatUserResponse(updatedUser);
+  }
+
+  @Get('notification-preferences')
+  async getNotificationPreferences(@Req() req) {
+    return req.user.notificationPreferences || {};
+  }
+
+  @Patch('notification-preferences')
+  async updateNotificationPreferences(
+    @Req() req,
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    const user = await this.userService.findById(req.user.id);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.notificationPreferences = {
+      ...(user.notificationPreferences || {}),
+      ...dto,
+    };
+
+    const savedUser = await this.userService.saveUser(user);
+
+    return savedUser.notificationPreferences;
   }
 
   @UseGuards(JwtAuthGuard)
@@ -111,8 +164,10 @@ export class UserController {
     @GetUser('id') userId: number, // Replaced @Request() req
     @Body() updateUserProfileDto: UpdateUserProfileDto,
   ): Promise<UserResponse> {
-    const updatedUser = await this.userService.updateProfile(userId, updateUserProfileDto);
+    const updatedUser = await this.userService.updateProfile(
+      userId,
+      updateUserProfileDto,
+    );
     return this.formatUserResponse(updatedUser);
   }
-
 }

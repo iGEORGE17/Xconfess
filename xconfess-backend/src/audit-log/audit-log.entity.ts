@@ -10,14 +10,39 @@ import {
 import { User } from '../user/entities/user.entity';
 
 export enum AuditActionType {
+<<<<<<< HEAD
+  // Existing moderation actions
+=======
   // Existing actions
+  CONFESSION_DELETE = 'confession_delete',
+  COMMENT_DELETE = 'comment_delete',
+  FAILED_LOGIN = 'failed_login',
+  REPORT_CREATED = 'report_created',
 
   // New report moderation actions
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
   REPORT_RESOLVED = 'report_resolved',
   REPORT_DISMISSED = 'report_dismissed',
+  REPORT_CREATED = 'report_created',
+  COMMENT_DELETED = 'comment_deleted',
+  CONFESSION_DELETED = 'confession_deleted',
+  NOTIFICATION_SUPPRESSED = 'notification_suppressed',
+  FAILED_LOGIN = 'failed_login',
   NOTIFICATION_DLQ_REPLAY = 'notification_dlq_replay',
   NOTIFICATION_DLQ_CLEANUP = 'notification_dlq_cleanup',
   MODERATION_ESCALATION = 'moderation_escalation',
+<<<<<<< HEAD
+
+  // ✅ Email template rollout actions
+  EMAIL_TEMPLATE_DELIVERED = 'email_template_delivered',
+  EMAIL_TEMPLATE_FAILED = 'email_template_failed',
+  EMAIL_TEMPLATE_PROMOTED = 'email_template_promoted',
+  EMAIL_TEMPLATE_ROLLED_BACK = 'email_template_rolled_back',
+=======
+  TEMPLATE_STATE_TRANSITION = 'template_state_transition',
+  TEMPLATE_ROLLOUT_KILLSWITCH = 'template_rollout_killswitch',
+  TEMPLATE_FALLBACK_ACTIVATED = 'template_fallback_activated',
+>>>>>>> 88a4a79856fcc36af0c70517b9c8e3e262c49203
 }
 
 @Entity('audit_logs')
@@ -53,7 +78,7 @@ export class AuditLog {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string | null;
 
-  // Optional: Add helper methods or computed fields if needed
+  // Optional helpers
   get entityId(): string | undefined {
     return this.metadata?.entityId || this.metadata?.reportId;
   }

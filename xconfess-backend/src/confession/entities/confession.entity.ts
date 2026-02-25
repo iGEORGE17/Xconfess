@@ -1,6 +1,3 @@
-  // Full-text search vector
-  @Column({ type: 'tsvector', nullable: true })
-  search_vector: string;
 // src/confession/entities/confession.entity.ts
 import {
   Entity,
@@ -114,6 +111,10 @@ export class AnonymousConfession {
 
   @Column({ name: 'anchored_at', type: 'timestamp', nullable: true })
   anchoredAt: Date;
+
+  // Full-text search vector
+  @Column({ type: 'tsvector', nullable: true })
+  search_vector: string;
 
   get content(): string {
     return this.message;
