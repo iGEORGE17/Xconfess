@@ -29,11 +29,31 @@ export class AlignConfessionSchema20260225140000 implements MigrationInterface {
             FOR EACH ROW EXECUTE FUNCTION update_confession_search_vector();
         `);
 
-        // Update existing records for search_vector
-        await queryRunner.query(`
-            UPDATE "anonymous_confessions" 
-            SET search_vector = to_tsvector('english', COALESCE(message, ''));
-        `);
+        // Update existing records for search_vector in batches to avoid long-running locks
+        let hasMore = true;
+        const batchSize = 5000;
+
+        while (hasMore) {
+            const result = await queryRunner.query(`
+                WITH target_ids AS (
+                    SELECT id FROM "anonymous_confessions"
+                    WHERE search_vector IS NULL
+                    LIMIT ${batchSize}
+                ),
+                updated AS (
+                    UPDATE "anonymous_confessions"
+                    SET search_vector = to_tsvector('english', COALESCE(message, ''))
+                    WHERE id IN (SELECT id FROM target_ids)
+                    RETURNING id
+                )
+                SELECT count(*) as count FROM updated;
+            `);
+
+            const count = parseInt(result[0].count);
+            if (count < batchSize) {
+                hasMore = false;
+            }
+        }
 
         // Create GIN index for search_vector
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_confession_search_vector" ON "anonymous_confessions" USING GIN(search_vector)`);
@@ -51,10 +71,10 @@ export class AlignConfessionSchema20260225140000 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX IF EXISTS "idx_confession_search_vector"`);
         await queryRunner.query(`DROP TRIGGER IF EXISTS confession_search_vector_update ON "anonymous_confessions"`);
         await queryRunner.query(`DROP FUNCTION IF EXISTS update_confession_search_vector()`);
-        
-        // We generally don't drop columns in down migrations if they might contain data unless necessary,
-        // but for a clean state we can if we want to reverse exactly.
-        // await queryRunner.query(`ALTER TABLE "anonymous_confessions" DROP COLUMN IF EXISTS "search_vector"`);
-        // await queryRunner.query(`ALTER TABLE "anonymous_confessions" DROP COLUMN IF EXISTS "view_count"`);
+
+        // Full rollback of columns to ensure idempotency
+        await queryRunner.query(`ALTER TABLE "user" DROP COLUMN IF EXISTS "is_active"`);
+        await queryRunner.query(`ALTER TABLE "anonymous_confessions" DROP COLUMN IF EXISTS "search_vector"`);
+        await queryRunner.query(`ALTER TABLE "anonymous_confessions" DROP COLUMN IF EXISTS "view_count"`);
     }
 }
