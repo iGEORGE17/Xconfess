@@ -1,24 +1,16 @@
-  // Allow switching active version (operator action)
-  setActiveTemplateVersion(key: string, version: string): void {
-    const reg = this.templateRegistry?.[key];
-    if (reg && reg.versions[version]) {
-      reg.activeVersion = version;
-      this.logger.log(`Switched ${key} template to version ${version}`);
-    } else {
-      throw new Error(`Template or version not found: ${key} v${version}`);
-    }
-  }
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '../logger/logger.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { UserIdMasker } from '../utils/mask-user-id';
 import {
   CircuitBreakerConfig,
   EmailProviderConfig,
   MailConfig,
   EmailTemplateRegistry,
   EmailTemplateVersion,
-} from './email.config';
+} from '../config/email.config';
 // Helper: Render template with variable validation
 function renderTemplate(
   template: EmailTemplateVersion,
@@ -41,19 +33,6 @@ function renderTemplate(
     text: replaceVars(template.text),
   };
 }
-  // Template registry reference
-  private get templateRegistry(): EmailTemplateRegistry {
-    return this.configService.get('mail.templateRegistry');
-  }
-
-  // Get active template version for a key
-  private getActiveTemplate(
-    key: string
-  ): EmailTemplateVersion | undefined {
-    const reg = this.templateRegistry?.[key];
-    if (!reg) return undefined;
-    return reg.versions[reg.activeVersion];
-  }
 
 // ── Circuit breaker states ────────────────────────────────────────────────────
 
@@ -106,8 +85,136 @@ export class EmailService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly auditLogService: AuditLogService,
     @Optional() private readonly appLogger?: AppLogger,
-  ) {}
+  ) { }
+
+  // ── Template Management ──────────────────────────────────────────────────────
+
+  /**
+   * Defines valid transitions for the lifecycle state machine.
+   */
+  private readonly validTransitions: Record<string, string[]> = {
+    draft: ['canary', 'active', 'archived'],
+    canary: ['active', 'deprecated', 'archived'],
+    active: ['deprecated', 'archived'],
+    deprecated: ['active', 'archived'],
+    archived: ['draft'], // Allow re-drafting from archive
+  };
+
+  /**
+   * Transition a template version to a new state with guardrails.
+   */
+  async transitionTemplateState(
+    templateKey: string,
+    version: string,
+    nextState: 'draft' | 'canary' | 'active' | 'deprecated' | 'archived',
+    adminId: string,
+    reason?: string,
+  ): Promise<void> {
+    const reg = this.templateRegistry?.[templateKey];
+    const template = reg?.versions[version];
+
+    if (!template) {
+      throw new Error(`Template version not found: ${templateKey} v${version}`);
+    }
+
+    const currentState = template.lifecycleState;
+    const allowed = this.validTransitions[currentState] || [];
+
+    if (!allowed.includes(nextState)) {
+      throw new Error(
+        `Invalid transition: ${currentState} -> ${nextState} for ${templateKey} v${version}`,
+      );
+    }
+
+    // Business Logic: Only one 'active' version allowed per template key?
+    // In this simple registry implementation, we just update the state.
+    // In a real DB implementation, we'd use a transaction.
+    template.lifecycleState = nextState;
+
+    // Log the transition
+    await this.auditLogService.logTemplateStateTransition(
+      templateKey,
+      version,
+      currentState,
+      nextState,
+      adminId,
+      reason,
+    );
+
+    this.logger.log(
+      `Template ${templateKey} v${version} transitioned: ${currentState} -> ${nextState} (by admin ${adminId})`,
+    );
+  }
+
+  // Allow switching active version (operator action)
+  setActiveTemplateVersion(templateKey: string, version: string): void {
+    const reg = this.templateRegistry?.[templateKey];
+    if (reg && reg.versions[version]) {
+      reg.activeVersion = version;
+      this.logger.log(`Switched ${templateKey} template to version ${version}`);
+    } else {
+      throw new Error(`Template or version not found: ${templateKey} v${version}`);
+    }
+  }
+
+  // Template registry reference
+  private get templateRegistry(): EmailTemplateRegistry {
+    return this.configService.get<EmailTemplateRegistry>('mail.templateRegistry') || {};
+  }
+
+  // Resolve template version based on lifecycle, rollout, and kill-switch
+  private resolveTemplate(
+    key: string
+  ): { template: EmailTemplateVersion; isCanary: boolean } | undefined {
+    const reg = this.templateRegistry?.[key];
+    if (!reg) return undefined;
+
+    const globalKillSwitch = this.configService.get<boolean>('mail.globalKillSwitch');
+    const localKillSwitch = reg.rollout?.killSwitchEnabled === true;
+    const isKillSwitchActive = globalKillSwitch || localKillSwitch;
+
+    const activeVersion = reg.versions[reg.activeVersion];
+    const canaryVersionKey = reg.rollout?.canaryVersion;
+    const canaryVersion = canaryVersionKey ? reg.versions[canaryVersionKey] : undefined;
+
+    // IF kill-switch is ON, ALWAYS use active version (if it's valid)
+    if (isKillSwitchActive) {
+      if (canaryVersion) {
+        this.logger.warn(`Kill-switch active for ${key}: forcing fallback from canary ${canaryVersionKey} to active ${reg.activeVersion}`);
+        this.auditLogService.logTemplateFallbackActivated(
+          key,
+          canaryVersionKey || 'unknown',
+          reg.activeVersion,
+          globalKillSwitch ? 'global_killswitch' : 'local_killswitch'
+        ).catch(() => undefined);
+      }
+      return activeVersion ? { template: activeVersion, isCanary: false } : undefined;
+    }
+
+    // Handle Canary routing
+    if (canaryVersion && canaryVersion.lifecycleState === 'canary') {
+      const weight = reg.rollout?.canaryWeight ?? 0;
+      const dice = Math.random() * 100;
+      if (dice < weight) {
+        return { template: canaryVersion, isCanary: true };
+      }
+    }
+
+    // Default to active version if it's actually 'active'
+    if (activeVersion && activeVersion.lifecycleState === 'active') {
+      return { template: activeVersion, isCanary: false };
+    }
+
+    // Fallback/Safety: If active is not 'active' (e.g. deprecated), we might still use it but log a warning
+    if (activeVersion) {
+      this.logger.warn(`Template ${key} active version ${reg.activeVersion} is in state ${activeVersion.lifecycleState}`);
+      return { template: activeVersion, isCanary: false };
+    }
+
+    return undefined;
+  }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -490,8 +597,10 @@ export class EmailService implements OnModuleInit {
 
   async sendWelcomeEmail(email: string, username: string): Promise<void> {
     const templateKey = 'welcome';
-    const template = this.getActiveTemplate(templateKey);
-    if (!template) throw new Error('No active template for welcome');
+    const resolved = this.resolveTemplate(templateKey);
+    if (!resolved) throw new Error('No valid template for welcome');
+
+    const { template, isCanary } = resolved;
     const vars = { username };
     const rendered = renderTemplate(template, vars);
     await this.sendEmail(
@@ -500,7 +609,11 @@ export class EmailService implements OnModuleInit {
       rendered.html,
       rendered.text,
       'email_welcome',
-      { templateKey, templateVersion: template.version }
+      {
+        templateKey,
+        templateVersion: template.version,
+        ...(isCanary ? { isCanary: true } : {})
+      } as any
     );
   }
 
@@ -582,24 +695,46 @@ If you didn't create an account with us, please ignore this email.
     confessionContent: string,
     emoji: string,
   ): Promise<void> {
-    const subject = `Someone reacted with ${emoji} to your confession!`;
-    await this.sendEmail(
-      toEmail,
-      subject,
-      this.generateReactionEmailTemplate(
-        username,
-        reactorName,
-        confessionContent,
-        emoji,
-      ),
-      this.generateReactionEmailText(
-        username,
-        reactorName,
-        confessionContent,
-        emoji,
-      ),
-      'email_reaction',
-    );
+    const templateKey = 'reaction_notification'; // Assuming this key exists
+    const resolved = this.resolveTemplate(templateKey);
+
+    if (resolved) {
+      const { template, isCanary } = resolved;
+      const vars = { username, reactorName, emoji, confessionContent };
+      const rendered = renderTemplate(template, vars);
+      await this.sendEmail(
+        toEmail,
+        rendered.subject,
+        rendered.html,
+        rendered.text,
+        'email_reaction',
+        {
+          templateKey,
+          templateVersion: template.version,
+          ...(isCanary ? { isCanary: true } : {})
+        } as any
+      );
+    } else {
+      // Fallback to hardcoded if no template found
+      const subject = `Someone reacted with ${emoji} to your confession!`;
+      await this.sendEmail(
+        toEmail,
+        subject,
+        this.generateReactionEmailTemplate(
+          username,
+          reactorName,
+          confessionContent,
+          emoji,
+        ),
+        this.generateReactionEmailText(
+          username,
+          reactorName,
+          confessionContent,
+          emoji,
+        ),
+        'email_reaction',
+      );
+    }
   }
 
   async sendPasswordResetEmail(
@@ -607,15 +742,36 @@ If you didn't create an account with us, please ignore this email.
     token: string,
     username?: string,
   ): Promise<void> {
+    const templateKey = 'password_reset';
+    const resolved = this.resolveTemplate(templateKey);
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
-    const subject = 'Reset Your XConfess Password';
-    await this.sendEmail(
-      email,
-      subject,
-      this.generateResetEmailTemplate(username || 'User', resetUrl, token),
-      this.generateResetEmailText(username || 'User', resetUrl),
-      'email_password_reset',
-    );
+
+    if (resolved) {
+      const { template, isCanary } = resolved;
+      const vars = { username: username || 'User', resetUrl, token };
+      const rendered = renderTemplate(template, vars);
+      await this.sendEmail(
+        email,
+        rendered.subject,
+        rendered.html,
+        rendered.text,
+        'email_password_reset',
+        {
+          templateKey,
+          templateVersion: template.version,
+          ...(isCanary ? { isCanary: true } : {})
+        } as any
+      );
+    } else {
+      const subject = 'Reset Your XConfess Password';
+      await this.sendEmail(
+        email,
+        subject,
+        this.generateResetEmailTemplate(username || 'User', resetUrl, token),
+        this.generateResetEmailText(username || 'User', resetUrl),
+        'email_password_reset',
+      );
+    }
   }
 
   async sendCommentNotification(data: {
@@ -624,8 +780,28 @@ If you didn't create an account with us, please ignore this email.
     commentPreview: string;
   }): Promise<void> {
     const { to, confessionId, commentPreview } = data;
-    const subject = 'New Comment on Your Confession';
-    const html = `
+    const templateKey = 'comment_notification';
+    const resolved = this.resolveTemplate(templateKey);
+
+    if (resolved) {
+      const { template, isCanary } = resolved;
+      const vars = { confessionId, commentPreview, frontendUrl: this.configService.get('FRONTEND_URL') || 'http://localhost:3000' };
+      const rendered = renderTemplate(template, vars);
+      await this.sendEmail(
+        to,
+        rendered.subject,
+        rendered.html,
+        rendered.text,
+        'email_comment_notification',
+        {
+          templateKey,
+          templateVersion: template.version,
+          ...(isCanary ? { isCanary: true } : {})
+        } as any
+      );
+    } else {
+      const subject = 'New Comment on Your Confession';
+      const html = `
       <h2>Someone commented on your confession!</h2>
       <p>Here's a preview of the comment:</p>
       <blockquote>${commentPreview}</blockquote>
@@ -634,7 +810,8 @@ If you didn't create an account with us, please ignore this email.
         View Confession
       </a>
     `;
-    await this.sendEmail(to, subject, html, '', 'email_comment_notification');
+      await this.sendEmail(to, subject, html, '', 'email_comment_notification');
+    }
   }
 
   private generateReactionEmailTemplate(
