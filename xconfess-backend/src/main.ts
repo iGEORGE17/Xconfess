@@ -58,6 +58,35 @@ async function bootstrap() {
     SwaggerModule.setup('api/api-docs', app, document);
   }
 
+  // Migration verification check
+  if (process.env.NODE_ENV !== 'test') {
+    const { DataSource } = await import('typeorm');
+    const { getTypeOrmConfig } = await import('./config/database.config');
+    const { ConfigService } = await import('@nestjs/config');
+    const configService = app.get(ConfigService);
+    const dataSource = new DataSource(getTypeOrmConfig(configService) as any);
+
+    try {
+      await dataSource.initialize();
+      const result = await dataSource.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'anonymous_confessions' 
+        AND column_name IN ('view_count', 'search_vector');
+      `);
+
+      const columns = result.map((r: any) => r.column_name);
+      if (!columns.includes('view_count') || !columns.includes('search_vector')) {
+        console.warn('⚠️  Database schema may be out of sync. Missing view_count or search_vector columns.');
+      } else {
+        console.log('✅ Database schema verified.');
+      }
+      await dataSource.destroy();
+    } catch (error) {
+      console.error('❌ Failed to verify database schema during startup:', error.message);
+    }
+  }
+
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
