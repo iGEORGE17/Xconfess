@@ -37,6 +37,7 @@ export class ConfessionController {
   @ApiResponse({ status: 201, description: 'Confession created successfully' })
   @UsePipes(new ValidationPipe({ whitelist: true }))
   create(@Body() dto: CreateConfessionDto) {
+    // Only allow canonical contract
     return this.service.create(dto);
   }
 

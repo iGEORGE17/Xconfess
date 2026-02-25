@@ -22,18 +22,6 @@ export class CreateConfessionDto {
   @IsEnum(Gender)
   gender?: Gender;
 
-  @ApiProperty({ description: 'Title of the confession', maxLength: 200 })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(200)
-  title: string;
-
-  @ApiProperty({ description: 'Full body of the confession', maxLength: 5000 })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(5000)
-  body: string;
-
   @ApiPropertyOptional({
     description: 'Tags for the confession (max 3)',
     type: [String],

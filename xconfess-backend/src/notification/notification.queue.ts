@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
@@ -7,6 +7,10 @@ import { Comment } from '../comment/entities/comment.entity';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { rateLimitConfig } from '../config/rate-limit.config';
+import {
+  dlqRetentionConfig,
+  DlqRetentionConfig,
+} from '../config/dlq-retention.config';
 import * as crypto from 'crypto';
 import Redis from 'ioredis';
 
@@ -73,14 +77,106 @@ export class NotificationQueue implements OnModuleDestroy {
   private redisClient: Redis;
   private readonly dedupeTtl: number;
 
+  private readonly dlqConfig: DlqRetentionConfig;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
+    @Inject('DLQ_RETENTION_CONFIG')
+    dlqConfig: DlqRetentionConfig = dlqRetentionConfig,
   ) {
     this.dedupeTtl = rateLimitConfig.notification.dedupeTtlSeconds;
+    this.dlqConfig = dlqConfig;
     this.initializeWorkers();
+    // Schedule periodic cleanup (every 6 hours)
+    setInterval(
+      () => {
+        this.cleanupDlq().catch((err) =>
+          this.appLogger.error(`DLQ cleanup failed: ${err.message}`),
+        );
+      },
+      6 * 60 * 60 * 1000,
+    );
+  }
+  /**
+   * Cleanup DLQ jobs older than retention window.
+   * If dryRun is true, only logs candidates.
+   * Emits audit log for each batch.
+   */
+  async cleanupDlq(options?: {
+    dryRun?: boolean;
+    batchSize?: number;
+    retentionDays?: number;
+    actorId?: string;
+  }) {
+    const now = Date.now();
+    const retentionMs =
+      1000 *
+      60 *
+      60 *
+      24 *
+      (options?.retentionDays ?? this.dlqConfig.retentionDays);
+    const cutoff = now - retentionMs;
+    const dryRun = options?.dryRun ?? this.dlqConfig.dryRun;
+    const batchSize = options?.batchSize ?? this.dlqConfig.cleanupBatchSize;
+    const actorId = options?.actorId ?? 'system';
+
+    const failedJobs = await this.queue.getJobs(['failed'], 0, -1, false);
+    const candidates = failedJobs.filter((job) => {
+      const failedAt = job.finishedOn
+        ? new Date(job.finishedOn).getTime()
+        : null;
+      return failedAt !== null && failedAt < cutoff;
+    });
+    const toProcess = candidates.slice(0, batchSize);
+
+    if (dryRun) {
+      this.appLogger.log(
+        `[DLQ Cleanup] Dry run: ${toProcess.length} jobs older than ${this.dlqConfig.retentionDays} days would be deleted/archived`,
+        'NotificationQueue',
+      );
+    } else {
+      let deleted = 0;
+      for (const job of toProcess) {
+        try {
+          await job.remove();
+          deleted++;
+        } catch (err) {
+          this.appLogger.error(
+            `Failed to remove DLQ job ${job.id}: ${err.message}`,
+          );
+        }
+      }
+      this.appLogger.log(
+        `[DLQ Cleanup] Deleted ${deleted} jobs older than ${this.dlqConfig.retentionDays} days`,
+        'NotificationQueue',
+      );
+    }
+
+    // Audit log
+    await this.auditLogService.log({
+      actionType: 'NOTIFICATION_DLQ_CLEANUP',
+      metadata: {
+        entityType: 'notification_dlq',
+        dryRun,
+        retentionDays: this.dlqConfig.retentionDays,
+        batchSize,
+        attempted: toProcess.length,
+        deleted: dryRun ? 0 : toProcess.length,
+        jobIds: toProcess.map((j) => j.id),
+        cleanedAt: new Date().toISOString(),
+      },
+      context: { userId: actorId },
+    });
+
+    return {
+      attempted: toProcess.length,
+      deleted: dryRun ? 0 : toProcess.length,
+      dryRun,
+      jobIds: toProcess.map((j) => j.id),
+    };
   }
 
   private initializeWorkers() {
@@ -129,7 +225,10 @@ export class NotificationQueue implements OnModuleDestroy {
 
     this.worker.on('failed', (job, error) => {
       const maskedJobId = job?.id;
-      const maskedError = error && typeof error.message === 'string' ? UserIdMasker.maskObject({ msg: error.message }).msg : error;
+      const maskedError =
+        error && typeof error.message === 'string'
+          ? UserIdMasker.maskObject({ msg: error.message }).msg
+          : error;
       this.appLogger.error(
         `Job ${maskedJobId} failed: ${maskedError}`,
         undefined,
@@ -274,13 +373,17 @@ export class NotificationQueue implements OnModuleDestroy {
     const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
 
     this.appLogger.debug(
-      UserIdMasker.maskObject({ msg: `Processing comment notification [${logContext}]` }).msg,
+      UserIdMasker.maskObject({
+        msg: `Processing comment notification [${logContext}]`,
+      }).msg,
       'NotificationQueue',
     );
 
     if (!recipientEmail) {
       this.appLogger.warn(
-        UserIdMasker.maskObject({ msg: `Skipping comment notification: no recipient email [${logContext}]` }).msg,
+        UserIdMasker.maskObject({
+          msg: `Skipping comment notification: no recipient email [${logContext}]`,
+        }).msg,
         'NotificationQueue',
       );
       return;
@@ -296,7 +399,9 @@ export class NotificationQueue implements OnModuleDestroy {
       });
 
       this.appLogger.log(
-        UserIdMasker.maskObject({ msg: `Comment notification sent [${logContext}]` }).msg,
+        UserIdMasker.maskObject({
+          msg: `Comment notification sent [${logContext}]`,
+        }).msg,
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_send_success_total', 1, {
@@ -307,7 +412,9 @@ export class NotificationQueue implements OnModuleDestroy {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.appLogger.error(
-        UserIdMasker.maskObject({ msg: `Failed to send comment notification: ${errorMessage} [${logContext}]` }).msg,
+        UserIdMasker.maskObject({
+          msg: `Failed to send comment notification: ${errorMessage} [${logContext}]`,
+        }).msg,
         undefined,
         'NotificationQueue',
       );
