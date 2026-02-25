@@ -15,6 +15,10 @@ import {
   dlqRetentionConfig,
   DlqRetentionConfig,
 } from '../config/dlq-retention.config';
+import { NotificationCategory, User } from '../user/entities/user.entity';
+import { UserService } from '../user/user.service';
+import { UserIdMasker } from '../utils/mask-user-id';
+import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import Redis from 'ioredis';
 
@@ -69,9 +73,9 @@ export interface ReplayResult {
  * Only stable, non-sensitive identifiers — never email addresses or content.
  */
 interface IdempotencyFields {
-  eventType: string; // e.g. 'comment-notification'
+  eventType: string;
   recipientEmail: string;
-  entityId: string; // confession ID
+  entityId: string;
 }
 
 const DEDUPE_KEY_PREFIX = 'notif:dedupe:';
@@ -83,7 +87,6 @@ export class NotificationQueue implements OnModuleDestroy {
   private worker: Worker;
   private redisClient: Redis;
   private readonly dedupeTtl: number;
-
   private readonly dlqConfig: DlqRetentionConfig;
 
   constructor(
@@ -91,6 +94,8 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly emailService: EmailService,
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
+    private readonly userService: UserService,
+    private readonly userRepository: Repository<User>,
     @Inject('DLQ_RETENTION_CONFIG')
     dlqConfig: DlqRetentionConfig = dlqRetentionConfig,
   ) {
@@ -107,6 +112,7 @@ export class NotificationQueue implements OnModuleDestroy {
       6 * 60 * 60 * 1000,
     );
   }
+
   /**
    * Cleanup DLQ jobs older than retention window.
    * If dryRun is true, only logs candidates.
@@ -162,7 +168,6 @@ export class NotificationQueue implements OnModuleDestroy {
       );
     }
 
-    // Audit log
     await this.auditLogService.log({
       actionType: AuditActionType.NOTIFICATION_DLQ_CLEANUP,
       metadata: {
@@ -192,9 +197,6 @@ export class NotificationQueue implements OnModuleDestroy {
       port: this.configService.get<number>('REDIS_PORT', 6379),
     };
 
-    // Dedicated ioredis client for idempotency key management.
-    // Kept separate from BullMQ's internal connection so Bull's
-    // subscribe/blocking commands don't interfere.
     this.redisClient = new Redis(redisConfig);
 
     this.queue = new Queue(this.queueName, {
@@ -222,13 +224,12 @@ export class NotificationQueue implements OnModuleDestroy {
     );
 
     this.worker.on('completed', (job) => {
-      const maskedJobId = job.id;
       const templateMeta = this.extractTemplateMeta(
         job.data as CommentNotificationPayload,
         job as Job<CommentNotificationPayload>,
       );
       this.appLogger.log(
-        `Job ${maskedJobId} completed successfully`,
+        `Job ${job.id} completed successfully`,
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_job_completed_total', 1, {
@@ -244,13 +245,12 @@ export class NotificationQueue implements OnModuleDestroy {
     });
 
     this.worker.on('failed', (job, error) => {
-      const maskedJobId = job?.id;
       const maskedError =
         error && typeof error.message === 'string'
           ? UserIdMasker.maskObject({ msg: error.message }).msg
           : error;
       this.appLogger.error(
-        `Job ${maskedJobId} failed: ${maskedError}`,
+        `Job ${job?.id} failed: ${maskedError}`,
         undefined,
         'NotificationQueue',
       );
@@ -270,22 +270,14 @@ export class NotificationQueue implements OnModuleDestroy {
       if (isTerminalFailure) {
         this.appLogger.incrementCounter('notification_send_failure_total', 1, {
           ...this.withTemplateMetricLabels(
-            {
-              channel,
-              queue: this.queueName,
-              outcome: 'terminal',
-            },
+            { channel, queue: this.queueName, outcome: 'terminal' },
             templateMeta,
           ),
         });
       } else {
         this.appLogger.incrementCounter('notification_retry_attempt_total', 1, {
           ...this.withTemplateMetricLabels(
-            {
-              channel,
-              queue: this.queueName,
-              attempt: String(attemptsMade),
-            },
+            { channel, queue: this.queueName, attempt: String(attemptsMade) },
             templateMeta,
           ),
         });
@@ -299,28 +291,12 @@ export class NotificationQueue implements OnModuleDestroy {
   // Idempotency helpers
   // ---------------------------------------------------------------------------
 
-  /**
-   * Build a deterministic, opaque idempotency key from stable, non-sensitive
-   * fields. The SHA-256 hash means the Redis key never exposes user data.
-   *
-   * Key space: eventType + recipientEmail + confessionId
-   * Collision probability across the TTL window is negligible for this scale.
-   */
   buildIdempotencyKey(fields: IdempotencyFields): string {
     const raw = `${fields.eventType}:${fields.recipientEmail}:${fields.entityId}`;
     const hash = crypto.createHash('sha256').update(raw).digest('hex');
     return `${DEDUPE_KEY_PREFIX}${hash}`;
   }
 
-  /**
-   * Attempt to claim the idempotency slot for this notification.
-   *
-   * Uses Redis SET NX EX — atomic: only one caller can set the key; all
-   * concurrent callers racing on the same key will get null back.
-   *
-   * Returns true if the slot was claimed (caller should enqueue).
-   * Returns false if a duplicate was detected (caller should skip).
-   */
   private async claimIdempotencySlot(key: string): Promise<boolean> {
     const result = await this.redisClient.set(
       key,
@@ -336,13 +312,6 @@ export class NotificationQueue implements OnModuleDestroy {
   // Public enqueue API
   // ---------------------------------------------------------------------------
 
-  /**
-   * Enqueue a comment notification for processing.
-   *
-   * Idempotency guarantee: duplicate calls with the same confession ID,
-   * recipient email, and event type within the dedupe TTL window will be
-   * collapsed — only the first call results in a queued job.
-   */
   async enqueueCommentNotification(
     payload: CommentNotificationPayload,
   ): Promise<void> {
@@ -359,7 +328,6 @@ export class NotificationQueue implements OnModuleDestroy {
     const claimed = await this.claimIdempotencySlot(idempotencyKey);
 
     if (!claimed) {
-      // Duplicate detected — log for debugging without exposing payload data
       this.appLogger.warn(
         'Duplicate notification enqueue suppressed (idempotency)',
         'NotificationQueue',
@@ -367,41 +335,31 @@ export class NotificationQueue implements OnModuleDestroy {
       this.appLogger.incrementCounter(
         'notification_dedupe_suppressed_total',
         1,
-        {
-          channel,
-          queue: this.queueName,
-        },
+        { channel, queue: this.queueName },
       );
       return;
     }
 
     this.appLogger.incrementCounter('notification_enqueued_total', 1, {
       ...this.withTemplateMetricLabels(
-        {
-          channel,
-          queue: this.queueName,
-        },
+        { channel, queue: this.queueName },
         templateMeta,
       ),
     });
 
-    // Attach template key/version if present in payload
-    let jobOpts: any = {
+    const jobOpts: any = {
       attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 1000,
-      },
+      backoff: { type: 'exponential', delay: 1000 },
     };
-    if ((payload as any).templateKey && (payload as any).templateVersion) {
-      jobOpts.templateKey = (payload as any).templateKey;
-      jobOpts.templateVersion = (payload as any).templateVersion;
-      if ((payload as any).templateTrack) {
-        jobOpts.templateTrack = (payload as any).templateTrack;
+    if (payload.templateKey && payload.templateVersion) {
+      jobOpts.templateKey = payload.templateKey;
+      jobOpts.templateVersion = payload.templateVersion;
+      if (payload.templateTrack) {
+        jobOpts.templateTrack = payload.templateTrack;
       }
     }
-    await this.queue.add('comment-notification', payload, jobOpts);
 
+    await this.queue.add('comment-notification', payload, jobOpts);
     await this.updateQueueDepthMetrics();
   }
 
@@ -415,34 +373,30 @@ export class NotificationQueue implements OnModuleDestroy {
   ): Promise<void> {
     const { confession, comment, recipientEmail } = payload;
     const templateMeta = this.extractTemplateMeta(payload, job);
+    const logContext = `confessionId=${confession?.id}`;
 
-    const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
+    if (!recipientEmail) return;
 
-    this.appLogger.debug(
-      UserIdMasker.maskObject({
-        msg: `Processing comment notification [${logContext}]`,
-      }).msg,
-      'NotificationQueue',
-    );
-
-    if (!recipientEmail) {
-      this.appLogger.warn(
-        UserIdMasker.maskObject({
-          msg: `Skipping comment notification: no recipient email [${logContext}]`,
-        }).msg,
-        'NotificationQueue',
-      );
-      return;
-    }
-
-    const commentPreview = this.createAnonymizedPreview(comment.content);
+    const commentPreview =
+      comment.content.length > 100
+        ? `${comment.content.substring(0, 100)}...`
+        : comment.content;
 
     try {
-      await this.emailService.sendCommentNotification({
-        to: recipientEmail,
-        confessionId: confession.id,
-        commentPreview,
-      });
+      // Resolve template version via registry + rollout policy, then send.
+      const { subject, html, text, meta } = this.emailService.resolveAndRender(
+        'comment_notification',
+        recipientEmail,
+        { confessionId: confession.id, commentPreview },
+      );
+
+      // sendEmail is private on EmailService; call via the public
+      // sendCommentNotification wrapper so encapsulation is preserved,
+      // passing the resolved meta for audit/metrics attribution.
+      await this.emailService.sendCommentNotification(
+        { to: recipientEmail, confessionId: confession.id, commentPreview },
+        meta,
+      );
 
       this.appLogger.log(
         UserIdMasker.maskObject({
@@ -452,10 +406,7 @@ export class NotificationQueue implements OnModuleDestroy {
       );
       this.appLogger.incrementCounter('notification_send_success_total', 1, {
         ...this.withTemplateMetricLabels(
-          {
-            channel: this.getChannel(payload),
-            queue: this.queueName,
-          },
+          { channel: this.getChannel(payload), queue: this.queueName },
           templateMeta,
         ),
       });
@@ -497,6 +448,7 @@ export class NotificationQueue implements OnModuleDestroy {
           isCanary: templateErrorMeta.templateTrack === 'canary',
         };
       }
+
       throw error; // re-throw to trigger BullMQ retry
     }
   }
@@ -546,7 +498,6 @@ export class NotificationQueue implements OnModuleDestroy {
     if (!templateMeta.templateKey || !templateMeta.templateVersion) {
       return base;
     }
-
     return {
       ...base,
       template_key: templateMeta.templateKey,
@@ -602,37 +553,17 @@ export class NotificationQueue implements OnModuleDestroy {
         {
           name: 'notification_send_success_total',
           type: 'counter',
-          labels: [
-            'channel',
-            'queue',
-            'template_key',
-            'template_version',
-            'template_track',
-          ],
+          labels: ['channel', 'queue', 'template_key', 'template_version', 'template_track'],
         },
         {
           name: 'notification_send_failure_total',
           type: 'counter',
-          labels: [
-            'channel',
-            'queue',
-            'outcome',
-            'template_key',
-            'template_version',
-            'template_track',
-          ],
+          labels: ['channel', 'queue', 'outcome', 'template_key', 'template_version', 'template_track'],
         },
         {
           name: 'notification_retry_attempt_total',
           type: 'counter',
-          labels: [
-            'channel',
-            'queue',
-            'attempt',
-            'template_key',
-            'template_version',
-            'template_track',
-          ],
+          labels: ['channel', 'queue', 'attempt', 'template_key', 'template_version', 'template_track'],
         },
         {
           name: 'notification_dedupe_suppressed_total',
@@ -670,23 +601,15 @@ export class NotificationQueue implements OnModuleDestroy {
 
     const filteredJobs = failedJobs.filter((job) => {
       const failedAt = job.finishedOn ? new Date(job.finishedOn) : null;
-      const failedAfter = filter?.failedAfter
-        ? new Date(filter.failedAfter)
-        : null;
-      const failedBefore = filter?.failedBefore
-        ? new Date(filter.failedBefore)
-        : null;
+      const failedAfter = filter?.failedAfter ? new Date(filter.failedAfter) : null;
+      const failedBefore = filter?.failedBefore ? new Date(filter.failedBefore) : null;
       const search = filter?.search?.toLowerCase()?.trim();
       const serializedPayload = JSON.stringify(job.data ?? {}).toLowerCase();
       const failedReason = (job.failedReason ?? '').toLowerCase();
 
       if (failedAfter && failedAt && failedAt < failedAfter) return false;
       if (failedBefore && failedAt && failedAt > failedBefore) return false;
-      if (
-        search &&
-        !serializedPayload.includes(search) &&
-        !failedReason.includes(search)
-      )
+      if (search && !serializedPayload.includes(search) && !failedReason.includes(search))
         return false;
 
       return true;
@@ -761,11 +684,7 @@ export class NotificationQueue implements OnModuleDestroy {
 
       if (!queuedJob) {
         result.failed += 1;
-        result.details.push({
-          id: job.id,
-          status: 'failed',
-          reason: 'Job not found',
-        });
+        result.details.push({ id: job.id, status: 'failed', reason: 'Job not found' });
         continue;
       }
 
@@ -777,11 +696,7 @@ export class NotificationQueue implements OnModuleDestroy {
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown replay error';
         result.failed += 1;
-        result.details.push({
-          id: job.id,
-          status: 'failed',
-          reason: errorMessage,
-        });
+        result.details.push({ id: job.id, status: 'failed', reason: errorMessage });
       }
     }
 
@@ -808,13 +723,34 @@ export class NotificationQueue implements OnModuleDestroy {
     this.appLogger.incrementCounter(
       'notification_dlq_replay_total',
       result.replayed,
-      {
-        queue: this.queueName,
-        mode: 'bulk',
-      },
+      { queue: this.queueName, mode: 'bulk' },
     );
 
     return result;
+  }
+
+  private async shouldSendNotification(
+    userId: number,
+    category: NotificationCategory,
+  ): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) return false;
+
+    const enabled = user.isNotificationEnabled(category);
+
+    if (!enabled) {
+      await this.auditLogService.log({
+        actionType: AuditActionType.NOTIFICATION_SUPPRESSED,
+        metadata: {
+          userId,
+          category,
+          reason: 'user_preference_disabled',
+          suppressedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    return enabled;
   }
 
   private toDlqJobView(job: Job<CommentNotificationPayload>): DlqJobView {
@@ -854,9 +790,6 @@ export class NotificationQueue implements OnModuleDestroy {
     await this.queue.close();
     await this.worker.close();
     await this.redisClient.quit();
-    this.appLogger.log(
-      'NotificationQueue shutdown complete',
-      'NotificationQueue',
-    );
+    this.appLogger.log('NotificationQueue shutdown complete', 'NotificationQueue');
   }
 }

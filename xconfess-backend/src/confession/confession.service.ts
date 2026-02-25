@@ -433,7 +433,8 @@ export class ConfessionService {
     if (!userOrIp) userOrIp = req.ip ?? '';
 
     if (await this.viewCache.checkAndMarkView(id, userOrIp)) {
-      await this.confessionRepo.increment({ id }, 'view_count', 1);
+      await this.confessionRepo.incrementViewCountAtomically(id);
+      // Reload the confession to get updated view_count
       const updated = await this.confessionRepo.findOne({
         where: { id },
         relations: ['reactions', 'reactions.anonymousUser'],
@@ -688,7 +689,7 @@ export class ConfessionService {
 
     return new ConfessionResponseDto({
       id: String(confession.id),
-      body: String(decryptedMessage),
+      message: String(decryptedMessage),
       createdAt: confession.created_at,
       updatedAt: confession.created_at,
     });

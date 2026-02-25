@@ -47,7 +47,7 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
-  ) { }
+  ) {}
 
   /**
    * Log a sensitive action to the audit log
@@ -64,7 +64,10 @@ export class AuditLogService {
             ? { requestId: dto.context.requestId }
             : {}),
           ...(dto.metadata?.templateKey && dto.metadata?.templateVersion
-            ? { templateKey: dto.metadata.templateKey, templateVersion: dto.metadata.templateVersion }
+            ? {
+                templateKey: dto.metadata.templateKey,
+                templateVersion: dto.metadata.templateVersion,
+              }
             : {}),
         },
         ipAddress: dto.context?.ipAddress || null,
@@ -94,7 +97,7 @@ export class AuditLogService {
     context?: AuditLogContext,
   ): Promise<void> {
     await this.log({
-      actionType: AuditActionType.CONFESSION_DELETE,
+      actionType: AuditActionType.CONFESSION_DELETED,
       metadata: {
         confessionId,
         entityType: 'confession',
@@ -115,7 +118,7 @@ export class AuditLogService {
     context?: AuditLogContext,
   ): Promise<void> {
     await this.log({
-      actionType: AuditActionType.COMMENT_DELETE,
+      actionType: AuditActionType.COMMENT_DELETED,
       metadata: {
         commentId,
         confessionId,
@@ -455,20 +458,27 @@ export class AuditLogService {
   /**
    * Find audit logs by entity (backward compatible with the requested feature)
    */
-  async findByEntity(entityType: string, entityId: string): Promise<AuditLog[]> {
+  async findByEntity(
+    entityType: string,
+    entityId: string,
+  ): Promise<AuditLog[]> {
     try {
       // Since we store entity info in metadata, we need to query the JSONB field
       const logs = await this.auditLogRepository
         .createQueryBuilder('audit_log')
         .leftJoinAndSelect('audit_log.user', 'user')
-        .where("audit_log.metadata->>'entityType' = :entityType", { entityType })
+        .where("audit_log.metadata->>'entityType' = :entityType", {
+          entityType,
+        })
         .andWhere("audit_log.metadata->>'entityId' = :entityId", { entityId })
         .orderBy('audit_log.timestamp', 'DESC')
         .getMany();
 
       return logs;
     } catch (error) {
-      this.logger.error(`Failed to find audit logs by entity: ${error.message}`);
+      this.logger.error(
+        `Failed to find audit logs by entity: ${error.message}`,
+      );
       return [];
     }
   }
@@ -506,7 +516,8 @@ export class AuditLogService {
     offset?: number;
   }) {
     try {
-      const query = this.auditLogRepository.createQueryBuilder('audit_log')
+      const query = this.auditLogRepository
+        .createQueryBuilder('audit_log')
         .leftJoinAndSelect('audit_log.user', 'user');
 
       if (options.userId) {
@@ -598,7 +609,8 @@ export class AuditLogService {
   async getStatistics(startDate?: Date, endDate?: Date) {
     try {
       // Create a base query for counting total logs
-      const countQuery = this.auditLogRepository.createQueryBuilder('audit_log');
+      const countQuery =
+        this.auditLogRepository.createQueryBuilder('audit_log');
 
       if (startDate) {
         countQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
@@ -612,7 +624,8 @@ export class AuditLogService {
       const totalLogs = await countQuery.getCount();
 
       // Create a separate query for action type counts (with group by)
-      const statsQuery = this.auditLogRepository.createQueryBuilder('audit_log');
+      const statsQuery =
+        this.auditLogRepository.createQueryBuilder('audit_log');
 
       if (startDate) {
         statsQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
@@ -724,4 +737,3 @@ export class AuditLogService {
     }
   }
 }
-

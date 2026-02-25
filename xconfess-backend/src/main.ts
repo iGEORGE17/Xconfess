@@ -12,7 +12,7 @@ async function bootstrap() {
   // Request-ID middleware — must be first so all downstream code sees it
   const requestIdMiddleware = new RequestIdMiddleware();
   app.use(requestIdMiddleware.use.bind(requestIdMiddleware));
-
+  app.enableShutdownHooks();
   app.use(
     compression({
       filter: (req, res) => {
@@ -46,7 +46,10 @@ async function bootstrap() {
       .setVersion('1.0')
       .addBearerAuth()
       .addTag('Auth', 'Authentication endpoints')
-      .addTag('Confessions', 'Confession CRUD, search, tags, and Stellar anchoring')
+      .addTag(
+        'Confessions',
+        'Confession CRUD, search, tags, and Stellar anchoring',
+      )
       .addTag('Reactions', 'Emoji reactions on confessions')
       .addTag('Messages', 'Anonymous messaging between users')
       .addTag('Reports', 'Report creation and moderation')
@@ -61,17 +64,13 @@ async function bootstrap() {
   // Migration verification check
   if (process.env.NODE_ENV !== 'test') {
     const { DataSource } = await import('typeorm');
-    const { getTypeOrmConfig } = await import('./config/database.config');
-    const { ConfigService } = await import('@nestjs/config');
-    const configService = app.get(ConfigService);
-    const dataSource = new DataSource(getTypeOrmConfig(configService) as any);
-
     try {
-      await dataSource.initialize();
+      const dataSource = app.get(DataSource);
       const result = await dataSource.query(`
         SELECT column_name 
         FROM information_schema.columns 
-        WHERE table_name = 'anonymous_confessions' 
+        WHERE table_schema = 'public'
+        AND table_name = 'anonymous_confessions' 
         AND column_name IN ('view_count', 'search_vector');
       `);
 
@@ -81,7 +80,6 @@ async function bootstrap() {
       } else {
         console.log('✅ Database schema verified.');
       }
-      await dataSource.destroy();
     } catch (error) {
       console.error('❌ Failed to verify database schema during startup:', error.message);
     }

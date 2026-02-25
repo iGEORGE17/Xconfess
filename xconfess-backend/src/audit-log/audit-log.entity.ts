@@ -10,18 +10,35 @@ import {
 import { User } from '../user/entities/user.entity';
 
 export enum AuditActionType {
-  // Existing actions
+  // Content moderation actions
   CONFESSION_DELETE = 'confession_delete',
   COMMENT_DELETE = 'comment_delete',
-  FAILED_LOGIN = 'failed_login',
-  REPORT_CREATED = 'report_created',
+  CONFESSION_DELETED = 'confession_deleted',
+  COMMENT_DELETED = 'comment_deleted',
 
-  // New report moderation actions
+  // Report actions
+  REPORT_CREATED = 'report_created',
   REPORT_RESOLVED = 'report_resolved',
   REPORT_DISMISSED = 'report_dismissed',
+
+  // Auth actions
+  FAILED_LOGIN = 'failed_login',
+
+  // Notification actions
+  NOTIFICATION_SUPPRESSED = 'notification_suppressed',
   NOTIFICATION_DLQ_REPLAY = 'notification_dlq_replay',
   NOTIFICATION_DLQ_CLEANUP = 'notification_dlq_cleanup',
+
+  // Moderation
   MODERATION_ESCALATION = 'moderation_escalation',
+
+  // Email template rollout actions
+  EMAIL_TEMPLATE_DELIVERED = 'email_template_delivered',
+  EMAIL_TEMPLATE_FAILED = 'email_template_failed',
+  EMAIL_TEMPLATE_PROMOTED = 'email_template_promoted',
+  EMAIL_TEMPLATE_ROLLED_BACK = 'email_template_rolled_back',
+
+  // Template state management
   TEMPLATE_STATE_TRANSITION = 'template_state_transition',
   TEMPLATE_ROLLOUT_KILLSWITCH = 'template_rollout_killswitch',
   TEMPLATE_FALLBACK_ACTIVATED = 'template_fallback_activated',
@@ -61,7 +78,7 @@ export class AuditLog {
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string | null;
 
-  // Optional: Add helper methods or computed fields if needed
+  // Optional helpers
   get entityId(): string | undefined {
     return this.metadata?.entityId || this.metadata?.reportId;
   }
