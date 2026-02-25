@@ -237,6 +237,83 @@ export class AuditLogService {
   }
 
   /**
+   * Log template state transition
+   */
+  async logTemplateStateTransition(
+    templateKey: string,
+    version: string,
+    from: string,
+    to: string,
+    adminId: string,
+    reason?: string,
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.TEMPLATE_STATE_TRANSITION,
+      metadata: {
+        templateKey,
+        templateVersion: version,
+        from,
+        to,
+        reason,
+        entityType: 'template_version',
+        entityId: `${templateKey}:${version}`,
+        transitionedAt: new Date().toISOString(),
+      },
+      context: { ...context, userId: adminId },
+    });
+  }
+
+  /**
+   * Log template killswitch toggle
+   */
+  async logTemplateKillswitchToggle(
+    adminId: string,
+    enabled: boolean,
+    templateKey?: string,
+    reason?: string,
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.TEMPLATE_ROLLOUT_KILLSWITCH,
+      metadata: {
+        enabled,
+        templateKey: templateKey || 'global',
+        reason,
+        entityType: 'template_config',
+        entityId: templateKey || 'global',
+        toggledAt: new Date().toISOString(),
+      },
+      context: { ...context, userId: adminId },
+    });
+  }
+
+  /**
+   * Log template fallback activation
+   */
+  async logTemplateFallbackActivated(
+    templateKey: string,
+    failedVersion: string,
+    fallbackVersion: string,
+    reason: string,
+    context?: AuditLogContext,
+  ): Promise<void> {
+    await this.log({
+      actionType: AuditActionType.TEMPLATE_FALLBACK_ACTIVATED,
+      metadata: {
+        templateKey,
+        failedVersion,
+        fallbackVersion,
+        reason,
+        entityType: 'template_version',
+        entityId: `${templateKey}:${failedVersion}`,
+        activatedAt: new Date().toISOString(),
+      },
+      context,
+    });
+  }
+
+  /**
    * Find audit logs by entity (backward compatible with the requested feature)
    */
   async findByEntity(
