@@ -11,6 +11,10 @@ import { User } from '../user/entities/user.entity';
 
 export enum AuditActionType {
   // Existing actions
+  CONFESSION_DELETE = 'confession_delete',
+  COMMENT_DELETE = 'comment_delete',
+  FAILED_LOGIN = 'failed_login',
+  REPORT_CREATED = 'report_created',
 
   // New report moderation actions
   REPORT_RESOLVED = 'report_resolved',
@@ -18,6 +22,9 @@ export enum AuditActionType {
   NOTIFICATION_DLQ_REPLAY = 'notification_dlq_replay',
   NOTIFICATION_DLQ_CLEANUP = 'notification_dlq_cleanup',
   MODERATION_ESCALATION = 'moderation_escalation',
+  TEMPLATE_STATE_TRANSITION = 'template_state_transition',
+  TEMPLATE_ROLLOUT_KILLSWITCH = 'template_rollout_killswitch',
+  TEMPLATE_FALLBACK_ACTIVATED = 'template_fallback_activated',
 }
 
 @Entity('audit_logs')
