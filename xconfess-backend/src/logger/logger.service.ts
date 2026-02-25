@@ -7,6 +7,14 @@ import {
 import { UserIdMasker } from '../utils/mask-user-id';
 
 type MetricLabels = Record<string, string | number | boolean>;
+type EventSeverity = 'info' | 'warning' | 'alert';
+
+interface StructuredEvent {
+  event: string;
+  severity: EventSeverity;
+  timestamp: string;
+  [key: string]: any;
+}
 
 interface TimerAggregate {
   count: number;
@@ -72,6 +80,49 @@ export class AppLogger implements NestLoggerService {
   verbose(message: any, context?: string, requestId?: string) {
     const payload = this.toLogPayload(message, context, requestId);
     this.nestLogger.verbose(payload, context);
+  }
+
+  emitEvent(
+    severity: EventSeverity,
+    event: string,
+    details: Record<string, any>,
+    context?: string,
+    requestId?: string,
+  ) {
+    const payload: StructuredEvent = {
+      event,
+      severity,
+      timestamp: new Date().toISOString(),
+      ...details,
+    };
+
+    if (severity === 'alert') {
+      this.error(payload, undefined, context, requestId);
+      return;
+    }
+    if (severity === 'warning') {
+      this.warn(payload, context, requestId);
+      return;
+    }
+    this.log(payload, context, requestId);
+  }
+
+  emitWarningEvent(
+    event: string,
+    details: Record<string, any>,
+    context?: string,
+    requestId?: string,
+  ) {
+    this.emitEvent('warning', event, details, context, requestId);
+  }
+
+  emitAlertEvent(
+    event: string,
+    details: Record<string, any>,
+    context?: string,
+    requestId?: string,
+  ) {
+    this.emitEvent('alert', event, details, context, requestId);
   }
 
   // ── Contextual helpers ───────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ export enum AuditActionType {
   TEMPLATE_STATE_TRANSITION = 'template_state_transition',
   TEMPLATE_ROLLOUT_KILLSWITCH = 'template_rollout_killswitch',
   TEMPLATE_FALLBACK_ACTIVATED = 'template_fallback_activated',
+  TEMPLATE_ROLLOUT_DIFF_RECORDED = 'template_rollout_diff_recorded',
 }
 
 @Entity('audit_logs')

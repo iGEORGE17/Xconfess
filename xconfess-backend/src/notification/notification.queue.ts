@@ -1,11 +1,15 @@
 import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { EmailService } from '../email/email.service';
+import {
+  EmailService,
+  TemplateVariableValidationError,
+} from '../email/email.service';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { Comment } from '../comment/entities/comment.entity';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditActionType } from '../audit-log/audit-log.entity';
 import { rateLimitConfig } from '../config/rate-limit.config';
 import {
   dlqRetentionConfig,
@@ -19,6 +23,9 @@ export interface CommentNotificationPayload {
   comment: Comment;
   recipientEmail: string;
   channel?: string;
+  templateKey?: string;
+  templateVersion?: string;
+  templateTrack?: 'active' | 'canary';
 }
 
 export interface DlqJobFilter {
@@ -157,7 +164,7 @@ export class NotificationQueue implements OnModuleDestroy {
 
     // Audit log
     await this.auditLogService.log({
-      actionType: 'NOTIFICATION_DLQ_CLEANUP',
+      actionType: AuditActionType.NOTIFICATION_DLQ_CLEANUP,
       metadata: {
         entityType: 'notification_dlq',
         dryRun,
@@ -198,13 +205,17 @@ export class NotificationQueue implements OnModuleDestroy {
       this.queueName,
       async (job: Job<CommentNotificationPayload>) => {
         const channel = this.getChannel(job.data);
+        const templateMeta = this.extractTemplateMeta(job.data, job);
         const startedAt = Date.now();
-        await this.processCommentNotification(job.data);
+        await this.processCommentNotification(job.data, job);
 
         this.appLogger.observeTimer(
           'notification_job_processing_duration_ms',
           Date.now() - startedAt,
-          { channel, queue: this.queueName },
+          this.withTemplateMetricLabels(
+            { channel, queue: this.queueName },
+            templateMeta,
+          ),
         );
       },
       { connection: redisConfig },
@@ -212,13 +223,22 @@ export class NotificationQueue implements OnModuleDestroy {
 
     this.worker.on('completed', (job) => {
       const maskedJobId = job.id;
+      const templateMeta = this.extractTemplateMeta(
+        job.data as CommentNotificationPayload,
+        job as Job<CommentNotificationPayload>,
+      );
       this.appLogger.log(
         `Job ${maskedJobId} completed successfully`,
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_job_completed_total', 1, {
-        channel: this.getChannel(job.data as CommentNotificationPayload),
-        queue: this.queueName,
+        ...this.withTemplateMetricLabels(
+          {
+            channel: this.getChannel(job.data as CommentNotificationPayload),
+            queue: this.queueName,
+          },
+          templateMeta,
+        ),
       });
       this.updateQueueDepthMetrics().catch(() => undefined);
     });
@@ -238,21 +258,36 @@ export class NotificationQueue implements OnModuleDestroy {
       if (!job) return;
 
       const channel = this.getChannel(job.data as CommentNotificationPayload);
+      const templateMeta = this.extractTemplateMeta(
+        job.data as CommentNotificationPayload,
+        job as Job<CommentNotificationPayload>,
+        error,
+      );
       const attemptsMade = job.attemptsMade ?? 0;
       const maxAttempts = job.opts.attempts ?? 1;
       const isTerminalFailure = attemptsMade >= maxAttempts;
 
       if (isTerminalFailure) {
         this.appLogger.incrementCounter('notification_send_failure_total', 1, {
-          channel,
-          queue: this.queueName,
-          outcome: 'terminal',
+          ...this.withTemplateMetricLabels(
+            {
+              channel,
+              queue: this.queueName,
+              outcome: 'terminal',
+            },
+            templateMeta,
+          ),
         });
       } else {
         this.appLogger.incrementCounter('notification_retry_attempt_total', 1, {
-          channel,
-          queue: this.queueName,
-          attempt: String(attemptsMade),
+          ...this.withTemplateMetricLabels(
+            {
+              channel,
+              queue: this.queueName,
+              attempt: String(attemptsMade),
+            },
+            templateMeta,
+          ),
         });
       }
 
@@ -312,6 +347,7 @@ export class NotificationQueue implements OnModuleDestroy {
     payload: CommentNotificationPayload,
   ): Promise<void> {
     const channel = this.getChannel(payload);
+    const templateMeta = this.extractTemplateMeta(payload);
 
     const idempotencyFields: IdempotencyFields = {
       eventType: 'comment-notification',
@@ -340,8 +376,13 @@ export class NotificationQueue implements OnModuleDestroy {
     }
 
     this.appLogger.incrementCounter('notification_enqueued_total', 1, {
-      channel,
-      queue: this.queueName,
+      ...this.withTemplateMetricLabels(
+        {
+          channel,
+          queue: this.queueName,
+        },
+        templateMeta,
+      ),
     });
 
     // Attach template key/version if present in payload
@@ -355,6 +396,9 @@ export class NotificationQueue implements OnModuleDestroy {
     if ((payload as any).templateKey && (payload as any).templateVersion) {
       jobOpts.templateKey = (payload as any).templateKey;
       jobOpts.templateVersion = (payload as any).templateVersion;
+      if ((payload as any).templateTrack) {
+        jobOpts.templateTrack = (payload as any).templateTrack;
+      }
     }
     await this.queue.add('comment-notification', payload, jobOpts);
 
@@ -367,8 +411,10 @@ export class NotificationQueue implements OnModuleDestroy {
 
   private async processCommentNotification(
     payload: CommentNotificationPayload,
+    job?: Job<CommentNotificationPayload>,
   ): Promise<void> {
     const { confession, comment, recipientEmail } = payload;
+    const templateMeta = this.extractTemplateMeta(payload, job);
 
     const logContext = `confessionId=${confession?.id} commentId=${comment?.id}`;
 
@@ -393,9 +439,9 @@ export class NotificationQueue implements OnModuleDestroy {
 
     try {
       await this.emailService.sendCommentNotification({
-        to: UserIdMasker.maskObject({ email: recipientEmail }).email,
+        to: recipientEmail,
         confessionId: confession.id,
-        commentPreview: UserIdMasker.maskObject({ msg: commentPreview }).msg,
+        commentPreview,
       });
 
       this.appLogger.log(
@@ -405,19 +451,52 @@ export class NotificationQueue implements OnModuleDestroy {
         'NotificationQueue',
       );
       this.appLogger.incrementCounter('notification_send_success_total', 1, {
-        channel: this.getChannel(payload),
-        queue: this.queueName,
+        ...this.withTemplateMetricLabels(
+          {
+            channel: this.getChannel(payload),
+            queue: this.queueName,
+          },
+          templateMeta,
+        ),
       });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
+      const templateErrorMeta = this.extractTemplateMeta(payload, job, error);
+      const failureContext = {
+        code:
+          error instanceof TemplateVariableValidationError
+            ? error.code
+            : ((error as any)?.errorCode as string | undefined) ||
+              'notification_send_failed',
+        templateKey: templateErrorMeta.templateKey || null,
+        templateVersion: templateErrorMeta.templateVersion || null,
+        templateTrack: templateErrorMeta.templateTrack || null,
+        violations:
+          error instanceof TemplateVariableValidationError
+            ? error.violations
+            : ((error as any)?.violations as any[] | undefined) || [],
+      };
+
       this.appLogger.error(
-        UserIdMasker.maskObject({
-          msg: `Failed to send comment notification: ${errorMessage} [${logContext}]`,
-        }).msg,
+        {
+          msg: UserIdMasker.maskObject({
+            msg: `Failed to send comment notification: ${errorMessage} [${logContext}]`,
+          }).msg,
+          failureContext,
+        },
         undefined,
         'NotificationQueue',
       );
+
+      if (error instanceof Error) {
+        (error as any).notificationErrorContext = failureContext;
+        (error as any).templateMeta = {
+          templateKey: templateErrorMeta.templateKey,
+          templateVersion: templateErrorMeta.templateVersion,
+          isCanary: templateErrorMeta.templateTrack === 'canary',
+        };
+      }
       throw error; // re-throw to trigger BullMQ retry
     }
   }
@@ -425,6 +504,56 @@ export class NotificationQueue implements OnModuleDestroy {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  private extractTemplateMeta(
+    payload?: Partial<CommentNotificationPayload>,
+    job?: Job<CommentNotificationPayload>,
+    error?: any,
+  ): {
+    templateKey?: string;
+    templateVersion?: string;
+    templateTrack?: 'active' | 'canary';
+  } {
+    const jobOpts = (job?.opts || {}) as Record<string, any>;
+    const errorMeta = (error?.templateMeta || {}) as Record<string, any>;
+
+    const templateKey =
+      payload?.templateKey ||
+      (jobOpts.templateKey as string | undefined) ||
+      (errorMeta.templateKey as string | undefined) ||
+      (error?.templateKey as string | undefined);
+    const templateVersion =
+      payload?.templateVersion ||
+      (jobOpts.templateVersion as string | undefined) ||
+      (errorMeta.templateVersion as string | undefined) ||
+      (error?.templateVersion as string | undefined);
+    const templateTrack =
+      payload?.templateTrack ||
+      (jobOpts.templateTrack as 'active' | 'canary' | undefined) ||
+      (errorMeta.isCanary ? 'canary' : 'active');
+
+    return { templateKey, templateVersion, templateTrack };
+  }
+
+  private withTemplateMetricLabels(
+    base: Record<string, string>,
+    templateMeta: {
+      templateKey?: string;
+      templateVersion?: string;
+      templateTrack?: 'active' | 'canary';
+    },
+  ): Record<string, string> {
+    if (!templateMeta.templateKey || !templateMeta.templateVersion) {
+      return base;
+    }
+
+    return {
+      ...base,
+      template_key: templateMeta.templateKey,
+      template_version: templateMeta.templateVersion,
+      template_track: templateMeta.templateTrack || 'active',
+    };
+  }
 
   private getChannel(payload: CommentNotificationPayload): string {
     return payload.channel || 'email_comment_notification';
@@ -473,17 +602,37 @@ export class NotificationQueue implements OnModuleDestroy {
         {
           name: 'notification_send_success_total',
           type: 'counter',
-          labels: ['channel', 'queue'],
+          labels: [
+            'channel',
+            'queue',
+            'template_key',
+            'template_version',
+            'template_track',
+          ],
         },
         {
           name: 'notification_send_failure_total',
           type: 'counter',
-          labels: ['channel', 'queue', 'outcome'],
+          labels: [
+            'channel',
+            'queue',
+            'outcome',
+            'template_key',
+            'template_version',
+            'template_track',
+          ],
         },
         {
           name: 'notification_retry_attempt_total',
           type: 'counter',
-          labels: ['channel', 'queue', 'attempt'],
+          labels: [
+            'channel',
+            'queue',
+            'attempt',
+            'template_key',
+            'template_version',
+            'template_track',
+          ],
         },
         {
           name: 'notification_dedupe_suppressed_total',
@@ -503,6 +652,7 @@ export class NotificationQueue implements OnModuleDestroy {
         ],
         queue: [this.queueName],
         outcome: ['transient', 'terminal'],
+        template_track: ['active', 'canary'],
       },
       metrics: this.appLogger.getMetricsSnapshot(),
     };

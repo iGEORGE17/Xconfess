@@ -2,7 +2,10 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '../logger/logger.service';
-import { AuditLogService } from '../audit-log/audit-log.service';
+import {
+  AuditLogService,
+  TemplateRolloutSourceMetadata,
+} from '../audit-log/audit-log.service';
 import { UserIdMasker } from '../utils/mask-user-id';
 import {
   CircuitBreakerConfig,
@@ -10,23 +13,139 @@ import {
   MailConfig,
   EmailTemplateRegistry,
   EmailTemplateVersion,
+  EmailTemplateSloConfig,
+  TemplateVariablePrimitiveType,
 } from '../config/email.config';
-// Helper: Render template with variable validation
-function renderTemplate(
+
+export type TemplateVariableValidationViolationCode =
+  | 'missing'
+  | 'unknown'
+  | 'type_mismatch';
+
+export interface TemplateVariableValidationViolation {
+  code: TemplateVariableValidationViolationCode;
+  key: string;
+  expected: string;
+  actual: string;
+}
+
+export class TemplateVariableValidationError extends Error {
+  readonly code = 'template_variable_validation_error';
+
+  constructor(
+    readonly templateKey: string,
+    readonly templateVersion: string,
+    readonly violations: TemplateVariableValidationViolation[],
+  ) {
+    super(
+      `Template variable validation failed for ${templateKey}@${templateVersion}`,
+    );
+  }
+
+  toMetadata() {
+    return {
+      code: this.code,
+      templateKey: this.templateKey,
+      templateVersion: this.templateVersion,
+      violations: this.violations,
+    };
+  }
+}
+
+function getActualType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function normalizeSchema(template: EmailTemplateVersion): {
+  required: Record<string, TemplateVariablePrimitiveType>;
+  optional: Record<string, TemplateVariablePrimitiveType>;
+} {
+  const required =
+    template.variableSchema?.required ??
+    Object.fromEntries(
+      (template.requiredVars || []).map((key) => [key, 'string']),
+    );
+
+  return {
+    required,
+    optional: template.variableSchema?.optional || {},
+  };
+}
+
+// Helper: Render template with strict variable validation.
+export function renderTemplate(
+  templateKey: string,
   template: EmailTemplateVersion,
-  vars: Record<string, string>
+  vars: Record<string, unknown>,
 ): { subject: string; html: string; text: string } {
-  // Validate required variables
-  for (const key of template.requiredVars) {
-    if (!(key in vars)) {
-      throw new Error(
-        `Missing required template variable: ${key} (template: ${template.version})`
-      );
+  const schema = normalizeSchema(template);
+  const allowedKeys = new Set([
+    ...Object.keys(schema.required),
+    ...Object.keys(schema.optional),
+  ]);
+  const violations: TemplateVariableValidationViolation[] = [];
+
+  for (const [key, expectedType] of Object.entries(schema.required)) {
+    const value = vars[key];
+    if (value === undefined || value === null) {
+      violations.push({
+        code: 'missing',
+        key,
+        expected: expectedType,
+        actual: value === null ? 'null' : 'undefined',
+      });
+      continue;
+    }
+
+    if (typeof value !== expectedType) {
+      violations.push({
+        code: 'type_mismatch',
+        key,
+        expected: expectedType,
+        actual: getActualType(value),
+      });
     }
   }
-  // Simple variable replacement
+
+  for (const [key, value] of Object.entries(vars)) {
+    if (!allowedKeys.has(key)) {
+      violations.push({
+        code: 'unknown',
+        key,
+        expected: 'not_allowed',
+        actual: getActualType(value),
+      });
+      continue;
+    }
+
+    const expectedType = schema.optional[key];
+    if (expectedType && value !== undefined && value !== null) {
+      if (typeof value !== expectedType) {
+        violations.push({
+          code: 'type_mismatch',
+          key,
+          expected: expectedType,
+          actual: getActualType(value),
+        });
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new TemplateVariableValidationError(
+      templateKey,
+      template.version,
+      violations,
+    );
+  }
+
   const replaceVars = (str: string) =>
-    str.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k) => vars[k] || '');
+    str.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k) =>
+      vars[k] === undefined || vars[k] === null ? '' : String(vars[k]),
+    );
+
   return {
     subject: replaceVars(template.subject),
     html: replaceVars(template.html),
@@ -48,18 +167,28 @@ interface CircuitBreakerState {
 
 // ── Provider abstraction ──────────────────────────────────────────────────────
 
-interface MailSendOptions {
-  from: string;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}
-
 interface TransporterEntry {
   transporter: nodemailer.Transporter;
   from: string;
   label: 'primary' | 'fallback';
+}
+
+interface TemplateSendMeta {
+  templateKey: string;
+  templateVersion: string;
+  isCanary?: boolean;
+}
+
+interface TemplateSloSeriesEntry {
+  timestamp: number;
+  success: boolean;
+  durationMs: number;
+}
+
+interface TemplateSloSeries {
+  entries: TemplateSloSeriesEntry[];
+  breachCount: number;
+  inBreach: boolean;
 }
 
 @Injectable()
@@ -82,6 +211,24 @@ export class EmailService implements OnModuleInit {
     cooldownSeconds: 60,
     probeSuccessThreshold: 2,
   };
+
+  private templateSloConfig: EmailTemplateSloConfig = {
+    evaluationWindowMinutes: 15,
+    active: {
+      maxErrorRatePercent: 5,
+      maxP95LatencyMs: 1200,
+      minSampleSize: 20,
+      alertAfterConsecutiveBreaches: 2,
+    },
+    canary: {
+      maxErrorRatePercent: 2,
+      maxP95LatencyMs: 900,
+      minSampleSize: 10,
+      alertAfterConsecutiveBreaches: 1,
+    },
+  };
+
+  private readonly templateSloSeries = new Map<string, TemplateSloSeries>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -111,6 +258,7 @@ export class EmailService implements OnModuleInit {
     nextState: 'draft' | 'canary' | 'active' | 'deprecated' | 'archived',
     adminId: string,
     reason?: string,
+    source?: TemplateRolloutSourceMetadata,
   ): Promise<void> {
     const reg = this.templateRegistry?.[templateKey];
     const template = reg?.versions[version];
@@ -141,6 +289,7 @@ export class EmailService implements OnModuleInit {
       nextState,
       adminId,
       reason,
+      source,
     );
 
     this.logger.log(
@@ -149,14 +298,155 @@ export class EmailService implements OnModuleInit {
   }
 
   // Allow switching active version (operator action)
-  setActiveTemplateVersion(templateKey: string, version: string): void {
+  async setActiveTemplateVersion(
+    templateKey: string,
+    version: string,
+    actorId = 'system',
+    reason?: string,
+    source?: TemplateRolloutSourceMetadata,
+  ): Promise<void> {
     const reg = this.templateRegistry?.[templateKey];
     if (reg && reg.versions[version]) {
+      const before = {
+        activeVersion: reg.activeVersion,
+        rollout: reg.rollout || {},
+      };
       reg.activeVersion = version;
+      const after = {
+        activeVersion: reg.activeVersion,
+        rollout: reg.rollout || {},
+      };
+
+      await this.auditLogService.logTemplateRolloutDiff({
+        templateKey,
+        templateVersion: version,
+        changeType: 'active_version_switch',
+        actorId,
+        before,
+        after,
+        source: {
+          reason,
+          correlationId: source?.correlationId,
+          sourceEndpoint: source?.sourceEndpoint,
+          sourceMethod: source?.sourceMethod,
+        },
+      });
+
       this.logger.log(`Switched ${templateKey} template to version ${version}`);
     } else {
       throw new Error(`Template or version not found: ${templateKey} v${version}`);
     }
+  }
+
+  async updateTemplateCanaryRollout(
+    templateKey: string,
+    actorId: string,
+    options: {
+      canaryVersion?: string;
+      canaryWeight?: number;
+      reason?: string;
+      source?: TemplateRolloutSourceMetadata;
+    },
+  ): Promise<void> {
+    const reg = this.templateRegistry?.[templateKey];
+    if (!reg) {
+      throw new Error(`Template not found: ${templateKey}`);
+    }
+
+    const before = {
+      activeVersion: reg.activeVersion,
+      rollout: reg.rollout || {},
+    };
+
+    reg.rollout = {
+      ...(reg.rollout || {}),
+      ...(options.canaryVersion !== undefined
+        ? { canaryVersion: options.canaryVersion }
+        : {}),
+      ...(options.canaryWeight !== undefined
+        ? { canaryWeight: options.canaryWeight }
+        : {}),
+    };
+
+    const after = {
+      activeVersion: reg.activeVersion,
+      rollout: reg.rollout || {},
+    };
+
+    await this.auditLogService.logTemplateRolloutDiff({
+      templateKey,
+      templateVersion: options.canaryVersion || reg.activeVersion,
+      changeType: 'canary_update',
+      actorId,
+      before,
+      after,
+      source: {
+        reason: options.reason,
+        correlationId: options.source?.correlationId,
+        sourceEndpoint: options.source?.sourceEndpoint,
+        sourceMethod: options.source?.sourceMethod,
+      },
+    });
+  }
+
+  async setTemplateKillSwitch(
+    actorId: string,
+    enabled: boolean,
+    templateKey?: string,
+    reason?: string,
+    source?: TemplateRolloutSourceMetadata,
+  ): Promise<void> {
+    if (templateKey) {
+      const reg = this.templateRegistry?.[templateKey];
+      if (!reg) {
+        throw new Error(`Template not found: ${templateKey}`);
+      }
+      const before = {
+        rollout: reg.rollout || {},
+      };
+      reg.rollout = {
+        ...(reg.rollout || {}),
+        killSwitchEnabled: enabled,
+      };
+      const after = {
+        rollout: reg.rollout || {},
+      };
+
+      await this.auditLogService.logTemplateRolloutDiff({
+        templateKey,
+        templateVersion: reg.activeVersion,
+        changeType: 'kill_switch_toggle',
+        actorId,
+        before,
+        after,
+        source: {
+          reason,
+          correlationId: source?.correlationId,
+          sourceEndpoint: source?.sourceEndpoint,
+          sourceMethod: source?.sourceMethod,
+        },
+      });
+    }
+
+    await this.auditLogService.logTemplateKillswitchToggle(
+      actorId,
+      enabled,
+      templateKey,
+      reason,
+      source,
+    );
+  }
+
+  async getTemplateRolloutHistory(options: {
+    templateKey?: string;
+    templateVersion?: string;
+    actorId?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }) {
+    return this.auditLogService.getTemplateRolloutHistory(options);
   }
 
   // Template registry reference
@@ -225,6 +515,10 @@ export class EmailService implements OnModuleInit {
 
     if (cbConfig) {
       this.cbConfig = cbConfig;
+    }
+
+    if (mailConfig?.slo) {
+      this.templateSloConfig = mailConfig.slo;
     }
 
     if (!mailConfig?.primary?.host) {
@@ -387,6 +681,127 @@ export class EmailService implements OnModuleInit {
     }
   }
 
+  private buildTemplateMetricLabels(
+    base: Record<string, string>,
+    templateMeta?: TemplateSendMeta,
+  ): Record<string, string> {
+    if (!templateMeta) return base;
+    return {
+      ...base,
+      template_key: templateMeta.templateKey,
+      template_version: templateMeta.templateVersion,
+      template_track: templateMeta.isCanary ? 'canary' : 'active',
+    };
+  }
+
+  private computeP95(entries: TemplateSloSeriesEntry[]): number {
+    if (entries.length === 0) return 0;
+    const sorted = [...entries]
+      .map((entry) => entry.durationMs)
+      .sort((a, b) => a - b);
+    const index = Math.ceil(sorted.length * 0.95) - 1;
+    return sorted[Math.max(0, index)];
+  }
+
+  private evaluateTemplateSlo(
+    templateMeta: TemplateSendMeta | undefined,
+    success: boolean,
+    durationMs: number,
+  ): void {
+    if (!templateMeta) return;
+
+    const key = `${templateMeta.templateKey}@${templateMeta.templateVersion}`;
+    const now = Date.now();
+    const windowMs = this.templateSloConfig.evaluationWindowMinutes * 60 * 1000;
+    const existing = this.templateSloSeries.get(key) || {
+      entries: [],
+      breachCount: 0,
+      inBreach: false,
+    };
+
+    existing.entries.push({
+      timestamp: now,
+      success,
+      durationMs,
+    });
+    existing.entries = existing.entries.filter(
+      (entry) => now - entry.timestamp <= windowMs,
+    );
+
+    const threshold = templateMeta.isCanary
+      ? this.templateSloConfig.canary
+      : this.templateSloConfig.active;
+    const total = existing.entries.length;
+    const failures = existing.entries.filter((entry) => !entry.success).length;
+    const errorRatePercent = total > 0 ? (failures / total) * 100 : 0;
+    const p95LatencyMs = this.computeP95(existing.entries);
+    const errorRateBreached = errorRatePercent > threshold.maxErrorRatePercent;
+    const latencyBreached = p95LatencyMs > threshold.maxP95LatencyMs;
+    const shouldEvaluate = total >= threshold.minSampleSize;
+    const breached = shouldEvaluate && (errorRateBreached || latencyBreached);
+
+    if (breached) {
+      existing.breachCount += 1;
+      const payload = {
+        templateKey: templateMeta.templateKey,
+        templateVersion: templateMeta.templateVersion,
+        track: templateMeta.isCanary ? 'canary' : 'active',
+        sampleSize: total,
+        failures,
+        errorRatePercent: Number(errorRatePercent.toFixed(2)),
+        p95LatencyMs: Number(p95LatencyMs.toFixed(2)),
+        thresholds: {
+          maxErrorRatePercent: threshold.maxErrorRatePercent,
+          maxP95LatencyMs: threshold.maxP95LatencyMs,
+          minSampleSize: threshold.minSampleSize,
+          alertAfterConsecutiveBreaches:
+            threshold.alertAfterConsecutiveBreaches,
+        },
+      };
+
+      this.appLogger?.emitWarningEvent(
+        'template_version_slo_threshold_breached',
+        payload,
+        'EmailService',
+      );
+
+      if (existing.breachCount >= threshold.alertAfterConsecutiveBreaches) {
+        this.appLogger?.emitAlertEvent(
+          'template_version_slo_alert',
+          {
+            ...payload,
+            breachCount: existing.breachCount,
+          },
+          'EmailService',
+        );
+      }
+
+      existing.inBreach = true;
+    } else if (existing.inBreach) {
+      this.appLogger?.emitEvent(
+        'info',
+        'template_version_slo_recovered',
+        {
+          templateKey: templateMeta.templateKey,
+          templateVersion: templateMeta.templateVersion,
+          track: templateMeta.isCanary ? 'canary' : 'active',
+          sampleSize: total,
+          failures,
+          errorRatePercent: Number(errorRatePercent.toFixed(2)),
+          p95LatencyMs: Number(p95LatencyMs.toFixed(2)),
+        },
+        'EmailService',
+      );
+
+      existing.inBreach = false;
+      existing.breachCount = 0;
+    } else {
+      existing.breachCount = 0;
+    }
+
+    this.templateSloSeries.set(key, existing);
+  }
+
   // ── Core send ────────────────────────────────────────────────────────────────
 
   private async sendEmail(
@@ -395,7 +810,7 @@ export class EmailService implements OnModuleInit {
     html: string,
     text: string,
     channel = 'email_generic',
-    templateMeta?: { templateKey: string; templateVersion: string },
+    templateMeta?: TemplateSendMeta,
   ): Promise<void> {
     const startedAt = Date.now();
     const provider = this.resolveProvider();
@@ -407,11 +822,19 @@ export class EmailService implements OnModuleInit {
         `Email blocked — circuit OPEN, no fallback. to=${maskedTo} channel=${channel}`,
       );
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'terminal',
-        reason,
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            outcome: 'terminal',
+            reason,
+          },
+          templateMeta,
+        ),
       });
-      throw new Error(`Email service unavailable: ${reason}`);
+      const unavailableError = new Error(`Email service unavailable: ${reason}`);
+      (unavailableError as any).templateMeta = templateMeta;
+      (unavailableError as any).errorCode = 'email_service_unavailable';
+      throw unavailableError;
     }
 
     if (!provider.transporter) {
@@ -419,9 +842,14 @@ export class EmailService implements OnModuleInit {
         'Email transporter not initialized yet. Email not sent.',
       );
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'terminal',
-        reason: 'transporter_not_initialized',
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            outcome: 'terminal',
+            reason: 'transporter_not_initialized',
+          },
+          templateMeta,
+        ),
       });
       return;
     }
@@ -432,15 +860,12 @@ export class EmailService implements OnModuleInit {
         `Routing email via fallback provider | channel=${channel} circuit_state=${this.cb.state}`,
       );
       this.appLogger?.incrementCounter('email_fallback_send_total', 1, {
-        channel,
+        ...this.buildTemplateMetricLabels({ channel }, templateMeta),
       });
     }
 
     try {
       const maskedTo = UserIdMasker.maskObject({ email: to }).email;
-      const maskedSubject = UserIdMasker.maskObject({ msg: subject }).msg;
-      const maskedHtml = UserIdMasker.maskObject({ msg: html }).msg;
-      const maskedText = UserIdMasker.maskObject({ msg: text }).msg;
       const info = await provider.transporter.sendMail({
         from: provider.from,
         to,
@@ -461,16 +886,29 @@ export class EmailService implements OnModuleInit {
       this.onSendSuccess(provider);
 
       this.appLogger?.incrementCounter('notification_send_success_total', 1, {
-        channel,
-        provider: provider.label,
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            provider: provider.label,
+          },
+          templateMeta,
+        ),
       });
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: provider.label,
-        },
+        this.buildTemplateMetricLabels(
+          {
+            channel,
+            provider: provider.label,
+          },
+          templateMeta,
+        ),
+      );
+      this.evaluateTemplateSlo(
+        templateMeta,
+        true,
+        Date.now() - startedAt,
       );
     } catch (error) {
       const maskedTo = UserIdMasker.maskObject({ email: to }).email;
@@ -487,23 +925,48 @@ export class EmailService implements OnModuleInit {
       );
 
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'transient',
-        provider: provider.label,
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            outcome: 'transient',
+            provider: provider.label,
+          },
+          templateMeta,
+        ),
       });
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: provider.label,
-        },
+        this.buildTemplateMetricLabels(
+          {
+            channel,
+            provider: provider.label,
+          },
+          templateMeta,
+        ),
+      );
+      this.evaluateTemplateSlo(
+        templateMeta,
+        false,
+        Date.now() - startedAt,
       );
 
       // If primary failed and fallback is available, retry once on fallback
       if (!usingFallback && this.fallback) {
         this.logger.warn(
           `Primary send failed — retrying on fallback | channel=${channel} error=${errorMessage}`,
+        );
+        this.appLogger?.incrementCounter(
+          'notification_retry_attempt_total',
+          1,
+          this.buildTemplateMetricLabels(
+            {
+              channel,
+              provider: provider.label,
+              retry_mode: 'fallback',
+            },
+            templateMeta,
+          ),
         );
         return this.sendViaFallback(
           to,
@@ -512,10 +975,14 @@ export class EmailService implements OnModuleInit {
           text,
           channel,
           startedAt,
+          templateMeta,
         );
       }
 
-      throw new Error(`Failed to send email: ${errorMessage}`);
+      const wrappedError = new Error(`Failed to send email: ${errorMessage}`);
+      (wrappedError as any).templateMeta = templateMeta;
+      (wrappedError as any).errorCode = 'email_send_failed';
+      throw wrappedError;
     }
   }
 
@@ -530,6 +997,7 @@ export class EmailService implements OnModuleInit {
     text: string,
     channel: string,
     startedAt: number,
+    templateMeta?: TemplateSendMeta,
   ): Promise<void> {
     if (!this.fallback) return;
 
@@ -546,19 +1014,32 @@ export class EmailService implements OnModuleInit {
         `Email delivered via fallback (after primary failure) to ${to}: ${info.messageId} | channel=${channel}`,
       );
       this.appLogger?.incrementCounter('email_fallback_send_total', 1, {
-        channel,
+        ...this.buildTemplateMetricLabels({ channel }, templateMeta),
       });
       this.appLogger?.incrementCounter('notification_send_success_total', 1, {
-        channel,
-        provider: 'fallback',
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            provider: 'fallback',
+          },
+          templateMeta,
+        ),
       });
       this.appLogger?.observeTimer(
         'notification_send_duration_ms',
         Date.now() - startedAt,
-        {
-          channel,
-          provider: 'fallback',
-        },
+        this.buildTemplateMetricLabels(
+          {
+            channel,
+            provider: 'fallback',
+          },
+          templateMeta,
+        ),
+      );
+      this.evaluateTemplateSlo(
+        templateMeta,
+        true,
+        Date.now() - startedAt,
       );
     } catch (fallbackError) {
       const msg =
@@ -569,11 +1050,24 @@ export class EmailService implements OnModuleInit {
         `Fallback also failed for ${to}: ${msg} | channel=${channel}`,
       );
       this.appLogger?.incrementCounter('notification_send_failure_total', 1, {
-        channel,
-        outcome: 'terminal',
-        provider: 'fallback',
+        ...this.buildTemplateMetricLabels(
+          {
+            channel,
+            outcome: 'terminal',
+            provider: 'fallback',
+          },
+          templateMeta,
+        ),
       });
-      throw new Error(`Both primary and fallback failed: ${msg}`);
+      this.evaluateTemplateSlo(
+        templateMeta,
+        false,
+        Date.now() - startedAt,
+      );
+      const wrappedError = new Error(`Both primary and fallback failed: ${msg}`);
+      (wrappedError as any).templateMeta = templateMeta;
+      (wrappedError as any).errorCode = 'email_send_failed_all_providers';
+      throw wrappedError;
     }
   }
 
@@ -602,7 +1096,7 @@ export class EmailService implements OnModuleInit {
 
     const { template, isCanary } = resolved;
     const vars = { username };
-    const rendered = renderTemplate(template, vars);
+    const rendered = renderTemplate(templateKey, template, vars);
     await this.sendEmail(
       email,
       rendered.subject,
@@ -613,7 +1107,7 @@ export class EmailService implements OnModuleInit {
         templateKey,
         templateVersion: template.version,
         ...(isCanary ? { isCanary: true } : {})
-      } as any
+      }
     );
   }
 
@@ -701,7 +1195,7 @@ If you didn't create an account with us, please ignore this email.
     if (resolved) {
       const { template, isCanary } = resolved;
       const vars = { username, reactorName, emoji, confessionContent };
-      const rendered = renderTemplate(template, vars);
+      const rendered = renderTemplate(templateKey, template, vars);
       await this.sendEmail(
         toEmail,
         rendered.subject,
@@ -712,7 +1206,7 @@ If you didn't create an account with us, please ignore this email.
           templateKey,
           templateVersion: template.version,
           ...(isCanary ? { isCanary: true } : {})
-        } as any
+        }
       );
     } else {
       // Fallback to hardcoded if no template found
@@ -749,7 +1243,7 @@ If you didn't create an account with us, please ignore this email.
     if (resolved) {
       const { template, isCanary } = resolved;
       const vars = { username: username || 'User', resetUrl, token };
-      const rendered = renderTemplate(template, vars);
+      const rendered = renderTemplate(templateKey, template, vars);
       await this.sendEmail(
         email,
         rendered.subject,
@@ -760,7 +1254,7 @@ If you didn't create an account with us, please ignore this email.
           templateKey,
           templateVersion: template.version,
           ...(isCanary ? { isCanary: true } : {})
-        } as any
+        }
       );
     } else {
       const subject = 'Reset Your XConfess Password';
@@ -786,7 +1280,7 @@ If you didn't create an account with us, please ignore this email.
     if (resolved) {
       const { template, isCanary } = resolved;
       const vars = { confessionId, commentPreview, frontendUrl: this.configService.get('FRONTEND_URL') || 'http://localhost:3000' };
-      const rendered = renderTemplate(template, vars);
+      const rendered = renderTemplate(templateKey, template, vars);
       await this.sendEmail(
         to,
         rendered.subject,
@@ -797,7 +1291,7 @@ If you didn't create an account with us, please ignore this email.
           templateKey,
           templateVersion: template.version,
           ...(isCanary ? { isCanary: true } : {})
-        } as any
+        }
       );
     } else {
       const subject = 'New Comment on Your Confession';
