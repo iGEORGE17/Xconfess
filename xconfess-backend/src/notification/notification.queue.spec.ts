@@ -4,7 +4,10 @@ import {
   NotificationQueue,
   CommentNotificationPayload,
 } from './notification.queue';
-import { EmailService } from '../email/email.service';
+import {
+  EmailService,
+  TemplateVariableValidationError,
+} from '../email/email.service';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
@@ -55,9 +58,13 @@ const makePayload = (
 describe('NotificationQueue', () => {
   let service: NotificationQueue;
   let logger: jest.Mocked<AppLogger>;
+  let emailServiceMock: { sendCommentNotification: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    emailServiceMock = {
+      sendCommentNotification: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -68,9 +75,7 @@ describe('NotificationQueue', () => {
         },
         {
           provide: EmailService,
-          useValue: {
-            sendCommentNotification: jest.fn().mockResolvedValue(undefined),
-          },
+          useValue: emailServiceMock,
         },
         {
           provide: AppLogger,
@@ -260,6 +265,53 @@ describe('NotificationQueue', () => {
 
       const warnMessage: string = logger.warn.mock.calls[0][0];
       expect(warnMessage).not.toContain('secret@example.com');
+    });
+  });
+
+  describe('processCommentNotification', () => {
+    it('records actionable schema validation context on render failure', async () => {
+      const validationError = new TemplateVariableValidationError(
+        'comment_notification',
+        'v2',
+        [
+          {
+            code: 'unknown',
+            key: 'extraField',
+            expected: 'not_allowed',
+            actual: 'string',
+          },
+        ],
+      );
+      (validationError as any).templateMeta = {
+        templateKey: 'comment_notification',
+        templateVersion: 'v2',
+        isCanary: true,
+      };
+
+      emailServiceMock.sendCommentNotification.mockRejectedValue(validationError);
+
+      await expect(
+        (service as any).processCommentNotification(makePayload()),
+      ).rejects.toThrow(TemplateVariableValidationError);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          failureContext: expect.objectContaining({
+            code: 'template_variable_validation_error',
+            templateKey: 'comment_notification',
+            templateVersion: 'v2',
+            templateTrack: 'canary',
+            violations: expect.arrayContaining([
+              expect.objectContaining({
+                code: 'unknown',
+                key: 'extraField',
+              }),
+            ]),
+          }),
+        }),
+        undefined,
+        'NotificationQueue',
+      );
     });
   });
 });
