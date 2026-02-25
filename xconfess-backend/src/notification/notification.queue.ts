@@ -10,9 +10,7 @@ import { Comment } from '../comment/entities/comment.entity';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditActionType } from '../audit-log/audit-log.entity';
-import { rateLimitConfig } from '../config/rate-limit.config';
 import {
-  dlqRetentionConfig,
   DlqRetentionConfig,
 } from '../config/dlq-retention.config';
 import { NotificationCategory, User } from '../user/entities/user.entity';
@@ -97,9 +95,9 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly userService: UserService,
     private readonly userRepository: Repository<User>,
     @Inject('DLQ_RETENTION_CONFIG')
-    dlqConfig: DlqRetentionConfig = dlqRetentionConfig,
+    dlqConfig: DlqRetentionConfig,
   ) {
-    this.dedupeTtl = rateLimitConfig.notification.dedupeTtlSeconds;
+    this.dedupeTtl = this.configService.get<number>('rateLimit.notification.dedupeTtlSeconds', 60);
     this.dlqConfig = dlqConfig;
     this.initializeWorkers();
     // Schedule periodic cleanup (every 6 hours)
@@ -419,7 +417,7 @@ export class NotificationQueue implements OnModuleDestroy {
           error instanceof TemplateVariableValidationError
             ? error.code
             : ((error as any)?.errorCode as string | undefined) ||
-              'notification_send_failed',
+            'notification_send_failed',
         templateKey: templateErrorMeta.templateKey || null,
         templateVersion: templateErrorMeta.templateVersion || null,
         templateTrack: templateErrorMeta.templateTrack || null,

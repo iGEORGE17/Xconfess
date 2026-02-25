@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { NotificationQueue } from './notification.queue';
-import { dlqRetentionConfig } from '../config/dlq-retention.config';
+import { getDlqRetentionConfig } from '../config/dlq-retention.config';
 import { EmailModule } from '../email/email.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { LoggerModule } from '../logger/logger.module';
@@ -18,8 +19,8 @@ import { User } from '../user/entities/user.entity';
   controllers: [NotificationAdminController],
   providers: [
     NotificationQueue,
-    { provide: 'DLQ_RETENTION_CONFIG', useValue: dlqRetentionConfig },
+    { provide: 'DLQ_RETENTION_CONFIG', useFactory: getDlqRetentionConfig, inject: [ConfigService] },
   ],
   exports: [NotificationQueue],
 })
-export class NotificationModule {}
+export class NotificationModule { }
