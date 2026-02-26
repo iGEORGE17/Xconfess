@@ -15,7 +15,9 @@ import { GetReportsQueryDto } from './dto/get-reports-query.dto';
 import { PaginatedReportsResponseDto } from './dto/get-reports-response.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { User, UserRole } from '../user/entities/user.entity';
+import { AnonymousUser } from '../user/entities/anonymous-user.entity';
 import { RequestUser } from '../auth/interfaces/jwt-payload.interface';
+import { OutboxEvent, OutboxStatus } from '../common/entities/outbox-event.entity';
 
 /** Message returned when user attempts a duplicate report */
 export const DUPLICATE_REPORT_MESSAGE =
@@ -37,6 +39,8 @@ export class ReportsService {
     private readonly reportRepository: Repository<Report>,
     @InjectRepository(AnonymousConfession)
     private readonly confessionRepository: Repository<AnonymousConfession>,
+    @InjectRepository(OutboxEvent)
+    private readonly outboxRepository: Repository<OutboxEvent>,
     private readonly auditLogService: AuditLogService,
   ) { }
 
@@ -50,17 +54,21 @@ export class ReportsService {
 
     return this.reportRepository.manager.transaction(async (manager) => {
       // 1️⃣ Ensure confession exists
-      const confession = await manager
-        .getRepository(AnonymousConfession)
-        .findOne({ where: { id: confessionId } });
+      const confessionRepo = manager.getRepository(AnonymousConfession);
+      const reportRepo = manager.getRepository(Report);
+      const outboxRepo = manager.getRepository(OutboxEvent);
+
+      const confession = await confessionRepo.findOne({
+        where: { id: confessionId },
+        relations: ['anonymousUser', 'anonymousUser.userLinks', 'anonymousUser.userLinks.user'],
+      });
 
       if (!confession) {
         throw new NotFoundException('Confession not found');
       }
 
       // 2️⃣ Duplicate check (handle NULL reporterId explicitly)
-      const qb = manager
-        .getRepository(Report)
+      const qb = reportRepo
         .createQueryBuilder('report')
         .where('report.confessionId = :confessionId', { confessionId })
         .andWhere('report.createdAt > :since', { since });
@@ -78,8 +86,7 @@ export class ReportsService {
       }
 
       // 3️⃣ Save report atomically with pending status
-      // DB-level unique index (idx_reports_dedupe_confession_reporter) catches concurrent duplicates
-      const report = manager.getRepository(Report).create({
+      const report = reportRepo.create({
         confessionId,
         reporterId: reporterId ?? undefined,
         type: dto.type ?? ReportType.OTHER,
@@ -89,7 +96,7 @@ export class ReportsService {
 
       let savedReport: Report;
       try {
-        savedReport = await manager.getRepository(Report).save(report);
+        savedReport = await reportRepo.save(report);
       } catch (err: unknown) {
         if (isDuplicateReportConstraintViolation(err)) {
           throw new BadRequestException(DUPLICATE_REPORT_MESSAGE);
@@ -97,7 +104,27 @@ export class ReportsService {
         throw err;
       }
 
-      // 4️⃣ Log report creation (non-blocking - no await)
+      // 4️⃣ Create Outbox Event for report notification
+      // We notify the confession author that their content was reported.
+      const recipientEmail = this.getRecipientEmail(confession.anonymousUser);
+      if (recipientEmail) {
+        await outboxRepo.save(
+          outboxRepo.create({
+            type: 'report_notification',
+            payload: {
+              reportId: savedReport.id,
+              confessionId: confession.id,
+              recipientEmail,
+              type: savedReport.type,
+              reason: savedReport.reason,
+            },
+            idempotencyKey: `report:${savedReport.id}`,
+            status: OutboxStatus.PENDING,
+          }),
+        );
+      }
+
+      // ... existing audit log logic ...
       if (reporterId) {
         this.auditLogService.logReport(
           savedReport.id,
@@ -117,6 +144,15 @@ export class ReportsService {
 
       return savedReport;
     });
+  }
+
+  private getRecipientEmail(anonymousUser: AnonymousUser): string | null {
+    if (!anonymousUser) return null;
+    const link = anonymousUser.userLinks?.[0];
+    if (link?.user) {
+      return link.user.getEmail();
+    }
+    return null;
   }
 
   async resolveReport(
