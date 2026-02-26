@@ -12,6 +12,13 @@ export enum UserRole {
   ADMIN = 'admin',
 }
 
+export enum NotificationCategory {
+  MESSAGE = 'message',
+  REACTION = 'reaction',
+  MODERATION = 'moderation',
+  SYSTEM = 'system',
+}
+
 @Entity()
 @Unique(['username'])
 @Unique(['emailHash'])
@@ -49,10 +56,24 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   resetPasswordExpires: Date | null;
 
+  @Column({
+    name: 'notification_preferences',
+    type: 'jsonb',
+    default: () => "'{}'",
+  })
+  notificationPreferences: Partial<Record<NotificationCategory, boolean>>;
+
+  isNotificationEnabled(category: NotificationCategory): boolean {
+    // Default = true if not explicitly disabled
+    if (!this.notificationPreferences) return true;
+
+    const value = this.notificationPreferences[category];
+    return value !== false;
+  }
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

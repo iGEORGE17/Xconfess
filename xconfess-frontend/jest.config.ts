@@ -6,21 +6,22 @@ const config = {
   testMatch: [
     "**/app/**/__tests__/**/*.test.ts",
     "**/app/**/__tests__/**/*.test.tsx",
+    "**/tests/**/*.spec.ts",
+    "**/tests/**/*.spec.tsx",
   ],
   moduleNameMapper: {
-    "^@/(.*)$": "<rootDir>/app/$1",
+    "^@/(.*)$": "<rootDir>/$1",
   },
-  setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   transform: {
     "^.+\\.tsx?$": [
       "ts-jest",
       {
         tsconfig: {
-          jsx: "react",
+          jsx: "react-jsx",
         },
       },
     ],
   },
 };
-
 module.exports = config;

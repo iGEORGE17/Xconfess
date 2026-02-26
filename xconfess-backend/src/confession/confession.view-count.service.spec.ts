@@ -5,6 +5,12 @@ import { ConfessionViewCacheService } from './confession-view-cache.service';
 import { AiModerationService } from '../moderation/ai-moderation.service';
 import { ModerationRepositoryService } from '../moderation/moderation-repository.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AnonymousUserService } from '../user/anonymous-user.service';
+import { AppLogger } from '../logger/logger.service';
+import { EncryptionService } from '../encryption/encryption.service';
+import { StellarService } from '../stellar/stellar.service';
+import { CacheService } from '../cache/cache.service';
+import { TagService } from './tag.service';
 import { encryptConfession } from '../utils/confession-encryption';
 
 
@@ -23,7 +29,7 @@ describe('ConfessionService - View Count Logic', () => {
           provide: AnonymousConfessionRepository,
           useValue: {
             findOne: jest.fn(),
-            increment: jest.fn(),
+            incrementViewCountAtomically: jest.fn(),
           },
         },
         {
@@ -35,6 +41,12 @@ describe('ConfessionService - View Count Logic', () => {
         { provide: AiModerationService, useValue: { moderateContent: jest.fn() } },
         { provide: ModerationRepositoryService, useValue: { createLog: jest.fn() } },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        { provide: AnonymousUserService, useValue: {} },
+        { provide: AppLogger, useValue: { log: jest.fn(), error: jest.fn() } },
+        { provide: EncryptionService, useValue: {} },
+        { provide: StellarService, useValue: {} },
+        { provide: CacheService, useValue: {} },
+        { provide: TagService, useValue: {} },
       ],
     }).compile();
 
@@ -47,7 +59,7 @@ describe('ConfessionService - View Count Logic', () => {
     const encrypted = encryptConfession('hello');
     (repo.findOne as jest.Mock).mockResolvedValue({ id: '1', message: encrypted, view_count: 0 });
     (cache.checkAndMarkView as jest.Mock).mockResolvedValue(true);
-    (repo.increment as jest.Mock).mockResolvedValue(undefined);
+    (repo.incrementViewCountAtomically as jest.Mock).mockResolvedValue(undefined);
     (repo.findOne as jest.Mock).mockResolvedValueOnce({ id: '1', message: encrypted, view_count: 0 }).mockResolvedValueOnce({
       id: '1',
       message: encrypted,
@@ -68,14 +80,14 @@ describe('ConfessionService - View Count Logic', () => {
     const confession = await service.getConfessionByIdWithViewCount('1', req as any);
     expect(confession!.view_count).toBe(5);
     expect(cache.checkAndMarkView).toHaveBeenCalled();
-    expect(repo.increment).not.toHaveBeenCalled();
+    expect(repo.incrementViewCountAtomically).not.toHaveBeenCalled();
   });
 
   it('should handle anonymous users using IP address', async () => {
     const encrypted = encryptConfession('hello');
     (repo.findOne as jest.Mock).mockResolvedValue({ id: '1', message: encrypted, view_count: 0 });
     (cache.checkAndMarkView as jest.Mock).mockResolvedValue(true);
-    (repo.increment as jest.Mock).mockResolvedValue(undefined);
+    (repo.incrementViewCountAtomically as jest.Mock).mockResolvedValue(undefined);
     (repo.findOne as jest.Mock).mockResolvedValueOnce({ id: '1', message: encrypted, view_count: 0 }).mockResolvedValueOnce({
       id: '1',
       message: encrypted,
@@ -89,5 +101,5 @@ describe('ConfessionService - View Count Logic', () => {
     expect(cache.checkAndMarkView).toHaveBeenCalledWith('1', '192.168.1.1');
   });
 
-  
+
 });
