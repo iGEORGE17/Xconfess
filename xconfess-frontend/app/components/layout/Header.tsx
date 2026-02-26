@@ -36,6 +36,14 @@ export default function Header() {
               >
                 Profile
               </Link>
+              {user?.role === "admin" && (
+                <Link
+                  href="/admin"
+                  className="text-gray-700 hover:text-purple-600 font-bold"
+                >
+                  Admin
+                </Link>
+              )}
               <Link
                 href="/messages"
                 className="text-gray-700 hover:text-purple-600 dark:text-slate-300 dark:hover:text-purple-400 font-medium transition-colors"
@@ -44,7 +52,7 @@ export default function Header() {
               </Link>
 
               <div className="h-6 w-px bg-zinc-200 dark:bg-slate-800" />
-              
+
               <ThemeToggle />
 
               {user && (

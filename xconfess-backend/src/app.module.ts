@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { getTypeOrmConfig } from './config/database.config';
+import { envValidationSchema } from './config/env.validation';
+import appConfig from './config/app.config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfessionModule } from './confession/confession.module';
@@ -23,6 +25,7 @@ import { StellarModule } from './stellar/stellar.module';
 import { CacheModule } from './cache/cache.module';
 import { TippingModule } from './tipping/tipping.module';
 import { LoggerModule } from './logger/logger.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { EncryptionModule } from './encryption/encryption.module';
 import { NotificationModule } from './notification/notification.module';
 import { DatabaseModule } from './database/database.module';
@@ -34,7 +37,11 @@ import { DatabaseModule } from './database/database.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      load: [throttleConfig],
+      load: [throttleConfig, appConfig],
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+      },
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -52,6 +59,7 @@ import { DatabaseModule } from './database/database.module';
       useFactory: getTypeOrmConfig,
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     TerminusModule,
     UserModule,
     AuthModule,
