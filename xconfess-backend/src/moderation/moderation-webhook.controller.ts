@@ -69,9 +69,9 @@
 //       confession.moderationFlags = payload.moderationFlags as any;
 //       confession.moderationStatus = payload.moderationStatus;
 //       confession.moderationDetails = payload.details;
-//       confession.requiresReview = 
+//       confession.requiresReview =
 //         payload.moderationStatus === ModerationStatus.FLAGGED;
-//       confession.isHidden = 
+//       confession.isHidden =
 //         payload.moderationStatus === ModerationStatus.REJECTED;
 
 //       await this.confessionRepo.save(confession);
@@ -80,14 +80,14 @@
 //       const logs = await this.moderationRepoService.getLogsByConfession(
 //         payload.confessionId,
 //       );
-      
+
 //       if (logs.length > 0) {
 //         const log = logs[0];
 //         log.moderationScore = payload.moderationScore;
 //         log.moderationFlags = payload.moderationFlags as any;
 //         log.moderationStatus = payload.moderationStatus;
 //         log.details = payload.details;
-//         log.requiresReview = 
+//         log.requiresReview =
 //           payload.moderationStatus === ModerationStatus.FLAGGED;
 //       }
 
@@ -154,7 +154,7 @@
 
 //     // TODO: Send notification to admin/moderators
 //     // Example: this.notificationService.notifyModerators(event);
-    
+
 //     // TODO: Could also trigger additional actions like:
 //     // - Email notification
 //     // - Slack/Discord webhook

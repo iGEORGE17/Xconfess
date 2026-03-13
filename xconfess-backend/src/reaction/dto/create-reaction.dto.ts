@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsUUID, IsString } from 'class-validator';
+import { IsNotEmpty, IsUUID, IsString, IsOptional } from 'class-validator';
 
 export class CreateReactionDto {
   @IsUUID()
@@ -12,4 +12,8 @@ export class CreateReactionDto {
   @IsString()
   @IsNotEmpty()
   emoji: string;
+
+  @IsOptional()
+  @IsUUID()
+  anonymousUserId?: string;
 }

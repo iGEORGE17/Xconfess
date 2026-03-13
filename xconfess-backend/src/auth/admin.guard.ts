@@ -1,11 +1,23 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { UserRole } from '../user/entities/user.entity';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & {
+  user?: {
+    role?: UserRole;
+  };
+};
 
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
-    
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+
     // Check if user is authenticated
     if (!request.user) {
       throw new ForbiddenException('User is not authenticated');

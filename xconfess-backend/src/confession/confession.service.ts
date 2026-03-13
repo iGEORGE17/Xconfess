@@ -553,7 +553,7 @@ export class ConfessionService {
     return data;
   }
 
-  private async findByUser(userId: string) {
+  private async findByUser(_userId: string) {
     // Implementation
     return [];
   }

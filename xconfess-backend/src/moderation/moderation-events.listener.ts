@@ -35,7 +35,7 @@ export class ModerationEventsListener {
   ) {}
 
   @OnEvent('moderation.high-severity')
-  async handleHighSeverity(event: HighSeverityEvent) {
+  handleHighSeverity(event: HighSeverityEvent) {
     this.logger.warn(
       `HIGH SEVERITY CONTENT DETECTED - Confession: ${event.confessionId}, ` +
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
@@ -77,7 +77,7 @@ export class ModerationEventsListener {
   }
 
   @OnEvent('moderation.requires-review')
-  async handleRequiresReview(event: RequiresReviewEvent) {
+  handleRequiresReview(event: RequiresReviewEvent) {
     this.logger.log(
       `Content flagged for review - Confession: ${event.confessionId}, ` +
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
