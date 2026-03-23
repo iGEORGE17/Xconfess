@@ -259,20 +259,6 @@ STELLAR_NETWORK=testnet
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 ```
 
-### Initialize the contract
-
-After deployment, call `initialize` once to set the owner address:
-
-```bash
-stellar contract invoke \
-  --id $CONTRACT_ID \
-  --network testnet \
-  --source my-deployer-key \
-  -- \
-  initialize \
-  --owner $(stellar keys address my-deployer-key)
-```
-
 ### Deploy to mainnet
 
 ```bash
@@ -285,11 +271,6 @@ STELLAR_SOURCE_ACCOUNT=my-mainnet-key npm run contract:deploy:mainnet
 ---
 
 ## Contract API
-
-### `initialize(owner: Address)`
-
-Deploys role state. Must be called once immediately after deployment.
-Panics if called a second time.
 
 ### `anchor_confession(hash: BytesN<32>, timestamp: u64) → Symbol`
 
@@ -308,29 +289,39 @@ Returns `Some(timestamp)` if the hash is anchored, `None` otherwise.
 
 Returns the total number of unique hashes ever anchored.
 
-### `assign_admin(caller: Address, target: Address)`
+### `get_version() → ContractVersionInfo`
 
-Grants `target` the admin role. Caller must be the owner.
+Returns release metadata for compatibility checks:
 
-### `revoke_admin(caller: Address, target: Address)`
+- `major: u32`
+- `minor: u32`
+- `patch: u32`
+- `build_metadata: String`
 
-Revokes `target`'s admin role. Caller must be the owner.
+### `get_capabilities() → ContractCapabilityInfo`
 
-### `transfer_ownership(caller: Address, new_owner: Address)`
+Returns runtime capability flags plus compatibility markers:
 
-Transfers contract ownership. Caller must be the current owner.
-Emits `own_xfer` event.
+- `capabilities: Vec<Symbol>`
+- `event_schema_version: u32`
+- `error_registry_version: u32`
 
-### `resolve(caller: Address, confession_id: u32)`
+Current flags:
 
-Marks a reported confession as resolved. Caller must be admin or owner.
+- `anchorv1`
+- `verifyv1`
+- `countv1`
+- `eventsv1`
+- `meta_v1`
 
-### `is_owner(addr: Address) → bool`
-### `is_admin(addr: Address) → bool`
-### `can_moderate(addr: Address) → bool`
-### `get_owner() → Address`
+### `has_capability(capability: Symbol) → bool`
 
-View functions — no auth required, no events emitted.
+Utility read method so off-chain consumers can branch behavior safely.
+
+### `get_event_schema_version() → u32`
+### `get_error_registry_version() → u32`
+
+Compatibility markers for event payload schema and error-code registry versions.
 
 ---
 
