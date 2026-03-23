@@ -11,6 +11,8 @@ pub enum ContractError {
     InvalidInput,       // input value invalid
     Overflow,           // arithmetic overflow
     CooldownActive,     // update cooldown not elapsed
+    PayloadTooLarge,    // emitted payload or metadata exceeds configured bound
+    MetadataTooLong,    // metadata field length exceeded
 
     /// ===========================================
     /// Confession module errors
@@ -30,6 +32,7 @@ pub enum ContractError {
     /// ===========================================
     ReportExists,       // user already reported
     InvalidReportReason,// report reason not allowed
+    ReportReasonTooLong,// report reason exceeds configured max
 }
 
 impl ContractError {
@@ -40,6 +43,8 @@ impl ContractError {
             ContractError::InvalidInput => 1002,
             ContractError::Overflow => 1003,
             ContractError::CooldownActive => 1004,
+            ContractError::PayloadTooLarge => 1005,
+            ContractError::MetadataTooLong => 1006,
 
             ContractError::ConfessionExists => 2000,
             ContractError::ConfessionEmpty => 2001,
@@ -50,6 +55,7 @@ impl ContractError {
 
             ContractError::ReportExists => 4000,
             ContractError::InvalidReportReason => 4001,
+            ContractError::ReportReasonTooLong => 4002,
         }
     }
 
@@ -60,6 +66,8 @@ impl ContractError {
             ContractError::InvalidInput => "invalid input",
             ContractError::Overflow => "arithmetic overflow",
             ContractError::CooldownActive => "cooldown period not elapsed",
+            ContractError::PayloadTooLarge => "payload exceeds configured limit",
+            ContractError::MetadataTooLong => "metadata field too long",
 
             ContractError::ConfessionExists => "confession already exists",
             ContractError::ConfessionEmpty => "confession content empty",
@@ -70,6 +78,7 @@ impl ContractError {
 
             ContractError::ReportExists => "report already exists",
             ContractError::InvalidReportReason => "report reason invalid",
+            ContractError::ReportReasonTooLong => "report reason too long",
         }
     }
 }
