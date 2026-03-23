@@ -14,6 +14,60 @@ pub const REPORT_EVENT: Symbol = symbol_short!("report");
 pub const ROLE_EVENT: Symbol = symbol_short!("role");
 
 /// ===========================================
+/// EVENT NONCE STORAGE
+/// ===========================================
+///
+/// Nonces are monotonic counters used by indexers to:
+/// - detect gaps (missing events)
+/// - detect duplicates/replays
+/// - enforce deterministic in-stream ordering
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum EventNonceKey {
+    Confession(u64),
+    Reaction(u64),
+    Report(u64),
+    Role(Address, Symbol),
+    Governance(Symbol),
+}
+
+fn read_nonce(env: &Env, key: &EventNonceKey) -> u64 {
+    env.storage().instance().get(key).unwrap_or(0u64)
+}
+
+fn bump_nonce(env: &Env, key: EventNonceKey) -> u64 {
+    let next = read_nonce(env, &key)
+        .checked_add(1)
+        .expect("event nonce overflow");
+    env.storage().instance().set(&key, &next);
+    next
+}
+
+pub fn latest_confession_nonce(env: &Env, confession_id: u64) -> u64 {
+    read_nonce(env, &EventNonceKey::Confession(confession_id))
+}
+
+pub fn latest_reaction_nonce(env: &Env, confession_id: u64) -> u64 {
+    read_nonce(env, &EventNonceKey::Reaction(confession_id))
+}
+
+pub fn latest_report_nonce(env: &Env, confession_id: u64) -> u64 {
+    read_nonce(env, &EventNonceKey::Report(confession_id))
+}
+
+pub fn latest_role_nonce(env: &Env, user: Address, role: Symbol) -> u64 {
+    read_nonce(env, &EventNonceKey::Role(user, role))
+}
+
+pub fn latest_governance_nonce(env: &Env, stream: Symbol) -> u64 {
+    read_nonce(env, &EventNonceKey::Governance(stream))
+}
+
+pub fn next_governance_nonce(env: &Env, stream: Symbol) -> u64 {
+    bump_nonce(env, EventNonceKey::Governance(stream))
+}
+
+/// ===========================================
 /// CONFESSION EVENT (V1) WITH OPTIONAL CORRELATION ID
 /// ===========================================
 #[contracttype]
@@ -23,6 +77,7 @@ pub struct ConfessionEvent {
     pub confession_id: u64,
     pub author: Address,
     pub content_hash: Symbol,
+    pub nonce: u64,
     pub timestamp: u64,
     pub correlation_id: Option<Symbol>, // new optional field
 }
@@ -34,11 +89,14 @@ pub fn emit_confession(
     content_hash: Symbol,
     correlation_id: Option<Symbol>, // optional parameter
 ) {
+    let nonce = bump_nonce(env, EventNonceKey::Confession(confession_id));
+
     let payload = ConfessionEvent {
         event_version: EVENT_VERSION_V1,
         confession_id,
         author,
         content_hash,
+        nonce,
         timestamp: env.ledger().timestamp(),
         correlation_id,
     };
@@ -56,6 +114,7 @@ pub struct ReactionEvent {
     pub confession_id: u64,
     pub reactor: Address,
     pub reaction_type: Symbol,
+    pub nonce: u64,
     pub timestamp: u64,
     pub correlation_id: Option<Symbol>,
 }
@@ -67,11 +126,14 @@ pub fn emit_reaction(
     reaction_type: Symbol,
     correlation_id: Option<Symbol>,
 ) {
+    let nonce = bump_nonce(env, EventNonceKey::Reaction(confession_id));
+
     let payload = ReactionEvent {
         event_version: EVENT_VERSION_V1,
         confession_id,
         reactor,
         reaction_type,
+        nonce,
         timestamp: env.ledger().timestamp(),
         correlation_id,
     };
@@ -89,6 +151,7 @@ pub struct ReportEvent {
     pub confession_id: u64,
     pub reporter: Address,
     pub reason: Symbol,
+    pub nonce: u64,
     pub timestamp: u64,
     pub correlation_id: Option<Symbol>,
 }
@@ -100,11 +163,14 @@ pub fn emit_report(
     reason: Symbol,
     correlation_id: Option<Symbol>,
 ) {
+    let nonce = bump_nonce(env, EventNonceKey::Report(confession_id));
+
     let payload = ReportEvent {
         event_version: EVENT_VERSION_V1,
         confession_id,
         reporter,
         reason,
+        nonce,
         timestamp: env.ledger().timestamp(),
         correlation_id,
     };
@@ -122,6 +188,7 @@ pub struct RoleEvent {
     pub user: Address,
     pub role: Symbol,
     pub granted: bool,
+    pub nonce: u64,
     pub timestamp: u64,
     pub correlation_id: Option<Symbol>,
 }
@@ -133,11 +200,14 @@ pub fn emit_role(
     granted: bool,
     correlation_id: Option<Symbol>,
 ) {
+    let nonce = bump_nonce(env, EventNonceKey::Role(user.clone(), role.clone()));
+
     let payload = RoleEvent {
         event_version: EVENT_VERSION_V1,
         user,
         role,
         granted,
+        nonce,
         timestamp: env.ledger().timestamp(),
         correlation_id,
     };
