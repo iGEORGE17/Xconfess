@@ -1,5 +1,8 @@
 use soroban_sdk::{contracttype, Env, Vec};
 
+// #403: explicit bounds to keep storage/event payloads predictable.
+pub const MAX_CONFESSION_CONTENT_LEN: u32 = 2048;
+
 #[contracttype]
 #[derive(Clone)]
 pub struct Confession {
@@ -17,6 +20,13 @@ pub enum ConfessionKey {
 }
 
 pub fn create(env: &Env, content: soroban_sdk::String) -> u64 {
+    if content.len() == 0 {
+        panic!("confession content empty");
+    }
+    if content.len() > MAX_CONFESSION_CONTENT_LEN {
+        panic!("confession content too long");
+    }
+
     let mut id: u64 = env
         .storage()
         .instance()

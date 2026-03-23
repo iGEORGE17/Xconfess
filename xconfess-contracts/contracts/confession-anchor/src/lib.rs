@@ -1,12 +1,45 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, BytesN, Env, Symbol};
+mod errors;
+mod events;
+
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, BytesN, Env, String, Symbol, Vec,
+};
+
+pub const CONTRACT_SEMVER_MAJOR: u32 = 1;
+pub const CONTRACT_SEMVER_MINOR: u32 = 0;
+pub const CONTRACT_SEMVER_PATCH: u32 = 0;
+pub const CONTRACT_BUILD_METADATA: &str = "xconfess.confession-anchor+2026-03-23";
+
+const CAPABILITY_ANCHOR_V1: Symbol = symbol_short!("anchorv1");
+const CAPABILITY_VERIFY_V1: Symbol = symbol_short!("verifyv1");
+const CAPABILITY_COUNT_V1: Symbol = symbol_short!("countv1");
+const CAPABILITY_EVENT_V1: Symbol = symbol_short!("eventsv1");
+const CAPABILITY_META_V1: Symbol = symbol_short!("meta_v1");
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConfessionData {
     pub timestamp: u64,
     pub anchor_height: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractVersionInfo {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+    pub build_metadata: String,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractCapabilityInfo {
+    pub capabilities: Vec<Symbol>,
+    pub event_schema_version: u32,
+    pub error_registry_version: u32,
 }
 
 fn get_confession_store(env: &Env) -> soroban_sdk::storage::Instance {
@@ -26,6 +59,16 @@ fn set_count(env: &Env, count: u64) {
     let storage = env.storage().instance();
     let key = symbol_short!("count");
     storage.set(&key, &count);
+}
+
+fn supported_capabilities(env: &Env) -> Vec<Symbol> {
+    let mut out = Vec::new(env);
+    out.push_back(CAPABILITY_ANCHOR_V1);
+    out.push_back(CAPABILITY_VERIFY_V1);
+    out.push_back(CAPABILITY_COUNT_V1);
+    out.push_back(CAPABILITY_EVENT_V1);
+    out.push_back(CAPABILITY_META_V1);
+    out
 }
 
 #[contract]
@@ -89,6 +132,44 @@ impl ConfessionAnchor {
     pub fn get_confession_count(env: Env) -> u64 {
         get_count(&env)
     }
+
+    /// Stable semantic version + build metadata for client compatibility checks.
+    pub fn get_version(env: Env) -> ContractVersionInfo {
+        ContractVersionInfo {
+            major: CONTRACT_SEMVER_MAJOR,
+            minor: CONTRACT_SEMVER_MINOR,
+            patch: CONTRACT_SEMVER_PATCH,
+            build_metadata: String::from_str(&env, CONTRACT_BUILD_METADATA),
+        }
+    }
+
+    /// Stable capability and compatibility markers for off-chain consumers.
+    pub fn get_capabilities(env: Env) -> ContractCapabilityInfo {
+        ContractCapabilityInfo {
+            capabilities: supported_capabilities(&env),
+            event_schema_version: events::EVENT_SCHEMA_VERSION,
+            error_registry_version: errors::ERROR_REGISTRY_VERSION,
+        }
+    }
+
+    /// Feature-flag helper for clients/indexers performing runtime branching.
+    pub fn has_capability(env: Env, capability: Symbol) -> bool {
+        let capabilities = supported_capabilities(&env);
+        for idx in 0..capabilities.len() {
+            if capabilities.get(idx) == Some(capability.clone()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn get_event_schema_version(_env: Env) -> u32 {
+        events::EVENT_SCHEMA_VERSION
+    }
+
+    pub fn get_error_registry_version(_env: Env) -> u32 {
+        errors::ERROR_REGISTRY_VERSION
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,13 +215,19 @@ impl ConfessionAnchor {
 // Group G – Idempotency and ordering guarantees
 //   anchor_then_verify_then_anchor_duplicate_is_stable
 //   interleaved_unique_and_duplicate_anchors_keep_correct_count
+//
+// Group H – Versioning and capability introspection
+//   version_metadata_matches_release_constants
+//   capability_metadata_matches_expected_surface
+//   has_capability_branches_correctly
+//   compatibility_marker_endpoints_are_in_sync
 
 #[cfg(test)]
 mod test {
     use super::*;
     use soroban_sdk::{
         testutils::{Events, Ledger, LedgerInfo},
-        BytesN, Env, IntoVal,
+        BytesN, Env, IntoVal, String as SorobanString,
     };
 
     // ── Shared test helpers ────────────────────────────────────────────────────
@@ -680,5 +767,59 @@ mod test {
         assert_eq!(client.verify_confession(&hash_a), Some(1_000));
         assert_eq!(client.verify_confession(&hash_b), Some(2_000));
         assert_eq!(client.verify_confession(&hash_c), Some(3_000));
+    }
+
+    // ── Group H: Versioning and capability introspection ─────────────────────
+
+    #[test]
+    fn version_metadata_matches_release_constants() {
+        let (env, client) = new_client();
+        let version = client.get_version();
+
+        assert_eq!(version.major, CONTRACT_SEMVER_MAJOR);
+        assert_eq!(version.minor, CONTRACT_SEMVER_MINOR);
+        assert_eq!(version.patch, CONTRACT_SEMVER_PATCH);
+        assert_eq!(
+            version.build_metadata,
+            SorobanString::from_str(&env, CONTRACT_BUILD_METADATA)
+        );
+    }
+
+    #[test]
+    fn capability_metadata_matches_expected_surface() {
+        let (_env, client) = new_client();
+        let info = client.get_capabilities();
+
+        assert_eq!(info.event_schema_version, events::EVENT_SCHEMA_VERSION);
+        assert_eq!(info.error_registry_version, errors::ERROR_REGISTRY_VERSION);
+        assert_eq!(info.capabilities.len(), 5);
+        assert_eq!(info.capabilities.get(0), Some(CAPABILITY_ANCHOR_V1));
+        assert_eq!(info.capabilities.get(1), Some(CAPABILITY_VERIFY_V1));
+        assert_eq!(info.capabilities.get(2), Some(CAPABILITY_COUNT_V1));
+        assert_eq!(info.capabilities.get(3), Some(CAPABILITY_EVENT_V1));
+        assert_eq!(info.capabilities.get(4), Some(CAPABILITY_META_V1));
+    }
+
+    #[test]
+    fn has_capability_branches_correctly() {
+        let (_env, client) = new_client();
+
+        assert!(client.has_capability(&CAPABILITY_META_V1));
+        assert!(client.has_capability(&CAPABILITY_ANCHOR_V1));
+        assert!(!client.has_capability(&symbol_short!("unknwnv1")));
+    }
+
+    #[test]
+    fn compatibility_marker_endpoints_are_in_sync() {
+        let (_env, client) = new_client();
+
+        assert_eq!(
+            client.get_event_schema_version(),
+            events::EVENT_SCHEMA_VERSION
+        );
+        assert_eq!(
+            client.get_error_registry_version(),
+            errors::ERROR_REGISTRY_VERSION
+        );
     }
 }

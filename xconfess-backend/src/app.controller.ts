@@ -23,8 +23,6 @@ export class AppController {
     private redis: RedisHealthIndicator,
     private readonly notificationQueue: NotificationQueue,
   ) {}
-    // private redis: RedisHealthIndicator,
-  ) { }
 
   @Get()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
