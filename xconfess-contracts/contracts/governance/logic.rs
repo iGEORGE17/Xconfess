@@ -1,74 +1,147 @@
-use soroban_sdk::{Address, Env};
+use soroban_sdk::{Address, Env, Vec};
 
-use crate::access_control::{require_admin_or_owner, count_admins, get_owner, is_admin};
-use crate::storage::DataKey;
-
-use super::model::AdminTransfer;
+use crate::access_control::{require_admin_or_owner, is_authorized, get_owner};
+use crate::error::ContractError;
+use super::model::{Proposal, CriticalAction, GovernanceConfig};
 use super::events::*;
+use super::storage::DataKey;
 
-const DEFAULT_TIMELOCK: u64 = 86400;
-
-pub fn propose(e: &Env, new_admin: Address) {
-    require_admin_or_owner(e);
-
-    let current = get_owner(e);
-
-    let transfer = AdminTransfer {
-        proposed_admin: new_admin.clone(),
-        proposed_at: e.ledger().timestamp(),
-    };
-
+pub fn get_config(e: &Env) -> GovernanceConfig {
     e.storage()
         .instance()
-        .set(&DataKey::PendingAdmin, &transfer);
-
-    proposed(e, current, new_admin);
+        .get(&DataKey::GovernanceConfig)
+        .unwrap_or(GovernanceConfig { quorum_threshold: 1 })
 }
 
-pub fn cancel(e: &Env) {
-    require_admin_or_owner(e);
-
-    e.storage().instance().remove(&DataKey::PendingAdmin);
-
-    let admin = get_owner(e);
-    cancelled(e, admin);
+pub fn set_config(e: &Env, config: GovernanceConfig) {
+    require_admin_or_owner(e, &get_owner(e));
+    e.storage().instance().set(&DataKey::GovernanceConfig, &config);
 }
 
-pub fn accept(e: &Env) {
-    let transfer: AdminTransfer = e
-        .storage()
-        .instance()
-        .get(&DataKey::PendingAdmin)
-        .expect("no pending transfer");
+pub fn get_next_proposal_id(e: &Env) -> u64 {
+    e.storage().instance().get(&DataKey::NextProposalId).unwrap_or(1)
+}
 
-    transfer.proposed_admin.require_auth();
+pub fn increment_proposal_id(e: &Env) {
+    let id = get_next_proposal_id(e);
+    e.storage().instance().set(&DataKey::NextProposalId, &(id + 1));
+}
 
-    let now = e.ledger().timestamp();
-
-    let timelock: u64 = e
-        .storage()
-        .instance()
-        .get(&DataKey::AdminTransferTimelock)
-        .unwrap_or(DEFAULT_TIMELOCK);
-
-    if now < transfer.proposed_at + timelock {
-        panic!("timelock not expired");
+pub fn propose(e: &Env, proposer: Address, action: CriticalAction) -> u64 {
+    proposer.require_auth();
+    if !is_authorized(e, &proposer) {
+        panic!("{}", ContractError::Unauthorized as u32);
     }
 
-    let old_admin = get_owner(e);
+    let id = get_next_proposal_id(e);
+    increment_proposal_id(e);
 
-    // Check minimum-admin invariant before finalizing transfer
-    let current_admins = count_admins(e);
-    
-    // If there are no explicit admins and we're transferring ownership,
-    // the new owner will be the only authorized address, which is fine
-    // But we should ensure this doesn't create a zero-admin state in edge cases
-    
-    e.storage()
+    let proposal = Proposal {
+        id,
+        action,
+        proposer: proposer.clone(),
+        approvers: Vec::new(e),
+        created_at: e.ledger().timestamp(),
+        executed: false,
+    };
+
+    e.storage().instance().set(&DataKey::Proposal(id), &proposal);
+    action_proposed(e, id, proposer);
+    id
+}
+
+pub fn approve(e: &Env, approver: Address, id: u64) {
+    approver.require_auth();
+    if !is_authorized(e, &approver) {
+        panic!("{}", ContractError::UnauthorizedApproval as u32);
+    }
+
+    let mut proposal: Proposal = e.storage()
         .instance()
-        .set(&DataKey::Admin, &transfer.proposed_admin);
+        .get(&DataKey::Proposal(id))
+        .expect("proposal not found");
 
-    e.storage().instance().remove(&DataKey::PendingAdmin);
+    if proposal.executed {
+        panic!("{}", ContractError::AlreadyExecuted as u32);
+    }
 
-    accepted(e, old_admin, transfer.proposed_admin);
+    if proposal.approvers.contains(approver.clone()) {
+        panic!("{}", ContractError::AlreadyApproved as u32);
+    }
+
+    proposal.approvers.push_back(approver.clone());
+    e.storage().instance().set(&DataKey::Proposal(id), &proposal);
+    action_approved(e, id, approver);
+}
+
+pub fn revoke(e: &Env, actor: Address, id: u64) {
+    actor.require_auth();
+    
+    let mut proposal: Proposal = e.storage()
+        .instance()
+        .get(&DataKey::Proposal(id))
+        .expect("proposal not found");
+
+    if proposal.executed {
+        panic!("{}", ContractError::AlreadyExecuted as u32);
+    }
+
+    let mut found = false;
+    let mut new_approvers = Vec::new(e);
+    for app in proposal.approvers.iter() {
+        if app == actor {
+            found = true;
+        } else {
+            new_approvers.push_back(app);
+        }
+    }
+
+    if !found {
+        panic!("{}", ContractError::NotFound as u32);
+    }
+
+    proposal.approvers = new_approvers;
+    e.storage().instance().set(&DataKey::Proposal(id), &proposal);
+    approval_revoked(e, id, actor);
+}
+
+pub fn execute(e: &Env, executor: Address, id: u64) {
+    executor.require_auth();
+    
+    let mut proposal: Proposal = e.storage()
+        .instance()
+        .get(&DataKey::Proposal(id))
+        .expect("proposal not found");
+
+    if proposal.executed {
+        panic!("{}", ContractError::AlreadyExecuted as u32);
+    }
+
+    let config = get_config(e);
+    if proposal.approvers.len() < config.quorum_threshold {
+        panic!("{}", ContractError::QuorumNotReached as u32);
+    }
+
+    // execute the action
+    match proposal.action.clone() {
+        CriticalAction::GrantAdmin(target) => {
+            crate::access_control::internal_grant_admin(e, &target);
+        },
+        CriticalAction::RevokeAdmin(target) => {
+            crate::access_control::internal_revoke_admin(e, &target, &proposal.proposer);
+        },
+        CriticalAction::TransferOwnership(target) => {
+            crate::access_control::internal_transfer_ownership(e, &target);
+        },
+        CriticalAction::Pause => {
+            e.storage().instance().set(&soroban_sdk::symbol_short!("paused"), &true);
+        },
+        CriticalAction::Unpause => {
+            e.storage().instance().set(&soroban_sdk::symbol_short!("paused"), &false);
+        }
+    }
+
+    proposal.executed = true;
+    e.storage().instance().set(&DataKey::Proposal(id), &proposal);
+    action_executed(e, id, executor);
 }

@@ -30,6 +30,16 @@ pub enum ContractError {
     /// ===========================================
     ReportExists,       // user already reported
     InvalidReportReason,// report reason not allowed
+
+    /// ===========================================
+    /// Governance module errors
+    /// ===========================================
+    ProposalNotFound,
+    UnauthorizedApproval,
+    QuorumNotReached,
+    AlreadyApproved,
+    AlreadyExecuted,
+    InvalidAction,
 }
 
 impl ContractError {
@@ -50,6 +60,13 @@ impl ContractError {
 
             ContractError::ReportExists => 4000,
             ContractError::InvalidReportReason => 4001,
+
+            ContractError::ProposalNotFound => 5000,
+            ContractError::UnauthorizedApproval => 5001,
+            ContractError::QuorumNotReached => 5002,
+            ContractError::AlreadyApproved => 5003,
+            ContractError::AlreadyExecuted => 5004,
+            ContractError::InvalidAction => 5005,
         }
     }
 
@@ -70,6 +87,13 @@ impl ContractError {
 
             ContractError::ReportExists => "report already exists",
             ContractError::InvalidReportReason => "report reason invalid",
+
+            ContractError::ProposalNotFound => "governance proposal not found",
+            ContractError::UnauthorizedApproval => "caller not authorized to approve",
+            ContractError::QuorumNotReached => "quorum threshold not met",
+            ContractError::AlreadyApproved => "caller already approved this proposal",
+            ContractError::AlreadyExecuted => "proposal already executed",
+            ContractError::InvalidAction => "invalid governance action",
         }
     }
 }
