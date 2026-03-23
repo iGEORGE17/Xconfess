@@ -7,7 +7,9 @@
     "build": "next build . --webpack",
     "start": "next start .",
     "lint": "eslint",
-    "test": "jest --no-coverage"
+    "test": "jest --no-coverage",
+    "generate-api": "npx tsx scripts/generate-openapi-client.ts",
+    "typecheck:api": "npx tsx -e \"require('./app/lib/api/generated/types.ts')\" 2>/dev/null || echo 'Generated API types not found. Run generate-api first.'"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.0",

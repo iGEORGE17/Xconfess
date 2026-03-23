@@ -2,14 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import apiClient from '@/app/lib/api/client';
-import { AUTH_TOKEN_KEY, USER_DATA_KEY, ANONYMOUS_USER_ID_KEY } from '@/app/lib/api/constants';
+import {
+  validateLoginForm,
+  parseLoginForm,
+  hasErrors,
+  type ValidationErrors,
+} from '@/app/lib/utils/validation';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ValidationErrors>({});
   const [loading, setLoading] = useState(false);
 
   const doMockAdminLogin = async () => {
@@ -23,20 +27,35 @@ export default function LoginPage() {
       });
       router.push('/admin/dashboard');
     } catch (e: any) {
-      setError('Mock login failed');
+      setErrors({ password: 'Mock login failed' });
     } finally {
       setLoading(false);
     }
   };
 
   const doLogin = async () => {
+    // Validate using shared validation helpers
+    const validationErrors = validateLoginForm({ email, password });
+    setErrors(validationErrors);
+
+    if (hasErrors(validationErrors)) {
+      return;
+    }
+
+    // Parse and validate with typed helper
+    const parsed = parseLoginForm({ email, password });
+    if (!parsed.success) {
+      setErrors(parsed.errors);
+      return;
+    }
+
     setLoading(true);
-    setError(null);
+    setErrors({});
     try {
       const res = await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
       });
 
       if (!res.ok) {
@@ -46,7 +65,7 @@ export default function LoginPage() {
 
       router.push('/admin/dashboard');
     } catch (e: any) {
-      setError(e?.message || 'Login failed');
+      setErrors({ password: e?.message || 'Login failed' });
     } finally {
       setLoading(false);
     }
@@ -62,9 +81,15 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {error && (
+        {errors.email && (
           <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
-            {error}
+            {errors.email}
+          </div>
+        )}
+
+        {errors.password && !errors.email && (
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
+            {errors.password}
           </div>
         )}
 
@@ -77,7 +102,13 @@ export default function LoginPage() {
               id="login-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                // Clear error on change
+                if (errors.email) {
+                  setErrors((prev) => ({ ...prev, email: undefined }));
+                }
+              }}
               className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
               placeholder="admin@example.com"
               autoComplete="email"
@@ -91,7 +122,13 @@ export default function LoginPage() {
               id="login-password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                // Clear error on change
+                if (errors.password) {
+                  setErrors((prev) => ({ ...prev, password: undefined }));
+                }
+              }}
               className="w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
               placeholder="••••••••"
               autoComplete="current-password"
