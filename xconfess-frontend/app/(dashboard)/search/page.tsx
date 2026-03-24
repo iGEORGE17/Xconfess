@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SearchInput } from "@/app/components/search/SearchInput";
 import { FilterSidebar } from "@/app/components/search/FilterSidebar";
 import { FilterChips } from "@/app/components/search/FilterChips";
@@ -17,6 +18,62 @@ import { cn } from "@/app/lib/utils/cn";
 
 const DEBOUNCE_MS = 300;
 
+function parseFiltersFromParams(params: URLSearchParams): SearchFilters {
+  const sort = params.get("sort");
+  const dateFrom = params.get("dateFrom");
+  const dateTo = params.get("dateTo");
+  const minReactions = params.get("minReactions");
+  const gender = params.get("gender");
+
+  const filters: SearchFilters = { ...DEFAULT_FILTERS };
+
+  if (sort && ["newest", "oldest", "reactions"].includes(sort)) {
+    filters.sort = sort as SearchFilters["sort"];
+  }
+  if (dateFrom) {
+    filters.dateFrom = dateFrom;
+  }
+  if (dateTo) {
+    filters.dateTo = dateTo;
+  }
+  if (minReactions) {
+    const parsed = Number(minReactions);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      filters.minReactions = parsed;
+    }
+  }
+  if (gender) {
+    filters.gender = gender;
+  }
+
+  return filters;
+}
+
+function filtersToSearchParams(filters: SearchFilters, query: string): URLSearchParams {
+  const params = new URLSearchParams();
+  
+  if (query.trim()) {
+    params.set("q", query.trim());
+  }
+  if (filters.sort && filters.sort !== "newest") {
+    params.set("sort", filters.sort);
+  }
+  if (filters.dateFrom) {
+    params.set("dateFrom", filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    params.set("dateTo", filters.dateTo);
+  }
+  if (filters.minReactions != null && filters.minReactions > 0) {
+    params.set("minReactions", String(filters.minReactions));
+  }
+  if (filters.gender) {
+    params.set("gender", filters.gender);
+  }
+  
+  return params;
+}
+
 function hasActiveFilters(f: SearchFilters): boolean {
   return !!(
     f.dateFrom ||
@@ -27,13 +84,26 @@ function hasActiveFilters(f: SearchFilters): boolean {
 }
 
 export default function SearchPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_FILTERS });
+  const [isInitialized, setIsInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const q = searchParams.get("q") || "";
+    const parsedFilters = parseFiltersFromParams(searchParams);
+    setQuery(q);
+    setFilters(parsedFilters);
+    setIsInitialized(true);
+  }, [searchParams]);
 
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
   const runSearch =
-    debouncedQuery.trim().length > 0 || hasActiveFilters(filters);
+    isInitialized && (debouncedQuery.trim().length > 0 || hasActiveFilters(filters));
 
   const {
     results,
@@ -54,45 +124,64 @@ export default function SearchPage() {
   const hasSearched = runSearch;
   const isEmpty = hasSearched && !isLoading && results.length === 0;
 
+  const updateUrl = useCallback((q: string, f: SearchFilters) => {
+    const params = filtersToSearchParams(f, q);
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.replace(newUrl, { scroll: false });
+  }, [pathname, router]);
+
   const handleSubmit = useCallback((q: string) => {
-    setQuery(q.trim());
-  }, []);
+    const trimmed = q.trim();
+    setQuery(trimmed);
+    updateUrl(trimmed, filters);
+  }, [filters, updateUrl]);
 
   const handleApplyFilters = useCallback((f: SearchFilters) => {
     setFilters(f);
     setSidebarOpen(false);
-  }, []);
+    updateUrl(query, f);
+  }, [query, updateUrl]);
 
   const handleResetFilters = useCallback(() => {
     setFilters({ ...DEFAULT_FILTERS });
     setSidebarOpen(false);
-  }, []);
+    updateUrl(query, DEFAULT_FILTERS);
+  }, [query, updateUrl]);
 
   const handleRemoveFilter = useCallback(
     (key: FilterChipKey) => {
       if (key === "query") {
         setQuery("");
         reset();
+        updateUrl("", filters);
         return;
       }
       if (key === "dateFrom") {
-        setFilters((prev) => ({ ...prev, dateFrom: undefined }));
+        const newFilters = { ...filters, dateFrom: undefined };
+        setFilters(newFilters);
+        updateUrl(query, newFilters);
         return;
       }
       if (key === "dateTo") {
-        setFilters((prev) => ({ ...prev, dateTo: undefined }));
+        const newFilters = { ...filters, dateTo: undefined };
+        setFilters(newFilters);
+        updateUrl(query, newFilters);
         return;
       }
       if (key === "minReactions") {
-        setFilters((prev) => ({ ...prev, minReactions: undefined }));
+        const newFilters = { ...filters, minReactions: undefined };
+        setFilters(newFilters);
+        updateUrl(query, newFilters);
         return;
       }
       if (key === "sort") {
-        setFilters((prev) => ({ ...prev, sort: "newest" }));
+        const newFilters = { ...filters, sort: "newest" };
+        setFilters(newFilters);
+        updateUrl(query, newFilters);
         return;
       }
     },
-    [reset]
+    [reset, updateUrl, query, filters]
   );
 
   const handleClearAll = useCallback(() => {
@@ -100,7 +189,8 @@ export default function SearchPage() {
     setFilters({ ...DEFAULT_FILTERS });
     reset();
     setSidebarOpen(false);
-  }, [reset]);
+    updateUrl("", DEFAULT_FILTERS);
+  }, [reset, updateUrl]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
