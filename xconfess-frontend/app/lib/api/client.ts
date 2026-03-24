@@ -106,3 +106,41 @@ apiClient.interceptors.response.use(
 
 export default apiClient;
 export { AxiosError };
+
+export type DataExportStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED" | "EXPIRED";
+
+export interface DataExportHistoryItem {
+	id: string;
+	status: DataExportStatus;
+	createdAt: string;
+	expiresAt: number | null;
+	canRedownload: boolean;
+	canRequestNewLink: boolean;
+	downloadUrl: string | null;
+}
+
+export interface DataExportHistoryResponse {
+	latest: DataExportHistoryItem | null;
+	history: DataExportHistoryItem[];
+}
+
+export const dataExportApi = {
+	async getHistory() {
+		const response = await apiClient.get<DataExportHistoryResponse>("/data-export/history");
+		return response.data;
+	},
+
+	async requestExport() {
+		const response = await apiClient.post<{ requestId: string; status: string }>(
+			"/data-export/request",
+		);
+		return response.data;
+	},
+
+	async redownload(requestId: string) {
+		const response = await apiClient.post<{ downloadUrl: string }>(
+			`/data-export/${requestId}/redownload`,
+		);
+		return response.data;
+	},
+};

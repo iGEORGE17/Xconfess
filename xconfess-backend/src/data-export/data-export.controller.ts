@@ -1,8 +1,20 @@
-import { Controller, Get, Param, Query, Res, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Res,
+  UnauthorizedException,
+  BadRequestException,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Response } from 'express';
 import * as crypto from 'crypto';
 import { DataExportService } from './data-export.service';
 import { ConfigService } from '@nestjs/config';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('data-export')
 export class DataExportController {
@@ -10,6 +22,34 @@ export class DataExportController {
     private readonly exportService: DataExportService,
     private readonly configService: ConfigService,
   ) { }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('request')
+  async requestExport(@Req() req: any) {
+    return this.exportService.requestExport(String(req.user.id));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('history')
+  async history(@Req() req: any) {
+    const userId = String(req.user.id);
+    const latest = await this.exportService.getLatestExport(userId);
+    const history = await this.exportService.getExportHistory(userId);
+
+    return {
+      latest,
+      history,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/redownload')
+  async redownload(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return this.exportService.getRedownloadLink(id, String(req.user.id));
+  }
 
   @Get('download/:id')
   async download(

@@ -5,7 +5,7 @@ import RetryButton from './RetryButton';
 
 interface ErrorStateProps {
   error?: string;
-  onRetry?: () => Promise<void>;
+  onRetry?: () => void | Promise<void>;
   title?: string;
   description?: string;
   showIcon?: boolean;
