@@ -38,9 +38,8 @@ export class ExportProcessor {
       const buffer = await this.generateZipBuffer(data);
 
       // 3. Save to Postgres (byte column)
-      await this.exportRepository.update(requestId, {
-        fileData: buffer,
-        status: 'READY'
+      await this.dataExportService.markExportGenerated(requestId, userId, buffer, {
+        jobId: job.id ? String(job.id) : null,
       });
 
       // 4. Fetch User Email & Notify

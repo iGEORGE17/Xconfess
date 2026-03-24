@@ -38,6 +38,25 @@ export interface TemplateRolloutDiffRecord {
   source?: TemplateRolloutSourceMetadata;
 }
 
+export type ExportLifecycleAction =
+  | 'request_created'
+  | 'generation_completed'
+  | 'link_refreshed'
+  | 'downloaded';
+
+export type ExportActorType = 'user' | 'system';
+
+export interface ExportLifecycleAuditRecord {
+  action: ExportLifecycleAction;
+  requestId: string;
+  exportId?: string;
+  actorType: ExportActorType;
+  actorId?: string | null;
+  occurredAt?: string;
+  metadata?: Record<string, any>;
+  context?: AuditLogContext;
+}
+
 @Injectable()
 export class AuditLogService {
   private readonly logger = new Logger(AuditLogService.name);
@@ -257,6 +276,47 @@ export class AuditLogService {
         replayedAt: metadata.replayedAt || new Date().toISOString(),
       },
       context: { ...context, userId: adminId },
+    });
+  }
+
+  private mapExportActionType(action: ExportLifecycleAction): AuditActionType {
+    switch (action) {
+      case 'request_created':
+        return AuditActionType.EXPORT_REQUEST_CREATED;
+      case 'generation_completed':
+        return AuditActionType.EXPORT_GENERATION_COMPLETED;
+      case 'link_refreshed':
+        return AuditActionType.EXPORT_LINK_REFRESHED;
+      case 'downloaded':
+        return AuditActionType.EXPORT_DOWNLOADED;
+      default:
+        return AuditActionType.EXPORT_REQUEST_CREATED;
+    }
+  }
+
+  async logExportLifecycleEvent(
+    record: ExportLifecycleAuditRecord,
+  ): Promise<void> {
+    const occurredAt = record.occurredAt || new Date().toISOString();
+    const exportId = record.exportId || record.requestId;
+
+    await this.log({
+      actionType: this.mapExportActionType(record.action),
+      metadata: {
+        ...(record.metadata || {}),
+        entityType: 'data_export',
+        entityId: exportId,
+        exportId,
+        requestId: record.requestId,
+        actorType: record.actorType,
+        actorId: record.actorId || null,
+        lifecycleAction: record.action,
+        occurredAt,
+      },
+      context: {
+        ...record.context,
+        userId: this.toNullableUuid(record.context?.userId || null),
+      },
     });
   }
 
@@ -505,9 +565,12 @@ export class AuditLogService {
   async findAll(options: {
     userId?: string;
     actorId?: string;
+    actorType?: string;
     actionType?: AuditActionType;
     entityType?: string;
     entityId?: string;
+    requestId?: string;
+    exportId?: string;
     templateKey?: string;
     templateVersion?: string;
     startDate?: Date;
@@ -535,6 +598,12 @@ export class AuditLogService {
         );
       }
 
+      if (options.actorType) {
+        query.andWhere("audit_log.metadata->>'actorType' = :actorType", {
+          actorType: options.actorType,
+        });
+      }
+
       if (options.actionType) {
         query.andWhere('audit_log.action_type = :actionType', {
           actionType: options.actionType,
@@ -551,6 +620,21 @@ export class AuditLogService {
         query.andWhere("audit_log.metadata->>'entityId' = :entityId", {
           entityId: options.entityId,
         });
+      }
+
+      if (options.requestId) {
+        query.andWhere("audit_log.metadata->>'requestId' = :requestId", {
+          requestId: options.requestId,
+        });
+      }
+
+      if (options.exportId) {
+        query.andWhere(
+          "(audit_log.metadata->>'exportId' = :exportId OR audit_log.metadata->>'entityId' = :exportId)",
+          {
+            exportId: options.exportId,
+          },
+        );
       }
 
       if (options.templateKey) {
@@ -728,6 +812,97 @@ export class AuditLogService {
       this.logger.error(
         `Failed to get template rollout history: ${error.message}`,
       );
+      return {
+        logs: [],
+        total: 0,
+        limit: options.limit || 100,
+        offset: options.offset || 0,
+      };
+    }
+  }
+
+  async getExportAccessTrail(options: {
+    requestId?: string;
+    exportId?: string;
+    actorId?: string;
+    actorType?: ExportActorType;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }) {
+    try {
+      const exportActionTypes: AuditActionType[] = [
+        AuditActionType.EXPORT_REQUEST_CREATED,
+        AuditActionType.EXPORT_GENERATION_COMPLETED,
+        AuditActionType.EXPORT_LINK_REFRESHED,
+        AuditActionType.EXPORT_DOWNLOADED,
+      ];
+
+      const query = this.auditLogRepository
+        .createQueryBuilder('audit_log')
+        .leftJoinAndSelect('audit_log.user', 'user')
+        .where('audit_log.action_type IN (:...actionTypes)', {
+          actionTypes: exportActionTypes,
+        })
+        .andWhere("audit_log.metadata->>'entityType' = :entityType", {
+          entityType: 'data_export',
+        });
+
+      if (options.requestId) {
+        query.andWhere("audit_log.metadata->>'requestId' = :requestId", {
+          requestId: options.requestId,
+        });
+      }
+
+      if (options.exportId) {
+        query.andWhere(
+          "(audit_log.metadata->>'exportId' = :exportId OR audit_log.metadata->>'entityId' = :exportId)",
+          {
+            exportId: options.exportId,
+          },
+        );
+      }
+
+      if (options.actorId) {
+        query.andWhere(
+          "(audit_log.user_id = :actorId OR audit_log.metadata->>'actorId' = :actorId)",
+          { actorId: options.actorId },
+        );
+      }
+
+      if (options.actorType) {
+        query.andWhere("audit_log.metadata->>'actorType' = :actorType", {
+          actorType: options.actorType,
+        });
+      }
+
+      if (options.startDate) {
+        query.andWhere('audit_log.timestamp >= :startDate', {
+          startDate: options.startDate,
+        });
+      }
+
+      if (options.endDate) {
+        query.andWhere('audit_log.timestamp <= :endDate', {
+          endDate: options.endDate,
+        });
+      }
+
+      query.orderBy('audit_log.timestamp', 'DESC');
+      query.limit(options.limit || 100);
+      query.offset(options.offset || 0);
+
+      const [logs, total] = await query.getManyAndCount();
+
+      return {
+        logs,
+        total,
+        limit: options.limit || 100,
+        offset: options.offset || 0,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get export access trail: ${error.message}`);
       return {
         logs: [],
         total: 0,
