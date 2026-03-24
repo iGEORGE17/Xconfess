@@ -79,6 +79,10 @@ export class Report {
   @Column({ name: 'resolution_reason', type: 'text', nullable: true })
   resolutionNotes: string | null;
 
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 255, nullable: true })
+  @Index(['idempotency_key'])
+  idempotencyKey: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

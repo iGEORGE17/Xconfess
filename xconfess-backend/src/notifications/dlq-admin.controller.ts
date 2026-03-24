@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue, Job } from 'bull';
-import { NotificationJobData, NOTIFICATION_DLQ, NOTIFICATION_QUEUE } from '../processors/notification.processor';
+import { NotificationJobData, NOTIFICATION_DLQ, NOTIFICATION_QUEUE } from './notification.queue';
 // import { AdminGuard } from '../../auth/guards/admin.guard';
 
 interface DlqJobView {
@@ -62,7 +62,7 @@ export class DlqAdminController {
     @Query('end')   end   = '49',
   ): Promise<{ total: number; jobs: DlqJobView[] }> {
     const [jobs, total] = await Promise.all([
-      this.dlq.getJobs(['wait', 'completed', 'failed', 'delayed'], +start, +end),
+      this.dlq.getJobs(['waiting', 'completed', 'failed', 'delayed'], +start, +end),
       this.dlq.count(),
     ]);
 

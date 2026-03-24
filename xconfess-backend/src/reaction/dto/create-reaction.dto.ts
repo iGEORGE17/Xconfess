@@ -5,10 +5,6 @@ export class CreateReactionDto {
   @IsNotEmpty()
   confessionId: string; //
 
-  @IsUUID()
-  @IsNotEmpty()
-  anonymousUserId: string;
-
   @IsString()
   @IsNotEmpty()
   emoji: string;
