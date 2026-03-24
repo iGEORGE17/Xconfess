@@ -126,3 +126,6 @@ impl AnonymousTipping {
             .unwrap_or(0_u64)
     }
 }
+
+#[cfg(test)]
+mod tipping_adversarial;
