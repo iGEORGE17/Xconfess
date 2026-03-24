@@ -6,6 +6,7 @@ import { SearchInput } from "@/app/components/search/SearchInput";
 import { FilterSidebar } from "@/app/components/search/FilterSidebar";
 import { FilterChips } from "@/app/components/search/FilterChips";
 import { SearchResults } from "@/app/components/search/SearchResults";
+import ErrorState from "@/app/components/common/ErrorState";
 import { useDebounce } from "@/app/lib/hooks/useDebounce";
 import { useSearch } from "@/app/lib/hooks/useSearch";
 import {
@@ -112,8 +113,10 @@ export default function SearchPage() {
     page,
     isLoading,
     error,
+    statusMeta,
     loadMore,
     reset,
+    retry,
   } = useSearch({
     query,
     filters,
@@ -123,6 +126,18 @@ export default function SearchPage() {
 
   const hasSearched = runSearch;
   const isEmpty = hasSearched && !isLoading && results.length === 0;
+  const hasActiveFilterValues = hasActiveFilters(filters);
+  const fatalError = Boolean(error && results.length === 0 && !isLoading);
+  const effectiveStatusMeta =
+    error && results.length > 0
+      ? {
+          partial: false,
+          degraded: true,
+          message: error,
+          warnings: [],
+          searchType: "error",
+        }
+      : statusMeta;
 
   const updateUrl = useCallback((q: string, f: SearchFilters) => {
     const params = filtersToSearchParams(f, q);
@@ -192,6 +207,10 @@ export default function SearchPage() {
     updateUrl("", DEFAULT_FILTERS);
   }, [reset, updateUrl]);
 
+  const handleSuggestion = useCallback((suggestion: string) => {
+    setQuery(suggestion);
+  }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -247,6 +266,13 @@ export default function SearchPage() {
             query={query}
             onRemoveFilter={handleRemoveFilter}
             onClearAll={handleClearAll}
+            statusChip={
+              effectiveStatusMeta?.partial
+                ? { label: "Partial results", tone: "warning" }
+                : effectiveStatusMeta?.degraded
+                ? { label: "Degraded search", tone: "warning" }
+                : null
+            }
           />
         </div>
 
@@ -278,25 +304,55 @@ export default function SearchPage() {
           </div>
 
           <main className="flex-1 min-w-0">
-            {error && (
-              <div
-                className="mb-6 rounded-xl border border-red-800 bg-red-950/30 px-4 py-3 text-red-200 text-sm"
-                role="alert"
-              >
-                {error}
+            {fatalError ? (
+              <div className="mb-6">
+                <ErrorState
+                  title="Search request failed"
+                  description="We could not reach search right now."
+                  error={error ?? "Search failed"}
+                  onRetry={retry}
+                  variant="error"
+                  fullHeight={false}
+                  primaryActionLabel="Clear filters"
+                  onPrimaryAction={handleClearAll}
+                />
               </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="mb-4">
+                    <ErrorState
+                      title="Search degraded"
+                      description="Loaded results may be incomplete."
+                      error={error}
+                      onRetry={retry}
+                      variant="warning"
+                      showIcon={false}
+                      fullHeight={false}
+                      showRetry
+                      primaryActionLabel="Clear filters"
+                      onPrimaryAction={handleClearAll}
+                    />
+                  </div>
+                )}
+                <SearchResults
+                  results={results}
+                  query={debouncedQuery.trim() || undefined}
+                  isLoading={isLoading}
+                  isEmpty={isEmpty}
+                  hasSearched={hasSearched}
+                  page={page}
+                  hasMore={hasMore}
+                  total={total}
+                  statusMeta={effectiveStatusMeta}
+                  hasActiveFilters={hasActiveFilterValues}
+                  onLoadMore={loadMore}
+                  onRetry={retry}
+                  onClearFilters={handleClearAll}
+                  onUseSuggestion={handleSuggestion}
+                />
+              </>
             )}
-            <SearchResults
-              results={results}
-              query={debouncedQuery.trim() || undefined}
-              isLoading={isLoading}
-              isEmpty={isEmpty}
-              hasSearched={hasSearched}
-              page={page}
-              hasMore={hasMore}
-              total={total}
-              onLoadMore={loadMore}
-            />
           </main>
         </div>
       </div>
