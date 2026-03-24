@@ -5,6 +5,8 @@ import { AdminService } from './services/admin.service';
 import { ModerationService } from './services/moderation.service';
 import { Report } from './entities/report.entity';
 import { AuditLog } from './entities/audit-log.entity';
+import { ModerationNoteTemplate } from '../comment/entities/moderation-note-template.entity';
+import { ModerationTemplateService } from '../comment/moderation-template.service';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { User } from '../user/entities/user.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -15,12 +17,12 @@ import { UserAnonymousUser } from '../user/entities/user-anonymous-link.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Report, AuditLog, AnonymousConfession, User, UserAnonymousUser]),
+    TypeOrmModule.forFeature([Report, AuditLog, ModerationNoteTemplate, AnonymousConfession, User, UserAnonymousUser]),
     AuthModule,
     UserModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService, ModerationService, AdminGateway, ReportsEventsListener],
-  exports: [AdminService, ModerationService],
+  providers: [AdminService, ModerationService, ModerationTemplateService, AdminGateway, ReportsEventsListener],
+  exports: [AdminService, ModerationService, ModerationTemplateService],
 })
 export class AdminModule {}
