@@ -153,6 +153,40 @@ describe('AuditLogService', () => {
     );
   });
 
+  it('records export lifecycle entries with stable metadata fields', async () => {
+    mockRepository.create.mockReturnValue({} as AuditLog);
+    mockRepository.save.mockResolvedValue({} as AuditLog);
+
+    await service.logExportLifecycleEvent({
+      action: 'downloaded',
+      actorType: 'user',
+      actorId: 'user-42',
+      requestId: 'export-req-1',
+      exportId: 'export-req-1',
+      occurredAt: '2026-03-24T00:00:00.000Z',
+      metadata: {
+        source: 'signed_link',
+      },
+    });
+
+    expect(mockRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: AuditActionType.EXPORT_DOWNLOADED,
+        metadata: expect.objectContaining({
+          entityType: 'data_export',
+          entityId: 'export-req-1',
+          exportId: 'export-req-1',
+          requestId: 'export-req-1',
+          actorType: 'user',
+          actorId: 'user-42',
+          lifecycleAction: 'downloaded',
+          occurredAt: '2026-03-24T00:00:00.000Z',
+          source: 'signed_link',
+        }),
+      }),
+    );
+  });
+
   it('returns template rollout history with action-type scoping', async () => {
     mockQueryBuilder.getManyAndCount.mockResolvedValue([[{ id: 'log-2' }], 1]);
 
@@ -173,6 +207,42 @@ describe('AuditLogService', () => {
           AuditActionType.TEMPLATE_ROLLOUT_DIFF_RECORDED,
         ]),
       }),
+    );
+  });
+
+  it('returns export access trail scoped to export lifecycle actions', async () => {
+    mockQueryBuilder.getManyAndCount.mockResolvedValue([[{ id: 'log-3' }], 1]);
+
+    const result = await service.getExportAccessTrail({
+      requestId: 'export-req-1',
+      actorType: 'system',
+      limit: 10,
+      offset: 0,
+    });
+
+    expect(result.total).toBe(1);
+    expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+      'audit_log.action_type IN (:...actionTypes)',
+      expect.objectContaining({
+        actionTypes: expect.arrayContaining([
+          AuditActionType.EXPORT_REQUEST_CREATED,
+          AuditActionType.EXPORT_GENERATION_COMPLETED,
+          AuditActionType.EXPORT_LINK_REFRESHED,
+          AuditActionType.EXPORT_DOWNLOADED,
+        ]),
+      }),
+    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "audit_log.metadata->>'entityType' = :entityType",
+      { entityType: 'data_export' },
+    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "audit_log.metadata->>'requestId' = :requestId",
+      { requestId: 'export-req-1' },
+    );
+    expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      "audit_log.metadata->>'actorType' = :actorType",
+      { actorType: 'system' },
     );
   });
 

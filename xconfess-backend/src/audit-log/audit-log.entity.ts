@@ -43,6 +43,12 @@ export enum AuditActionType {
   TEMPLATE_ROLLOUT_KILLSWITCH = 'template_rollout_killswitch',
   TEMPLATE_FALLBACK_ACTIVATED = 'template_fallback_activated',
   TEMPLATE_ROLLOUT_DIFF_RECORDED = 'template_rollout_diff_recorded',
+
+  // Data export lifecycle
+  EXPORT_REQUEST_CREATED = 'export_request_created',
+  EXPORT_GENERATION_COMPLETED = 'export_generation_completed',
+  EXPORT_LINK_REFRESHED = 'export_link_refreshed',
+  EXPORT_DOWNLOADED = 'export_downloaded',
 }
 
 @Entity('audit_logs')
