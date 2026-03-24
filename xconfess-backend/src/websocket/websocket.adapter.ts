@@ -3,6 +3,37 @@ import { ServerOptions } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
 import { INestApplicationContext } from '@nestjs/common';
 
+export function buildWebSocketServerOptions(
+  corsOrigin: string,
+  options?: ServerOptions,
+): Partial<ServerOptions> {
+  return {
+    ...options,
+    path: options?.path || '/socket.io',
+    cors: {
+      origin: corsOrigin,
+      credentials: true,
+      methods: ['GET', 'POST'],
+    },
+    // Connection pooling and performance settings
+    pingTimeout: 60000, // 60 seconds
+    pingInterval: 25000, // 25 seconds
+    upgradeTimeout: 10000, // 10 seconds
+    maxHttpBufferSize: 1e6, // 1 MB
+    // Transports in order of preference
+    transports: ['websocket', 'polling'],
+    // Allow upgrades from polling to websocket
+    allowUpgrades: true,
+    // Compression
+    perMessageDeflate: {
+      threshold: 1024, // Only compress messages larger than 1KB
+    },
+    httpCompression: {
+      threshold: 1024,
+    },
+  };
+}
+
 export class WebSocketAdapter extends IoAdapter {
   constructor(
     private app: INestApplicationContext,
@@ -13,32 +44,7 @@ export class WebSocketAdapter extends IoAdapter {
 
   createIOServer(port: number, options?: ServerOptions): any {
     const corsOrigin = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-    
-    const serverOptions: Partial<ServerOptions> = {
-      ...options,
-      path: options?.path || '/socket.io',
-      cors: {
-        origin: corsOrigin,
-        credentials: true,
-        methods: ['GET', 'POST'],
-      },
-      // Connection pooling and performance settings
-      pingTimeout: 60000, // 60 seconds
-      pingInterval: 25000, // 25 seconds
-      upgradeTimeout: 10000, // 10 seconds
-      maxHttpBufferSize: 1e6, // 1 MB
-      // Transports in order of preference
-      transports: ['websocket', 'polling'],
-      // Allow upgrades from polling to websocket
-      allowUpgrades: true,
-      // Compression
-      perMessageDeflate: {
-        threshold: 1024, // Only compress messages larger than 1KB
-      },
-      httpCompression: {
-        threshold: 1024,
-      },
-    };
+    const serverOptions = buildWebSocketServerOptions(corsOrigin, options);
 
     const server = super.createIOServer(port, serverOptions);
 
