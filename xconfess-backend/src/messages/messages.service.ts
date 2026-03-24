@@ -63,6 +63,11 @@ export class MessagesService {
     });
     if (!confession) throw new NotFoundException('Confession not found');
 
+    const authorUser = confession.anonymousUser?.userLinks?.[0]?.user;
+    if (authorUser && !authorUser.canReceiveReplies()) {
+      throw new ForbiddenException('This user is not accepting messages');
+    }
+
     // Get or create anonymous identity for this session
     const sender = await this.anonymousUserService.getOrCreateForUserSession(
       user.id,

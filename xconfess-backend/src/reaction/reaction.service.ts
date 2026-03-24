@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -37,6 +38,12 @@ export class ReactionService {
 
     if (!confession) {
       throw new NotFoundException('Confession not found');
+    }
+
+    // 1.5: Check privacy settings - prevent reactions if author disabled them
+    const authorUser = confession.anonymousUser?.userLinks?.[0]?.user;
+    if (authorUser && !authorUser.shouldShowReactions()) {
+      throw new ForbiddenException('Reactions are disabled for this user');
     }
 
     // 2. Verify the reacting anonymous user exists.
