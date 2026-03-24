@@ -2,7 +2,9 @@
   "name": "xconfess",
   "private": true,
   "workspaces": [
-    "xconfess-contract"
+    "xconfess-backend",
+    "xconfess-contracts",
+    "xconfess-frontend"
   ],
   "engines": {
     "node": ">=18.0.0",

@@ -190,6 +190,10 @@ pub fn require_admin_or_owner(env: &Env, caller: &Address) {
 /// * Emits `admin_granted` event.
 pub fn grant_admin(env: &Env, caller: &Address, target: &Address) {
     require_owner(env, caller);
+    internal_grant_admin(env, target);
+}
+
+pub fn internal_grant_admin(env: &Env, target: &Address) {
 
     if is_admin(env, target) {
         panic!("{}", AccessError::AlreadyAdmin as u32);
@@ -225,7 +229,10 @@ pub fn grant_admin(env: &Env, caller: &Address, target: &Address) {
 /// * Emits `admin_revoked` event.
 pub fn revoke_admin(env: &Env, caller: &Address, target: &Address) {
     require_owner(env, caller);
+    internal_revoke_admin(env, target, caller);
+}
 
+pub fn internal_revoke_admin(env: &Env, target: &Address, caller: &Address) {
     if is_owner(env, target) {
         panic!("{}", AccessError::CannotDemoteOwner as u32);
     }
@@ -274,22 +281,16 @@ pub fn revoke_admin(env: &Env, caller: &Address, target: &Address) {
 /// * Emits `own_xfer` event carrying both old and new addresses.
 pub fn transfer_ownership(env: &Env, caller: &Address, new_owner: &Address) {
     require_owner(env, caller);
+    internal_transfer_ownership(env, new_owner);
+}
 
+pub fn internal_transfer_ownership(env: &Env, new_owner: &Address) {
     // Snapshot old owner for validation and event before overwriting
     let old_owner = get_owner(env);
     
     // Prevent invalid transfer to same address
     if old_owner == *new_owner {
         panic!("{}", AccessError::InvalidOwnershipTransfer as u32);
-    }
-
-    // Check minimum-admin invariant: ensure we're not transferring away from the last
-    // authorized address if the old owner is not in the admin set
-    let current_admins = count_admins(env);
-    if current_admins == 0 && !is_admin(env, &old_owner) {
-        // Old owner is the only authorized address and not in admin set
-        // After transfer, new owner would be authorized, so this is safe
-        // But we should emit a governance event for transparency
     }
 
     env.storage()
