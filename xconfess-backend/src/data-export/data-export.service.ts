@@ -9,6 +9,18 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ExportRequest } from './entities/export-request.entity';
 
+export type ExportHistoryStatus = 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
+
+export interface ExportHistoryItem {
+  id: string;
+  status: ExportHistoryStatus;
+  createdAt: Date;
+  expiresAt: number | null;
+  canRedownload: boolean;
+  canRequestNewLink: boolean;
+  downloadUrl: string | null;
+}
+
 @Injectable()
 export class DataExportService {
   constructor(
@@ -68,6 +80,71 @@ export class DataExportService {
       where: { id: requestId, userId },
       select: ['fileData', 'status'],
     });
+  }
+
+  private getExpiryTimestamp(createdAt: Date): number {
+    return new Date(createdAt).getTime() + 24 * 60 * 60 * 1000;
+  }
+
+  private isDownloadStillValid(request: Pick<ExportRequest, 'status' | 'createdAt'>): boolean {
+    if (request.status !== 'READY') {
+      return false;
+    }
+
+    return Date.now() <= this.getExpiryTimestamp(request.createdAt);
+  }
+
+  private toHistoryItem(request: Pick<ExportRequest, 'id' | 'status' | 'createdAt' | 'userId'>): ExportHistoryItem {
+    const expiresAt = request.status === 'READY' ? this.getExpiryTimestamp(request.createdAt) : null;
+    const canRedownload = this.isDownloadStillValid(request);
+    const normalizedStatus: ExportHistoryStatus =
+      request.status === 'READY' && !canRedownload
+        ? 'EXPIRED'
+        : (request.status as ExportHistoryStatus);
+
+    return {
+      id: request.id,
+      status: normalizedStatus,
+      createdAt: request.createdAt,
+      expiresAt,
+      canRedownload,
+      canRequestNewLink: normalizedStatus === 'EXPIRED',
+      downloadUrl: canRedownload ? this.generateSignedDownloadUrl(request.id, request.userId) : null,
+    };
+  }
+
+  async getExportHistory(userId: string, limit = 20): Promise<ExportHistoryItem[]> {
+    const requests = await this.exportRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      select: ['id', 'status', 'createdAt', 'userId'],
+    });
+
+    return requests.map((request) => this.toHistoryItem(request));
+  }
+
+  async getLatestExport(userId: string): Promise<ExportHistoryItem | null> {
+    const latestRequest = await this.exportRepository.findOne({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      select: ['id', 'status', 'createdAt', 'userId'],
+    });
+
+    return latestRequest ? this.toHistoryItem(latestRequest) : null;
+  }
+
+  async getRedownloadLink(requestId: string, userId: string): Promise<{ downloadUrl: string }> {
+    const request = await this.exportRepository.findOne({
+      where: { id: requestId, userId },
+      select: ['id', 'status', 'createdAt', 'userId'],
+    });
+
+    if (!request || !this.isDownloadStillValid(request)) {
+      throw new BadRequestException('Secure download link is no longer available. Request a new export.');
+    }
+
+    return { downloadUrl: this.generateSignedDownloadUrl(request.id, request.userId) };
   }
 
   async compileUserData(userId: string): Promise<any> {
