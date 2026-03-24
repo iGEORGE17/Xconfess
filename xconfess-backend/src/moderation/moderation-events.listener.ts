@@ -1,8 +1,11 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { NotificationService } from '../../notifications/services/notification.service';
+import { NotificationService } from 'src/notifications/services/notification.service';
+import { NotificationType } from 'src/notifications/entities/notification.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditActionType } from '../audit-log/audit-log.entity';
 import { ModerationRepositoryService } from './moderation-repository.service';
+import { ModerationStatus, ModerationCategory } from './ai-moderation.service';
 import { UserRole } from '../user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -35,7 +38,7 @@ export class ModerationEventsListener {
   ) {}
 
   @OnEvent('moderation.high-severity')
-  handleHighSeverity(event: HighSeverityEvent) {
+  async handleHighSeverity(event: HighSeverityEvent) {
     this.logger.warn(
       `HIGH SEVERITY CONTENT DETECTED - Confession: ${event.confessionId}, ` +
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
@@ -47,8 +50,8 @@ export class ModerationEventsListener {
       });
       for (const admin of admins) {
         await this.notificationService.createNotification({
-          type: 'system',
-          userId: admin.id,
+          type: NotificationType.SYSTEM,
+          userId: String(admin.id),
           title: 'High-Severity Content Detected',
           message: `Confession ${event.confessionId} flagged as high-severity. Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
           metadata: {
@@ -59,7 +62,7 @@ export class ModerationEventsListener {
         });
       }
       await this.auditLogService.log({
-        actionType: 'MODERATION_ESCALATION',
+        actionType: AuditActionType.MODERATION_ESCALATION,
         metadata: {
           eventType: 'high-severity',
           confessionId: event.confessionId,
@@ -77,7 +80,7 @@ export class ModerationEventsListener {
   }
 
   @OnEvent('moderation.requires-review')
-  handleRequiresReview(event: RequiresReviewEvent) {
+  async handleRequiresReview(event: RequiresReviewEvent) {
     this.logger.log(
       `Content flagged for review - Confession: ${event.confessionId}, ` +
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
@@ -88,8 +91,8 @@ export class ModerationEventsListener {
         '', // content not needed for escalation
         {
           score: event.score,
-          flags: event.flags,
-          status: 'flagged',
+          flags: event.flags as unknown as ModerationCategory[],
+          status: ModerationStatus.FLAGGED,
           requiresReview: true,
         },
         event.confessionId,
@@ -97,7 +100,7 @@ export class ModerationEventsListener {
         'escalation',
       );
       await this.auditLogService.log({
-        actionType: 'MODERATION_ESCALATION',
+        actionType: AuditActionType.MODERATION_ESCALATION,
         metadata: {
           eventType: 'requires-review',
           confessionId: event.confessionId,
