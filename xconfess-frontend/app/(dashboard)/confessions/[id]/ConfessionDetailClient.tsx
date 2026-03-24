@@ -49,7 +49,7 @@ const refetch = async () => {
   setRefetchError(false);
   const result = await getConfessionById(confessionId);
   if (result.ok && result.data) {
-    setConfession({ ... });
+    setConfession(result.data);
   } else {
     setRefetchError(true);
   }

@@ -78,15 +78,22 @@ describe('ExportProcessor', () => {
         userId: '1',
         confessions: [{ id: 1, message: 'hello' }],
       });
-      userRepo.findOneBy.mockResolvedValue({ id: 1, emailEncrypted: 'test@example.com', username: 'testuser' });
+      userRepo.findOneBy.mockResolvedValue({
+        id: 1,
+        emailEncrypted: 'test@example.com',
+        username: 'testuser',
+      });
 
       await processor.handleExport(mockJob);
 
       expect(dataExportService.compileUserData).toHaveBeenCalled();
-      expect(exportRepo.update).toHaveBeenCalledWith('req-1', expect.objectContaining({
-        status: 'READY',
-        isChunked: true,
-      }));
+      expect(exportRepo.update).toHaveBeenCalledWith(
+        'req-1',
+        expect.objectContaining({
+          status: 'READY',
+          isChunked: true,
+        }),
+      );
       expect(chunkRepo.save).toHaveBeenCalled();
     });
 
@@ -95,11 +102,15 @@ describe('ExportProcessor', () => {
         data: { userId: '1', requestId: 'req-1' },
       } as Job;
 
-      dataExportService.compileUserData.mockRejectedValue(new Error('Test error'));
+      dataExportService.compileUserData.mockRejectedValue(
+        new Error('Test error'),
+      );
 
       await processor.handleExport(mockJob);
 
-      expect(exportRepo.update).toHaveBeenCalledWith('req-1', { status: 'FAILED' });
+      expect(exportRepo.update).toHaveBeenCalledWith('req-1', {
+        status: 'FAILED',
+      });
     });
   });
 });

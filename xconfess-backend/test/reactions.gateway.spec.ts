@@ -23,7 +23,7 @@ describe('Reactions Integration (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    
+
     const configService = app.get(ConfigService);
     const wsAdapter = new WebSocketAdapter(app, configService);
     app.useWebSocketAdapter(wsAdapter);
@@ -301,8 +301,10 @@ describe('Reactions Integration (e2e)', () => {
               .get('/api/v1/websocket/stats')
               .expect(200)
               .then((response) => {
-                expect(response.body.totalConnections).toBeGreaterThanOrEqual(targetConnections);
-                
+                expect(response.body.totalConnections).toBeGreaterThanOrEqual(
+                  targetConnections,
+                );
+
                 // Cleanup
                 clients.forEach((c) => c.disconnect());
                 done();
@@ -402,7 +404,7 @@ describe('ReactionsGateway fanout and reconnect unit coverage', () => {
       join: jest.fn(),
       leave: jest.fn(),
       disconnect: jest.fn(),
-    } as any);
+    }) as any;
 
   it('reconnects after network interruption and re-subscribes to room', () => {
     const gateway = createGateway();
@@ -410,11 +412,15 @@ describe('ReactionsGateway fanout and reconnect unit coverage', () => {
     const reconnectedClient = createSocketClient('socket-new');
 
     gateway.handleConnection(disconnectedClient);
-    gateway.handleSubscribeToConfession(disconnectedClient, { confessionId: 'c-1' });
+    gateway.handleSubscribeToConfession(disconnectedClient, {
+      confessionId: 'c-1',
+    });
     gateway.handleDisconnect(disconnectedClient);
 
     gateway.handleConnection(reconnectedClient);
-    gateway.handleSubscribeToConfession(reconnectedClient, { confessionId: 'c-1' });
+    gateway.handleSubscribeToConfession(reconnectedClient, {
+      confessionId: 'c-1',
+    });
 
     expect(disconnectedClient.join).toHaveBeenCalledWith('confession:c-1');
     expect(reconnectedClient.join).toHaveBeenCalledWith('confession:c-1');
