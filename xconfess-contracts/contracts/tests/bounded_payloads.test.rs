@@ -62,3 +62,110 @@ fn settlement_proof_metadata_limit_plus_one_rejected() {
 
     let _ = AnonymousTipping::send_tip_with_proof(env, recipient, 10, Some(metadata));
 }
+
+// ── Amount boundary table ────────────────────────────────────────────────────
+//
+// Parametrised over (amount, should_panic). Values cover the fencepost on each
+// side of the > 0 guard plus an i128 extremity.
+
+#[test]
+#[should_panic(expected = "tip amount must be positive")]
+fn amount_zero_rejected() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let _ = AnonymousTipping::send_tip(env, recipient, 0);
+}
+
+#[test]
+#[should_panic(expected = "tip amount must be positive")]
+fn amount_negative_one_rejected() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let _ = AnonymousTipping::send_tip(env, recipient, -1);
+}
+
+#[test]
+#[should_panic(expected = "tip amount must be positive")]
+fn amount_i128_min_rejected() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let _ = AnonymousTipping::send_tip(env, recipient, i128::MIN);
+}
+
+#[test]
+fn amount_one_accepted() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let id = AnonymousTipping::send_tip(env.clone(), recipient.clone(), 1);
+    assert_eq!(id, 1);
+    assert_eq!(AnonymousTipping::get_tips(env, recipient), 1);
+}
+
+#[test]
+fn amount_half_i128_max_accepted() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let amount = i128::MAX / 2;
+    let id = AnonymousTipping::send_tip(env.clone(), recipient.clone(), amount);
+    assert_eq!(id, 1);
+    assert_eq!(AnonymousTipping::get_tips(env, recipient), amount);
+}
+
+// ── Metadata boundary table ───────────────────────────────────────────────────
+
+#[test]
+fn metadata_length_64_accepted() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let meta = SorobanString::from_str(&env, &"x".repeat(64));
+    let id = AnonymousTipping::send_tip_with_proof(env.clone(), recipient.clone(), 1, Some(meta));
+    assert_eq!(id, 1);
+}
+
+#[test]
+fn metadata_length_127_accepted() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let meta = SorobanString::from_str(&env, &"x".repeat(127));
+    let id = AnonymousTipping::send_tip_with_proof(env.clone(), recipient.clone(), 1, Some(meta));
+    assert_eq!(id, 1);
+}
+
+#[test]
+#[should_panic(expected = "proof metadata too long")]
+fn metadata_length_256_rejected() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+    let meta = SorobanString::from_str(&env, &"x".repeat(256));
+    let _ = AnonymousTipping::send_tip_with_proof(env, recipient, 1, Some(meta));
+}
+
+// ── Duplicate settlement / accumulated totals ─────────────────────────────────
+//
+// Two sequential tips to the same recipient must both succeed and produce
+// monotonically increasing settlement IDs while accumulating the running total.
+
+#[test]
+fn duplicate_recipient_tips_accumulate_and_id_increments() {
+    let env = Env::default();
+    AnonymousTipping::init(env.clone());
+    let recipient = soroban_sdk::Address::generate(&env);
+
+    let id1 = AnonymousTipping::send_tip(env.clone(), recipient.clone(), 10);
+    let id2 = AnonymousTipping::send_tip(env.clone(), recipient.clone(), 20);
+    let id3 = AnonymousTipping::send_tip(env.clone(), recipient.clone(), 30);
+
+    assert_eq!(id1, 1);
+    assert_eq!(id2, 2);
+    assert_eq!(id3, 3);
+    assert_eq!(AnonymousTipping::get_tips(env.clone(), recipient), 60);
+    assert_eq!(AnonymousTipping::latest_settlement_nonce(env), 3);
+}
