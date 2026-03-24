@@ -115,7 +115,7 @@ describe('API Error Contract (e2e)', () => {
                 }
             }
 
-            console.warn('Could not trigger 429 in E2E test, skipping throttling check');
+            // console.warn('Could not trigger 429 in E2E test, skipping throttling check');
         });
     });
 });

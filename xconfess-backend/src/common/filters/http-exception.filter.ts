@@ -22,7 +22,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         if (typeof exceptionResponse === 'string') {
             message = exceptionResponse;
         } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-            const resObj = exceptionResponse as any;
+            const resObj = exceptionResponse as Record<string, any>;
 
             // Handle validation errors (arrays) from ValidationPipe
             if (Array.isArray(resObj.message)) {
