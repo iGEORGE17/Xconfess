@@ -139,6 +139,7 @@ Key supporting references:
 - [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for frontend-heavy deployment verification details
 - [docs/SOROBAN_SETUP.md](docs/SOROBAN_SETUP.md) for Soroban environment setup and contract interaction help
 - [maintainer/issues/125-docs-contract-release-and-upgrade-runbook.md](maintainer/issues/125-docs-contract-release-and-upgrade-runbook.md) for contract release and rollback guidance
+- [maintainer/BACKLOG_INDEX.md](maintainer/BACKLOG_INDEX.md) for maintainer backlog grouping, subsystem ownership, and triage routing
 
 ---
 
