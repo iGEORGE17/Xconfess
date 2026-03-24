@@ -1,8 +1,8 @@
 import { Processor, Process, OnQueueFailed, OnQueueCompleted, InjectQueue } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bull';
-import { EmailNotificationService } from '../services/email-notification.service';
-import { NotificationType } from '../entities/notification.entity';
+import { EmailNotificationService } from './services/email-notification.service';
+import { NotificationType } from './entities/notification.entity';
 
 export const NOTIFICATION_QUEUE = 'notifications';
 export const NOTIFICATION_DLQ   = 'notifications-dlq';

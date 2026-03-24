@@ -2,9 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Notification, NotificationType } from '../entities/notification.entity';
+import { NotificationJobData } from '../notification.queue';
 
 @Injectable()
 export class EmailNotificationService {
+  sendEmail(data: NotificationJobData) {
+    throw new Error('Method not implemented.');
+  }
   private readonly logger = new Logger(EmailNotificationService.name);
   private transporter: nodemailer.Transporter;
 
