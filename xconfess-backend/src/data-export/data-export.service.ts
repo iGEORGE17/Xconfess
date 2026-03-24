@@ -1,5 +1,10 @@
 // src/data-export/data-export.service.ts
-import { Injectable, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -11,7 +16,12 @@ import { ExportRequest } from './entities/export-request.entity';
 import { ExportChunk } from './entities/export-chunk.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
-export type ExportHistoryStatus = 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
+export type ExportHistoryStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'READY'
+  | 'FAILED'
+  | 'EXPIRED';
 
 /** Detailed lifecycle progress returned alongside every export history item. */
 export interface ExportProgress {
@@ -54,7 +64,7 @@ export class DataExportService {
     @InjectQueue('export-queue') private exportQueue: Queue,
     private readonly configService: ConfigService,
     @Optional() private readonly auditLogService?: AuditLogService,
-  ) { }
+  ) {}
 
   async requestExport(userId: string) {
     // 1. Rate Limit Check: Find any request created in the last 7 days
@@ -64,7 +74,7 @@ export class DataExportService {
     const recentRequest = await this.exportRepository.findOne({
       where: {
         userId,
-        createdAt: MoreThan(sevenDaysAgo)
+        createdAt: MoreThan(sevenDaysAgo),
       },
     });
 
@@ -96,7 +106,7 @@ export class DataExportService {
     // 3. Kick off Bull queue
     await this.exportQueue.add('process-export', {
       userId,
-      requestId: request.id
+      requestId: request.id,
     });
 
     return { requestId: request.id, status: 'PENDING', queuedAt: now };
@@ -136,14 +146,19 @@ export class DataExportService {
     });
   }
 
-  generateSignedDownloadUrl(requestId: string, userId: string, chunkIndex?: number): string {
+  generateSignedDownloadUrl(
+    requestId: string,
+    userId: string,
+    chunkIndex?: number,
+  ): string {
     const expires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours from now
     const secret = this.configService.get<string>('app.appSecret', '');
 
     // Create a hash of the payload
-    const dataToSign = chunkIndex !== undefined
-      ? `${requestId}:${userId}:${chunkIndex}:${expires}`
-      : `${requestId}:${userId}:${expires}`;
+    const dataToSign =
+      chunkIndex !== undefined
+        ? `${requestId}:${userId}:${chunkIndex}:${expires}`
+        : `${requestId}:${userId}:${expires}`;
 
     const signature = crypto
       .createHmac('sha256', secret || 'APP_SECRET_NOT_SET')
@@ -172,7 +187,14 @@ export class DataExportService {
   async getExportFile(requestId: string, userId: string) {
     const exportRecord = await this.exportRepository.findOne({
       where: { id: requestId, userId },
-      select: ['fileData', 'status', 'isChunked', 'chunkCount', 'totalSize', 'combinedChecksum'],
+      select: [
+        'fileData',
+        'status',
+        'isChunked',
+        'chunkCount',
+        'totalSize',
+        'combinedChecksum',
+      ],
     });
 
     if (exportRecord?.fileData) {
@@ -238,7 +260,9 @@ export class DataExportService {
     return new Date(createdAt).getTime() + 24 * 60 * 60 * 1000;
   }
 
-  private isDownloadStillValid(request: Pick<ExportRequest, 'status' | 'createdAt'>): boolean {
+  private isDownloadStillValid(
+    request: Pick<ExportRequest, 'status' | 'createdAt'>,
+  ): boolean {
     if (request.status !== 'READY') {
       return false;
     }
@@ -274,7 +298,10 @@ export class DataExportService {
       | 'lastFailureReason'
     >,
   ): ExportHistoryItem {
-    const expiresAt = request.status === 'READY' ? this.getExpiryTimestamp(request.createdAt) : null;
+    const expiresAt =
+      request.status === 'READY'
+        ? this.getExpiryTimestamp(request.createdAt)
+        : null;
     const canRedownload = this.isDownloadStillValid(request);
     const normalizedStatus: ExportHistoryStatus =
       request.status === 'READY' && !canRedownload
@@ -288,7 +315,9 @@ export class DataExportService {
       expiresAt,
       canRedownload,
       canRequestNewLink: normalizedStatus === 'EXPIRED',
-      downloadUrl: canRedownload ? this.generateSignedDownloadUrl(request.id, request.userId) : null,
+      downloadUrl: canRedownload
+        ? this.generateSignedDownloadUrl(request.id, request.userId)
+        : null,
       progress: this.buildProgress(request),
     };
   }
@@ -308,7 +337,10 @@ export class DataExportService {
     'lastFailureReason',
   ] as const;
 
-  async getExportHistory(userId: string, limit = 20): Promise<ExportHistoryItem[]> {
+  async getExportHistory(
+    userId: string,
+    limit = 20,
+  ): Promise<ExportHistoryItem[]> {
     const requests = await this.exportRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
@@ -329,24 +361,34 @@ export class DataExportService {
     return latestRequest ? this.toHistoryItem(latestRequest) : null;
   }
 
-  async getRedownloadLink(requestId: string, userId: string): Promise<{ downloadUrl: string }> {
+  async getRedownloadLink(
+    requestId: string,
+    userId: string,
+  ): Promise<{ downloadUrl: string }> {
     const request = await this.exportRepository.findOne({
       where: { id: requestId, userId },
       select: this.lifecycleSelect as any,
     });
 
     if (!request || !this.isDownloadStillValid(request)) {
-      throw new BadRequestException('Secure download link is no longer available. Request a new export.');
+      throw new BadRequestException(
+        'Secure download link is no longer available. Request a new export.',
+      );
     }
 
-    return { downloadUrl: this.generateSignedDownloadUrl(request.id, request.userId) };
+    return {
+      downloadUrl: this.generateSignedDownloadUrl(request.id, request.userId),
+    };
   }
 
   /**
    * Returns the full lifecycle status for a single export job.
    * Used by the GET /data-export/:id/status endpoint.
    */
-  async getJobStatus(requestId: string, userId: string): Promise<ExportJobStatus> {
+  async getJobStatus(
+    requestId: string,
+    userId: string,
+  ): Promise<ExportJobStatus> {
     const request = await this.exportRepository.findOne({
       where: { id: requestId, userId },
       select: this.lifecycleSelect as any,
@@ -382,8 +424,7 @@ export class DataExportService {
   convertToCsv(data: any[]): string {
     if (!data || data.length === 0) return '';
     const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(obj => Object.values(obj).join(',')).join('\n');
+    const rows = data.map((obj) => Object.values(obj).join(',')).join('\n');
     return `${headers}\n${rows}`;
   }
-
 }

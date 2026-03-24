@@ -342,7 +342,8 @@ describe('Backend Improvements (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      const secondAnonContext = secondConfessionsResponse.headers['x-anonymous-context-id'];
+      const secondAnonContext =
+        secondConfessionsResponse.headers['x-anonymous-context-id'];
       expect(secondAnonContext).toBe(anonContext);
     });
   });

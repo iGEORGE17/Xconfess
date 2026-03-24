@@ -1,5 +1,12 @@
 // src/data-export/entities/export-chunk.entity.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { ExportRequest } from './export-request.entity';
 
 @Entity('export_chunks')

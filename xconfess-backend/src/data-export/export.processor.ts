@@ -28,7 +28,7 @@ export class ExportProcessor {
     private dataExportService: DataExportService,
     private emailService: EmailService,
     private configService: ConfigService,
-  ) { }
+  ) {}
 
   @Process('process-export')
   async handleExport(job: Job<{ userId: string; requestId: string }>) {
@@ -55,25 +55,38 @@ export class ExportProcessor {
       const now = new Date();
       await this.exportRepository.update(requestId, { completedAt: now });
 
-      const user = await this.userRepository.findOneBy({ id: parseInt(userId) });
+      const user = await this.userRepository.findOneBy({
+        id: parseInt(userId),
+      });
       if (user && user.emailEncrypted) {
         const settingsUrl = `${this.configService.get<string>('app.frontendUrl', 'http://localhost:3000')}/settings/data-export`;
-        await this.emailService.sendWelcomeEmail(user.emailEncrypted, user.username);
+        await this.emailService.sendWelcomeEmail(
+          user.emailEncrypted,
+          user.username,
+        );
       }
 
-      this.logger.log(`Chunked export ${requestId} completed with ${result.chunkCount} chunks.`);
-
+      this.logger.log(
+        `Chunked export ${requestId} completed with ${result.chunkCount} chunks.`,
+      );
     } catch (error) {
       this.logger.error(`Export ${requestId} failed: ${error.message}`);
       // Use the service helper so retryCount and lastFailureReason are persisted
-      await this.dataExportService.markExportFailed(requestId, error.message ?? 'unknown error');
+      await this.dataExportService.markExportFailed(
+        requestId,
+        error.message ?? 'unknown error',
+      );
     }
   }
 
   private async generateChunkedZip(
     requestId: string,
     data: any,
-  ): Promise<{ chunkCount: number; totalSize: number; combinedChecksum: string }> {
+  ): Promise<{
+    chunkCount: number;
+    totalSize: number;
+    combinedChecksum: string;
+  }> {
     return new Promise((resolve, reject) => {
       const archive = (archiver as any)('zip', { zlib: { level: 9 } });
       const combinedHash = crypto.createHash('sha256');
@@ -83,7 +96,10 @@ export class ExportProcessor {
       let currentChunkSize = 0;
 
       const saveChunk = async (buffer: Buffer, index: number) => {
-        const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
+        const checksum = crypto
+          .createHash('sha256')
+          .update(buffer)
+          .digest('hex');
         await this.chunkRepository.save({
           exportRequestId: requestId,
           chunkIndex: index,
@@ -96,7 +112,9 @@ export class ExportProcessor {
       const chunkProcessor = new Writable({
         write: async (chunk, encoding, callback) => {
           try {
-            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding as BufferEncoding);
+            const buf = Buffer.isBuffer(chunk)
+              ? chunk
+              : Buffer.from(chunk, encoding);
             combinedHash.update(buf);
             totalSize += buf.length;
 
@@ -139,9 +157,13 @@ export class ExportProcessor {
 
       archive.pipe(chunkProcessor);
 
-      archive.append(JSON.stringify(data, null, 2), { name: 'complete_data.json' });
+      archive.append(JSON.stringify(data, null, 2), {
+        name: 'complete_data.json',
+      });
       if (data.confessions) {
-        const csvContent = this.dataExportService.convertToCsv(data.confessions);
+        const csvContent = this.dataExportService.convertToCsv(
+          data.confessions,
+        );
         archive.append(csvContent, { name: 'confessions.csv' });
       }
 

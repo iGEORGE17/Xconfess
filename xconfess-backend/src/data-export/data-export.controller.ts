@@ -22,7 +22,7 @@ export class DataExportController {
   constructor(
     private readonly exportService: DataExportService,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Post('request')
@@ -52,19 +52,13 @@ export class DataExportController {
    */
   @UseGuards(JwtAuthGuard)
   @Get(':id/status')
-  async getJobStatus(
-    @Param('id') id: string,
-    @Req() req: any,
-  ) {
+  async getJobStatus(@Param('id') id: string, @Req() req: any) {
     return this.exportService.getJobStatus(id, String(req.user.id));
   }
 
   @UseGuards(JwtAuthGuard)
   @Post(':id/redownload')
-  async redownload(
-    @Param('id') id: string,
-    @Req() req: any,
-  ) {
+  async redownload(@Param('id') id: string, @Req() req: any) {
     return this.exportService.getRedownloadLink(id, String(req.user.id));
   }
 
@@ -86,9 +80,10 @@ export class DataExportController {
     const secret = this.configService.get<string>('app.appSecret', '');
     const chunkIndex = chunk !== undefined ? parseInt(chunk) : undefined;
 
-    const dataToVerify = chunkIndex !== undefined
-      ? `${id}:${userId}:${chunkIndex}:${expires}`
-      : `${id}:${userId}:${expires}`;
+    const dataToVerify =
+      chunkIndex !== undefined
+        ? `${id}:${userId}:${chunkIndex}:${expires}`
+        : `${id}:${userId}:${expires}`;
 
     const expectedSignature = crypto
       .createHmac('sha256', secret || 'APP_SECRET_NOT_SET')
@@ -101,7 +96,11 @@ export class DataExportController {
 
     // 3. Fetch from Service (Only if signature is valid)
     if (chunkIndex !== undefined) {
-      const exportChunk = await this.exportService.getExportChunk(id, userId, chunkIndex);
+      const exportChunk = await this.exportService.getExportChunk(
+        id,
+        userId,
+        chunkIndex,
+      );
       if (!exportChunk) throw new NotFoundException('Chunk not found.');
 
       res.set({
@@ -127,7 +126,7 @@ export class DataExportController {
         totalSize: exportReq.totalSize,
         checksum: exportReq.combinedChecksum,
         downloadUrls: Array.from({ length: exportReq.chunkCount }, (_, i) =>
-          this.exportService.generateSignedDownloadUrl(id, userId, i)
+          this.exportService.generateSignedDownloadUrl(id, userId, i),
         ),
       });
     }

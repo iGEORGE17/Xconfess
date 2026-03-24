@@ -102,7 +102,11 @@ describe('DataExportService', () => {
 
       // entity should be created with queuedAt set
       expect(mockExportRepository.create).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: '42', status: 'PENDING', queuedAt: now }),
+        expect.objectContaining({
+          userId: '42',
+          status: 'PENDING',
+          queuedAt: now,
+        }),
       );
 
       expect(mockExportQueue.add).toHaveBeenCalledWith('process-export', {
@@ -164,7 +168,9 @@ describe('DataExportService', () => {
 
     try {
       // First failure: retryCount is currently 0
-      mockExportRepository.findOne.mockResolvedValue({ retryCount: 0 } as ExportRequest);
+      mockExportRepository.findOne.mockResolvedValue({
+        retryCount: 0,
+      } as ExportRequest);
       mockExportRepository.update.mockResolvedValue({ affected: 1 });
 
       await service.markExportFailed('req-fail-1', 'out of memory');
@@ -182,13 +188,19 @@ describe('DataExportService', () => {
 
   it('accumulates retryCount across multiple failures', async () => {
     // Simulate a second failure (retryCount is already 1)
-    mockExportRepository.findOne.mockResolvedValue({ retryCount: 1 } as ExportRequest);
+    mockExportRepository.findOne.mockResolvedValue({
+      retryCount: 1,
+    } as ExportRequest);
     mockExportRepository.update.mockResolvedValue({ affected: 1 });
 
     await service.markExportFailed('req-fail-2', 'disk full');
 
-    expect(mockExportRepository.update).toHaveBeenCalledWith('req-fail-2',
-      expect.objectContaining({ retryCount: 2, lastFailureReason: 'disk full' }),
+    expect(mockExportRepository.update).toHaveBeenCalledWith(
+      'req-fail-2',
+      expect.objectContaining({
+        retryCount: 2,
+        lastFailureReason: 'disk full',
+      }),
     );
   });
 
@@ -198,7 +210,8 @@ describe('DataExportService', () => {
 
     await service.markExportFailed('req-missing', 'error');
 
-    expect(mockExportRepository.update).toHaveBeenCalledWith('req-missing',
+    expect(mockExportRepository.update).toHaveBeenCalledWith(
+      'req-missing',
       expect.objectContaining({ retryCount: 1 }),
     );
   });
@@ -333,7 +346,9 @@ describe('DataExportService', () => {
     expect(history[0].status).toBe('PROCESSING');
     expect(history[0].progress).toBeDefined();
     expect(history[0].progress.queuedAt).toEqual(queuedAt);
-    expect(history[0].progress.processingAt).toEqual(new Date('2026-03-24T20:01:00.000Z'));
+    expect(history[0].progress.processingAt).toEqual(
+      new Date('2026-03-24T20:01:00.000Z'),
+    );
   });
 
   // ── legacy tests (unchanged behaviour) ───────────────────────────────────
@@ -389,7 +404,10 @@ describe('DataExportService', () => {
   });
 
   it('does not emit download audit log when file is missing', async () => {
-    mockExportRepository.findOne.mockResolvedValue({ fileData: null, status: 'EXPIRED' });
+    mockExportRepository.findOne.mockResolvedValue({
+      fileData: null,
+      status: 'EXPIRED',
+    });
 
     await service.getExportFile('req-4', '11');
 
@@ -418,18 +436,27 @@ describe('DataExportService', () => {
   describe('getExportChunk', () => {
     it('should throw NotFoundException if request does not exist', async () => {
       mockExportRepository.findOne.mockResolvedValue(null);
-      await expect(service.getExportChunk('req-1', 'user-1', 0)).rejects.toThrow('Export request not found or unauthorized');
+      await expect(
+        service.getExportChunk('req-1', 'user-1', 0),
+      ).rejects.toThrow('Export request not found or unauthorized');
     });
 
     it('should return the chunk if it exists and user owns the request', async () => {
-      mockExportRepository.findOne.mockResolvedValue({ id: 'req-1', userId: 'user-1' });
+      mockExportRepository.findOne.mockResolvedValue({
+        id: 'req-1',
+        userId: 'user-1',
+      });
       const mockChunk = { id: 'chunk-1', chunkIndex: 0 };
       mockChunkRepository.findOne.mockResolvedValue(mockChunk);
 
       const result = await service.getExportChunk('req-1', 'user-1', 0);
       expect(result).toEqual(mockChunk);
-      expect(mockExportRepository.findOne).toHaveBeenCalledWith({ where: { id: 'req-1', userId: 'user-1' } });
-      expect(mockChunkRepository.findOne).toHaveBeenCalledWith({ where: { exportRequestId: 'req-1', chunkIndex: 0 } });
+      expect(mockExportRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'req-1', userId: 'user-1' },
+      });
+      expect(mockChunkRepository.findOne).toHaveBeenCalledWith({
+        where: { exportRequestId: 'req-1', chunkIndex: 0 },
+      });
     });
   });
 });
