@@ -37,6 +37,9 @@ export class ExportProcessor {
     try {
       this.logger.log(`Starting chunked export for user ${userId}...`);
 
+      // Stamp processingAt and flip status to PROCESSING
+      await this.dataExportService.markExportProcessing(requestId);
+
       const data = await this.dataExportService.compileUserData(userId);
       const result = await this.generateChunkedZip(requestId, data);
 
@@ -48,6 +51,10 @@ export class ExportProcessor {
         combinedChecksum: result.combinedChecksum,
       });
 
+      // Stamp completedAt
+      const now = new Date();
+      await this.exportRepository.update(requestId, { completedAt: now });
+
       const user = await this.userRepository.findOneBy({ id: parseInt(userId) });
       if (user && user.emailEncrypted) {
         const settingsUrl = `${this.configService.get<string>('app.frontendUrl', 'http://localhost:3000')}/settings/data-export`;
@@ -58,7 +65,8 @@ export class ExportProcessor {
 
     } catch (error) {
       this.logger.error(`Export ${requestId} failed: ${error.message}`);
-      await this.exportRepository.update(requestId, { status: 'FAILED' });
+      // Use the service helper so retryCount and lastFailureReason are persisted
+      await this.dataExportService.markExportFailed(requestId, error.message ?? 'unknown error');
     }
   }
 

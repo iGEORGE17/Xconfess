@@ -13,6 +13,17 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 
 export type ExportHistoryStatus = 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
 
+/** Detailed lifecycle progress returned alongside every export history item. */
+export interface ExportProgress {
+  queuedAt: Date | null;
+  processingAt: Date | null;
+  completedAt: Date | null;
+  failedAt: Date | null;
+  expiredAt: Date | null;
+  retryCount: number;
+  lastFailureReason: string | null;
+}
+
 export interface ExportHistoryItem {
   id: string;
   status: ExportHistoryStatus;
@@ -21,6 +32,16 @@ export interface ExportHistoryItem {
   canRedownload: boolean;
   canRequestNewLink: boolean;
   downloadUrl: string | null;
+  /** Lifecycle timeline — additive; older clients can safely ignore this field. */
+  progress: ExportProgress;
+}
+
+/** Slim status response for the GET :id/status endpoint. */
+export interface ExportJobStatus {
+  id: string;
+  userId: string;
+  status: ExportHistoryStatus;
+  progress: ExportProgress;
 }
 
 @Injectable()
@@ -51,8 +72,13 @@ export class DataExportService {
       throw new BadRequestException('Export allowed once every 7 days.');
     }
 
-    // 2. Create record
-    const request = this.exportRepository.create({ userId, status: 'PENDING' });
+    // 2. Create record — stamp queuedAt immediately
+    const now = new Date();
+    const request = this.exportRepository.create({
+      userId,
+      status: 'PENDING',
+      queuedAt: now,
+    });
     await this.exportRepository.save(request);
 
     await this.auditLogService?.logExportLifecycleEvent({
@@ -63,6 +89,7 @@ export class DataExportService {
       exportId: request.id,
       metadata: {
         status: request.status,
+        queuedAt: now.toISOString(),
       },
     });
 
@@ -72,9 +99,42 @@ export class DataExportService {
       requestId: request.id
     });
 
-    return { requestId: request.id, status: 'PENDING' };
+    return { requestId: request.id, status: 'PENDING', queuedAt: now };
   }
 
+  /**
+   * Called by the processor as soon as it picks up the job.
+   * Transitions status to PROCESSING and stamps processingAt.
+   */
+  async markExportProcessing(requestId: string): Promise<void> {
+    const now = new Date();
+    await this.exportRepository.update(requestId, {
+      status: 'PROCESSING',
+      processingAt: now,
+    });
+  }
+
+  /**
+   * Called by the processor on failure. Increments retryCount and stores the
+   * reason so operators can investigate without digging through log files.
+   */
+  async markExportFailed(requestId: string, reason: string): Promise<void> {
+    const now = new Date();
+
+    // Fetch current retryCount so we can increment it safely.
+    const current = await this.exportRepository.findOne({
+      where: { id: requestId },
+      select: ['retryCount'],
+    });
+    const retryCount = (current?.retryCount ?? 0) + 1;
+
+    await this.exportRepository.update(requestId, {
+      status: 'FAILED',
+      failedAt: now,
+      retryCount,
+      lastFailureReason: reason,
+    });
+  }
 
   generateSignedDownloadUrl(requestId: string, userId: string, chunkIndex?: number): string {
     const expires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours from now
@@ -152,9 +212,11 @@ export class DataExportService {
     fileData: Buffer,
     metadata?: Record<string, any>,
   ): Promise<void> {
+    const now = new Date();
     await this.exportRepository.update(requestId, {
       fileData,
       status: 'READY',
+      completedAt: now,
     });
 
     await this.auditLogService?.logExportLifecycleEvent({
@@ -166,6 +228,7 @@ export class DataExportService {
       metadata: {
         userId,
         status: 'READY',
+        completedAt: now.toISOString(),
         ...(metadata || {}),
       },
     });
@@ -183,7 +246,34 @@ export class DataExportService {
     return Date.now() <= this.getExpiryTimestamp(request.createdAt);
   }
 
-  private toHistoryItem(request: Pick<ExportRequest, 'id' | 'status' | 'createdAt' | 'userId'>): ExportHistoryItem {
+  private buildProgress(request: Partial<ExportRequest>): ExportProgress {
+    return {
+      queuedAt: request.queuedAt ?? null,
+      processingAt: request.processingAt ?? null,
+      completedAt: request.completedAt ?? null,
+      failedAt: request.failedAt ?? null,
+      expiredAt: request.expiredAt ?? null,
+      retryCount: request.retryCount ?? 0,
+      lastFailureReason: request.lastFailureReason ?? null,
+    };
+  }
+
+  private toHistoryItem(
+    request: Pick<
+      ExportRequest,
+      | 'id'
+      | 'status'
+      | 'createdAt'
+      | 'userId'
+      | 'queuedAt'
+      | 'processingAt'
+      | 'completedAt'
+      | 'failedAt'
+      | 'expiredAt'
+      | 'retryCount'
+      | 'lastFailureReason'
+    >,
+  ): ExportHistoryItem {
     const expiresAt = request.status === 'READY' ? this.getExpiryTimestamp(request.createdAt) : null;
     const canRedownload = this.isDownloadStillValid(request);
     const normalizedStatus: ExportHistoryStatus =
@@ -199,15 +289,31 @@ export class DataExportService {
       canRedownload,
       canRequestNewLink: normalizedStatus === 'EXPIRED',
       downloadUrl: canRedownload ? this.generateSignedDownloadUrl(request.id, request.userId) : null,
+      progress: this.buildProgress(request),
     };
   }
+
+  /** The full list of fields we need fetched from the DB for history/status calls. */
+  private readonly lifecycleSelect = [
+    'id',
+    'status',
+    'createdAt',
+    'userId',
+    'queuedAt',
+    'processingAt',
+    'completedAt',
+    'failedAt',
+    'expiredAt',
+    'retryCount',
+    'lastFailureReason',
+  ] as const;
 
   async getExportHistory(userId: string, limit = 20): Promise<ExportHistoryItem[]> {
     const requests = await this.exportRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
       take: limit,
-      select: ['id', 'status', 'createdAt', 'userId'],
+      select: this.lifecycleSelect as any,
     });
 
     return requests.map((request) => this.toHistoryItem(request));
@@ -217,7 +323,7 @@ export class DataExportService {
     const latestRequest = await this.exportRepository.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['id', 'status', 'createdAt', 'userId'],
+      select: this.lifecycleSelect as any,
     });
 
     return latestRequest ? this.toHistoryItem(latestRequest) : null;
@@ -226,7 +332,7 @@ export class DataExportService {
   async getRedownloadLink(requestId: string, userId: string): Promise<{ downloadUrl: string }> {
     const request = await this.exportRepository.findOne({
       where: { id: requestId, userId },
-      select: ['id', 'status', 'createdAt', 'userId'],
+      select: this.lifecycleSelect as any,
     });
 
     if (!request || !this.isDownloadStillValid(request)) {
@@ -234,6 +340,34 @@ export class DataExportService {
     }
 
     return { downloadUrl: this.generateSignedDownloadUrl(request.id, request.userId) };
+  }
+
+  /**
+   * Returns the full lifecycle status for a single export job.
+   * Used by the GET /data-export/:id/status endpoint.
+   */
+  async getJobStatus(requestId: string, userId: string): Promise<ExportJobStatus> {
+    const request = await this.exportRepository.findOne({
+      where: { id: requestId, userId },
+      select: this.lifecycleSelect as any,
+    });
+
+    if (!request) {
+      throw new NotFoundException('Export request not found or unauthorized');
+    }
+
+    const canRedownload = this.isDownloadStillValid(request);
+    const normalizedStatus: ExportHistoryStatus =
+      request.status === 'READY' && !canRedownload
+        ? 'EXPIRED'
+        : (request.status as ExportHistoryStatus);
+
+    return {
+      id: request.id,
+      userId: request.userId,
+      status: normalizedStatus,
+      progress: this.buildProgress(request),
+    };
   }
 
   async compileUserData(userId: string): Promise<any> {

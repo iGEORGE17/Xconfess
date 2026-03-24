@@ -30,4 +30,36 @@ export class ExportRequest {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  // ── Lifecycle timestamps ──────────────────────────────────────────────────
+
+  /** Set when the export job is enqueued in Bull. */
+  @Column({ type: 'timestamp', nullable: true })
+  queuedAt: Date | null;
+
+  /** Set when the processor picks up the job. */
+  @Column({ type: 'timestamp', nullable: true })
+  processingAt: Date | null;
+
+  /** Set when the export reaches READY status. */
+  @Column({ type: 'timestamp', nullable: true })
+  completedAt: Date | null;
+
+  /** Updated every time the processor fails (supports retries). */
+  @Column({ type: 'timestamp', nullable: true })
+  failedAt: Date | null;
+
+  /** Set when the 24-hour download window elapses. */
+  @Column({ type: 'timestamp', nullable: true })
+  expiredAt: Date | null;
+
+  // ── Retry / failure metadata ──────────────────────────────────────────────
+
+  /** Number of times the processor has attempted (and failed) this job. */
+  @Column({ default: 0 })
+  retryCount: number;
+
+  /** The error message from the most recent processor failure. */
+  @Column({ type: 'text', nullable: true })
+  lastFailureReason: string | null;
 }

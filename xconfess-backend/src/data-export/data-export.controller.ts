@@ -43,6 +43,22 @@ export class DataExportController {
     };
   }
 
+  /**
+   * GET /data-export/:id/status
+   *
+   * Returns the full lifecycle timeline for a single export job:
+   * status, all timestamps, retry count, and last failure reason.
+   * Older clients that only need `status` can safely ignore the added fields.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/status')
+  async getJobStatus(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return this.exportService.getJobStatus(id, String(req.user.id));
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post(':id/redownload')
   async redownload(
@@ -59,7 +75,7 @@ export class DataExportController {
     @Query('expires') expires: string,
     @Query('signature') signature: string,
     @Query('chunk') chunk?: string,
-    @Res() res: Response,
+    @Res() res?: Response,
   ) {
     // 1. Check Expiration
     if (Date.now() > parseInt(expires)) {
