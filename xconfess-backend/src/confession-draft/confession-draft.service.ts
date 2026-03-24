@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -22,6 +23,7 @@ import {
   decryptConfession,
 } from '../utils/confession-encryption';
 import { ConfessionService } from '../confession/confession.service';
+import { UpdateConfessionDraftDto } from './dto/update-confession-draft.dto';
 import { DateTime } from 'luxon';
 
 const MAX_DRAFTS_PER_USER = 50;
@@ -62,6 +64,10 @@ export class ConfessionDraftService {
     return {
       ...draft,
       content: decryptConfession(draft.content, this.aesKey),
+      revisions: (draft.revisions || []).map((rev) => ({
+        ...rev,
+        content: decryptConfession(rev.content, this.aesKey),
+      })),
     };
   }
 
@@ -117,7 +123,11 @@ export class ConfessionDraftService {
     return this.sanitizeForResponse(draft);
   }
 
-  async updateDraft(userId: number, id: string, content?: string) {
+  async updateDraft(
+    userId: number,
+    id: string,
+    dto: UpdateConfessionDraftDto,
+  ) {
     const draft = await this.draftRepo.findOne({ where: { id } });
     if (!draft) throw new NotFoundException('Draft not found');
     if (draft.userId !== userId) throw new ForbiddenException();
@@ -126,8 +136,23 @@ export class ConfessionDraftService {
       throw new BadRequestException('Cannot edit a posted draft');
     }
 
-    if (typeof content === 'string') {
-      draft.content = encryptConfession(content, this.aesKey);
+    if (draft.version !== dto.version) {
+      throw new ConflictException({
+        message: 'Conflict detected: draft has been modified by another session',
+        currentDraft: this.sanitizeForResponse(draft),
+      });
+    }
+
+    if (typeof dto.content === 'string') {
+      // Store current content in revision history before updating
+      const revision = {
+        content: draft.content,
+        version: draft.version,
+        createdAt: new Date(),
+      };
+
+      draft.revisions = [revision, ...(draft.revisions || [])].slice(0, 10);
+      draft.content = encryptConfession(dto.content, this.aesKey);
     }
 
     const saved = await this.draftRepo.save(draft);

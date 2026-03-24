@@ -46,7 +46,7 @@ export class ConfessionDraftController {
     @Param('id') id: string,
     @Body() dto: UpdateConfessionDraftDto,
   ) {
-    return this.service.updateDraft(userId, id, dto.content);
+    return this.service.updateDraft(userId, id, dto);
   }
 
   @Delete(':id')
