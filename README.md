@@ -60,7 +60,7 @@ xConfess is an anonymous confession platform where users can share their thought
 - **Swagger/OpenAPI**: API documentation
 
 ### Frontend (xconfess-frontend)
-- **Next.js 14**: React framework with App Router
+- **Next.js 16**: React framework with App Router
 - **TailwindCSS**: Utility-first styling
 - **Stellar SDK**: Blockchain interactions
 
@@ -196,6 +196,15 @@ xconfess/
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:5000
    - API Docs: http://localhost:5000/api/api-docs
+
+### Auth Route Split
+
+The backend intentionally exposes both route groups:
+
+- `/api/users/*` for user lifecycle operations (`register`, `login`, `profile`, account state)
+- `/api/auth/*` for auth-centric flows (`login`, `me`, `logout`, `forgot-password`, `reset-password`)
+
+Full, controller-accurate route documentation lives in [xconfess-backend/API_DOCUMENTATION.md](xconfess-backend/API_DOCUMENTATION.md).
 
 ---
 
