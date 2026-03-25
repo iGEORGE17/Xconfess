@@ -60,7 +60,7 @@ xConfess is an anonymous confession platform where users can share their thought
 - **Swagger/OpenAPI**: API documentation
 
 ### Frontend (xconfess-frontend)
-- **Next.js 14**: React framework with App Router
+- **Next.js 16**: React framework with App Router
 - **TailwindCSS**: Utility-first styling
 - **Stellar SDK**: Blockchain interactions
 
@@ -130,6 +130,19 @@ xconfess/
 
 ---
 
+## 🚀 Release Readiness
+
+Use the shared release checklist at [docs/release-readiness-checklist.md](docs/release-readiness-checklist.md) before promoting backend, frontend, or contract changes.
+
+Key supporting references:
+
+- [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for frontend-heavy deployment verification details
+- [docs/SOROBAN_SETUP.md](docs/SOROBAN_SETUP.md) for Soroban environment setup and contract interaction help
+- [maintainer/issues/125-docs-contract-release-and-upgrade-runbook.md](maintainer/issues/125-docs-contract-release-and-upgrade-runbook.md) for contract release and rollback guidance
+- [maintainer/BACKLOG_INDEX.md](maintainer/BACKLOG_INDEX.md) for maintainer backlog grouping, subsystem ownership, and triage routing
+
+---
+
 ## ⚙️ Installation
 
 ### Prerequisites
@@ -196,6 +209,15 @@ xconfess/
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:5000
    - API Docs: http://localhost:5000/api/api-docs
+
+### Auth Route Split
+
+The backend intentionally exposes both route groups:
+
+- `/api/users/*` for user lifecycle operations (`register`, `login`, `profile`, account state)
+- `/api/auth/*` for auth-centric flows (`login`, `me`, `logout`, `forgot-password`, `reset-password`)
+
+Full, controller-accurate route documentation lives in [xconfess-backend/API_DOCUMENTATION.md](xconfess-backend/API_DOCUMENTATION.md).
 
 ---
 

@@ -22,7 +22,9 @@ export class ModerationRepositoryService {
     apiProvider?: string,
     manager?: EntityManager,
   ): Promise<ModerationLog> {
-    const repo = manager ? manager.getRepository(ModerationLog) : this.moderationLogRepo;
+    const repo = manager
+      ? manager.getRepository(ModerationLog)
+      : this.moderationLogRepo;
     const log = repo.create({
       confessionId,
       userId,
@@ -46,7 +48,7 @@ export class ModerationRepositoryService {
     notes?: string,
   ): Promise<ModerationLog> {
     const log = await this.moderationLogRepo.findOne({ where: { id: logId } });
-    
+
     if (!log) {
       throw new Error('Moderation log not found');
     }
@@ -100,7 +102,7 @@ export class ModerationRepositoryService {
     }
 
     const total = await query.getCount();
-    
+
     const byStatus = await query
       .select('log.moderationStatus', 'status')
       .addSelect('COUNT(*)', 'count')
@@ -109,12 +111,12 @@ export class ModerationRepositoryService {
 
     const avgScore = await query
       .select('AVG(log.moderationScore)', 'avgScore')
-      .getRawOne();
+      .getRawOne<{ avgScore: string | number | null }>();
 
     return {
       total,
       byStatus,
-      avgScore: parseFloat(avgScore?.avgScore) || 0,
+      avgScore: avgScore?.avgScore ? Number(avgScore.avgScore) : 0,
     };
   }
 
@@ -129,10 +131,11 @@ export class ModerationRepositoryService {
     let falseNegatives = 0;
 
     for (const log of reviewed) {
-      const aiPredictedHarmful = 
-        log.moderationStatus === ModerationStatus.REJECTED || 
+      const aiPredictedHarmful =
+        log.moderationStatus === ModerationStatus.REJECTED ||
         log.moderationStatus === ModerationStatus.FLAGGED;
-      const humanConfirmedHarmful = log.moderationStatus === ModerationStatus.REJECTED;
+      const humanConfirmedHarmful =
+        log.moderationStatus === ModerationStatus.REJECTED;
 
       if (aiPredictedHarmful && humanConfirmedHarmful) truePositives++;
       else if (aiPredictedHarmful && !humanConfirmedHarmful) falsePositives++;
@@ -142,15 +145,18 @@ export class ModerationRepositoryService {
 
     const total = reviewed.length;
     const accuracy = total > 0 ? (truePositives + trueNegatives) / total : 0;
-    const precision = (truePositives + falsePositives) > 0 
-      ? truePositives / (truePositives + falsePositives) 
-      : 0;
-    const recall = (truePositives + falseNegatives) > 0 
-      ? truePositives / (truePositives + falseNegatives) 
-      : 0;
-    const f1Score = (precision + recall) > 0 
-      ? 2 * (precision * recall) / (precision + recall) 
-      : 0;
+    const precision =
+      truePositives + falsePositives > 0
+        ? truePositives / (truePositives + falsePositives)
+        : 0;
+    const recall =
+      truePositives + falseNegatives > 0
+        ? truePositives / (truePositives + falseNegatives)
+        : 0;
+    const f1Score =
+      precision + recall > 0
+        ? (2 * (precision * recall)) / (precision + recall)
+        : 0;
 
     return {
       total,

@@ -12,10 +12,14 @@ const apiClient = axios.create({
 // Request interceptor for adding auth token
 apiClient.interceptors.request.use(
 	(config) => {
-		const token = localStorage.getItem(AUTH_TOKEN_KEY);
-		if (token) {
-			config.headers.Authorization = `Bearer ${token}`;
-		}
+		// Tokens are now handled via secure session cookies
+		config.withCredentials = true;
+
+		// Generate correlation ID for tracing
+		const correlationId = crypto.randomUUID();
+		config.headers["X-Correlation-ID"] = correlationId;
+		config.correlationId = correlationId;
+
 		return config;
 	},
 	(error) => {
@@ -24,10 +28,11 @@ apiClient.interceptors.request.use(
 	},
 );
 
-// Extend AxiosRequestConfig to support per-request retry tracking
+// Extend AxiosRequestConfig to support per-request retry tracking and correlation
 declare module "axios" {
 	interface InternalAxiosRequestConfig {
 		__retryCount?: number;
+		correlationId?: string;
 	}
 }
 
@@ -91,6 +96,7 @@ apiClient.interceptors.response.use(
 				url: config.url,
 				status: error.response?.status,
 				retries: config.__retryCount,
+				correlationId: config.correlationId,
 			},
 		);
 
@@ -100,3 +106,41 @@ apiClient.interceptors.response.use(
 
 export default apiClient;
 export { AxiosError };
+
+export type DataExportStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED" | "EXPIRED";
+
+export interface DataExportHistoryItem {
+	id: string;
+	status: DataExportStatus;
+	createdAt: string;
+	expiresAt: number | null;
+	canRedownload: boolean;
+	canRequestNewLink: boolean;
+	downloadUrl: string | null;
+}
+
+export interface DataExportHistoryResponse {
+	latest: DataExportHistoryItem | null;
+	history: DataExportHistoryItem[];
+}
+
+export const dataExportApi = {
+	async getHistory() {
+		const response = await apiClient.get<DataExportHistoryResponse>("/data-export/history");
+		return response.data;
+	},
+
+	async requestExport() {
+		const response = await apiClient.post<{ requestId: string; status: string }>(
+			"/data-export/request",
+		);
+		return response.data;
+	},
+
+	async redownload(requestId: string) {
+		const response = await apiClient.post<{ downloadUrl: string }>(
+			`/data-export/${requestId}/redownload`,
+		);
+		return response.data;
+	},
+};

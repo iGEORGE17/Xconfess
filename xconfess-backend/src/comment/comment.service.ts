@@ -1,10 +1,11 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Comment } from './entities/comment.entity';
 import { User } from '../user/entities/user.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
@@ -14,9 +15,16 @@ import {
   ModerationStatus,
 } from './entities/moderation-comment.entity';
 import { AnonymousUser } from '../user/entities/anonymous-user.entity';
+import {
+  OutboxEvent,
+  OutboxStatus,
+} from '../common/entities/outbox-event.entity';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class CommentService {
+  private readonly logger = new Logger(CommentService.name);
+
   constructor(
     @InjectRepository(Comment)
     private commentRepo: Repository<Comment>,
@@ -24,7 +32,11 @@ export class CommentService {
     private confessionRepo: Repository<AnonymousConfession>,
     @InjectRepository(ModerationComment)
     private moderationCommentRepo: Repository<ModerationComment>,
+    @InjectRepository(OutboxEvent)
+    private outboxRepo: Repository<OutboxEvent>,
     private readonly notificationQueue: NotificationQueue,
+    private readonly dataSource: DataSource,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   async create(
@@ -36,38 +48,98 @@ export class CommentService {
   ): Promise<Comment> {
     const confession = await this.confessionRepo.findOne({
       where: { id: confessionId, isDeleted: false },
-      relations: ['anonymousUser'],
+      relations: [
+        'anonymousUser',
+        'anonymousUser.userLinks',
+        'anonymousUser.userLinks.user',
+      ],
     });
 
     if (!confession) {
       throw new NotFoundException('Confession not found');
     }
 
-    const comment = this.commentRepo.create({
-      content,
-      anonymousUser: user,
-      confession,
-      anonymousContextId,
-    });
+    return this.dataSource
+      .transaction(async (manager) => {
+        // ... (existing comment creation logic)
+        const commentRepo = manager.getRepository(Comment);
+        const moderationRepo = manager.getRepository(ModerationComment);
+        const outboxRepo = manager.getRepository(OutboxEvent);
 
-    if (parentId) {
-      const parentComment = new Comment();
-      parentComment.id = parentId;
-      comment.parent = parentComment;
+        const comment = commentRepo.create({
+          content,
+          anonymousUser: user,
+          confession,
+          anonymousContextId,
+        });
+
+        if (parentId) {
+          const parentComment = new Comment();
+          parentComment.id = parentId;
+          comment.parent = parentComment;
+        }
+
+        const savedComment = await commentRepo.save(comment);
+
+        // Add moderation entry
+        await moderationRepo.save(
+          moderationRepo.create({
+            comment: savedComment,
+            commentId: savedComment.id,
+            status: ModerationStatus.PENDING,
+          }),
+        );
+
+        // 4. Create Outbox Event for notification
+        const recipientEmail = this.getRecipientEmail(confession.anonymousUser);
+        if (recipientEmail) {
+          const payload = {
+            commentId: savedComment.id,
+            confessionId: confession.id,
+            recipientEmail,
+            commenterContextId: anonymousContextId,
+            commentPreview: content.substring(0, 100),
+          };
+
+          const idempotencyKey = `comment:${savedComment.id}`;
+
+          await outboxRepo.save(
+            outboxRepo.create({
+              type: 'comment_notification',
+              payload,
+              idempotencyKey,
+              status: OutboxStatus.PENDING,
+            }),
+          );
+        }
+
+        return savedComment;
+      })
+      .then(async (result) => {
+        // Invalidate trending analytics after a new comment lands.
+        // Fire-and-forget: cache failures must not roll back the comment write.
+        this.analyticsService
+          .invalidateTrendingCache('comment-created')
+          .catch((err) =>
+            this.logger.error(
+              'Failed to invalidate trending cache after comment create',
+              err,
+            ),
+          );
+        return result;
+      });
+  }
+
+  private getRecipientEmail(anonymousUser: AnonymousUser): string | null {
+    if (!anonymousUser) return null;
+
+    // Find linked user
+    const link = anonymousUser.userLinks?.[0];
+    if (link?.user) {
+      return link.user.getEmail();
     }
 
-    const saved = await this.commentRepo.save(comment);
-
-    // Add moderation entry
-    await this.moderationCommentRepo.save(
-      this.moderationCommentRepo.create({
-        comment: saved,
-        commentId: saved.id,
-        status: ModerationStatus.PENDING,
-      }),
-    );
-
-    return saved;
+    return null;
   }
 
   async findByConfessionId(
@@ -120,6 +192,16 @@ export class CommentService {
     }
 
     await this.commentRepo.update(id, { isDeleted: true });
+
+    // A deleted comment changes visible engagement counts.
+    this.analyticsService
+      .invalidateTrendingCache('comment-deleted')
+      .catch((err) =>
+        this.logger.error(
+          'Failed to invalidate trending cache after comment delete',
+          err,
+        ),
+      );
   }
 
   async moderateComment(
@@ -142,6 +224,26 @@ export class CommentService {
     moderation.moderatedBy = moderator;
     moderation.moderatedById = moderator.id;
     await this.moderationCommentRepo.save(moderation);
+
+    // Moderation changes which comments are publicly visible, directly
+    // affecting trending scores and platform stats.
+    this.analyticsService
+      .invalidateTrendingCache(`comment-moderated:${status}`)
+      .catch((err) =>
+        this.logger.error(
+          'Failed to invalidate trending cache after moderation',
+          err,
+        ),
+      );
+    this.analyticsService
+      .invalidateStatsCache(`comment-moderated:${status}`)
+      .catch((err) =>
+        this.logger.error(
+          'Failed to invalidate stats cache after moderation',
+          err,
+        ),
+      );
+
     return { success: true, message: `Comment ${status}` };
   }
 }

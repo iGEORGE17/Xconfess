@@ -4,6 +4,7 @@ import {
   NotFoundException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AnonymousConfessionRepository } from './repository/confession.repository';
 import { CreateConfessionDto } from './dto/create-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
@@ -50,7 +51,12 @@ export class ConfessionService {
     private readonly stellarService: StellarService,
     private readonly cacheService: CacheService,
     private readonly tagService: TagService,
-  ) { }
+    private readonly configService: ConfigService,
+  ) {}
+
+  private get aesKey(): string {
+    return this.configService.get<string>('app.confessionAesKey', '');
+  }
 
   private sanitizeMessage(message: string): string {
     return sanitizeHtml(message, {
@@ -79,12 +85,12 @@ export class ConfessionService {
       // Step 1.5: Create an AnonymousUser to associate with this confession
       const anonymousUser = manager
         ? await manager
-          .getRepository(AnonymousUser)
-          .save(manager.getRepository(AnonymousUser).create())
+            .getRepository(AnonymousUser)
+            .save(manager.getRepository(AnonymousUser).create())
         : await this.anonymousUserService.create();
 
       // Step 2: Encrypt and save the confession
-      const encryptedMsg = encryptConfession(msg);
+      const encryptedMsg = encryptConfession(msg, this.aesKey);
       const confessionRepo: Repository<AnonymousConfession> = manager
         ? manager.getRepository(AnonymousConfession)
         : (this.confessionRepo as unknown as Repository<AnonymousConfession>);
@@ -202,11 +208,17 @@ export class ConfessionService {
     const skip = (page - 1) * limit;
     const qb = this.confessionRepo
       .createQueryBuilder('confession')
+      .leftJoinAndSelect('confession.anonymousUser', 'anonymousUser')
+      .leftJoinAndSelect('anonymousUser.userLinks', 'userLinks')
+      .leftJoinAndSelect('userLinks.user', 'user')
       .andWhere('confession.isDeleted = false')
       .andWhere('confession.isHidden = false')
       .andWhere('confession.moderationStatus IN (:...statuses)', {
         statuses: [ModerationStatus.APPROVED, ModerationStatus.PENDING],
       })
+      .andWhere(
+        "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
+      )
       .leftJoinAndSelect('confession.reactions', 'reactions')
       .leftJoinAndSelect('reactions.anonymousUser', 'reactionUser')
       .select([
@@ -246,7 +258,7 @@ export class ConfessionService {
 
     const decryptedItems = items.map((item) => ({
       ...item,
-      message: decryptConfession(item.message),
+      message: decryptConfession(item.message, this.aesKey),
     }));
 
     const result = {
@@ -273,7 +285,7 @@ export class ConfessionService {
       const moderationResult =
         await this.aiModerationService.moderateContent(sanitized);
 
-      dto.message = encryptConfession(sanitized);
+      dto.message = encryptConfession(sanitized, this.aesKey);
       await this.confessionRepo.update(id, {
         ...dto,
         moderationScore: moderationResult.score,
@@ -297,7 +309,8 @@ export class ConfessionService {
     }
 
     const updated = await this.confessionRepo.findOne({ where: { id } });
-    if (updated) updated.message = decryptConfession(updated.message);
+    if (updated)
+      updated.message = decryptConfession(updated.message, this.aesKey);
     return updated;
   }
 
@@ -322,9 +335,7 @@ export class ConfessionService {
       where: { id, isDeleted: true },
     });
     if (!existing)
-      throw new NotFoundException(
-        `Soft-deleted confession ${id} not found`,
-      );
+      throw new NotFoundException(`Soft-deleted confession ${id} not found`);
     await this.confessionRepo.update(id, {
       isDeleted: false,
       deletedAt: null,
@@ -348,7 +359,7 @@ export class ConfessionService {
     return {
       data: data.map((c) => ({
         ...c,
-        message: decryptConfession(c.message),
+        message: decryptConfession(c.message, this.aesKey),
       })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
@@ -402,7 +413,13 @@ export class ConfessionService {
   async getConfessionByIdWithViewCount(id: string, req: Request) {
     const conf = await this.confessionRepo.findOne({
       where: { id, isDeleted: false, isHidden: false },
-      relations: ['reactions', 'reactions.anonymousUser'],
+      relations: [
+        'anonymousUser',
+        'anonymousUser.userLinks',
+        'anonymousUser.userLinks.user',
+        'reactions',
+        'reactions.anonymousUser',
+      ],
       select: {
         id: true,
         message: true,
@@ -422,6 +439,12 @@ export class ConfessionService {
     });
     if (!conf) throw new NotFoundException('Confession not found');
 
+    const authorUser = conf.anonymousUser?.userLinks?.[0]?.user;
+    const hideReactions = authorUser && !authorUser.shouldShowReactions();
+    if (hideReactions) {
+      conf.reactions = [];
+    }
+
     type AuthenticatedRequest = Request & { user?: { id?: string } };
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user?.id;
@@ -433,16 +456,28 @@ export class ConfessionService {
     if (!userOrIp) userOrIp = req.ip ?? '';
 
     if (await this.viewCache.checkAndMarkView(id, userOrIp)) {
-      await this.confessionRepo.increment({ id }, 'view_count', 1);
+      await this.confessionRepo.incrementViewCountAtomically(id);
       const updated = await this.confessionRepo.findOne({
         where: { id },
-        relations: ['reactions', 'reactions.anonymousUser'],
+        relations: [
+          'anonymousUser',
+          'anonymousUser.userLinks',
+          'anonymousUser.userLinks.user',
+          'reactions',
+          'reactions.anonymousUser',
+        ],
       });
-      if (updated) updated.message = decryptConfession(updated.message);
+      if (updated) {
+        const updatedAuthor = updated.anonymousUser?.userLinks?.[0]?.user;
+        if (updatedAuthor && !updatedAuthor.shouldShowReactions()) {
+          updated.reactions = [];
+        }
+        updated.message = decryptConfession(updated.message, this.aesKey);
+      }
       return updated;
     }
 
-    conf.message = decryptConfession(conf.message);
+    conf.message = decryptConfession(conf.message, this.aesKey);
     return conf;
   }
 
@@ -546,7 +581,7 @@ export class ConfessionService {
     return data;
   }
 
-  private async findByUser(userId: string) {
+  private async findByUser(_userId: string) {
     // Implementation
     return [];
   }
@@ -617,7 +652,7 @@ export class ConfessionService {
     }
 
     // Decrypt confession to generate hash
-    const decryptedMessage = decryptConfession(confession.message);
+    const decryptedMessage = decryptConfession(confession.message, this.aesKey);
     const anchorData = this.stellarService.processAnchorData(
       decryptedMessage,
       dto.stellarTxHash,
@@ -637,7 +672,7 @@ export class ConfessionService {
 
     const updated = await this.confessionRepo.findOne({ where: { id } });
     if (updated) {
-      updated.message = decryptConfession(updated.message);
+      updated.message = decryptConfession(updated.message, this.aesKey);
     }
 
     return {
@@ -684,11 +719,11 @@ export class ConfessionService {
   private toResponseDto(
     confession: AnonymousConfession,
   ): ConfessionResponseDto {
-    const decryptedMessage = decryptConfession(confession.message);
+    const decryptedMessage = decryptConfession(confession.message, this.aesKey);
 
     return new ConfessionResponseDto({
       id: String(confession.id),
-      body: String(decryptedMessage),
+      message: String(decryptedMessage),
       createdAt: confession.created_at,
       updatedAt: confession.created_at,
     });
@@ -737,7 +772,7 @@ export class ConfessionService {
 
     const decryptedItems = confessions.map((item) => ({
       ...item,
-      message: decryptConfession(item.message),
+      message: decryptConfession(item.message, this.aesKey),
     }));
 
     const result = {

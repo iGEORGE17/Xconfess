@@ -1,6 +1,4 @@
-
-
-//  The stable shape that all frontend components consume. 
+//  The stable shape that all frontend components consume.
 export interface NormalizedConfession {
   id: string;
   content: string;
@@ -17,10 +15,10 @@ export interface NormalizedConfession {
   _demo?: boolean;
 }
 
-// Raw shape as it may arrive from the backend. 
+// Raw shape as it may arrive from the backend.
 export interface RawConfession {
   id?: string;
- 
+
   message?: string;
   body?: string;
   content?: string;
@@ -46,17 +44,17 @@ export interface RawConfession {
 
 //   Reduces an array of reaction objects `[{ type, count }]` into a plain record `{ like: 5, love: 3 }`. Returns the input unchanged if it is already a plain object.
 
+// Reduces an array of reaction objects `[{ type, count }]` into a plain record `{ like: 5, love: 3 }`.
+// Returns the input unchanged if it is already a plain object.
 function normalizeReactions(
   raw: RawConfession["reactions"],
 ): Record<string, number> {
   if (!raw) return { like: 0, love: 0 };
 
-  // Already a plain object (normalized or from demo data)
   if (!Array.isArray(raw)) {
     return raw as Record<string, number>;
   }
 
-  // Array of { type: string; count?: number }
   return raw.reduce<Record<string, number>>((acc, reaction) => {
     if (reaction?.type) {
       acc[reaction.type] = (acc[reaction.type] ?? 0) + (reaction.count ?? 1);
@@ -76,9 +74,16 @@ export function normalizeConfession(raw: RawConfession): NormalizedConfession {
     commentCount:
       raw.commentCount ??
       (Array.isArray(raw.comments) ? raw.comments.length : 0),
-    reactions: normalizeReactions(raw.reactions),
+    reactions: normalizeReactions(raw.reactions), // always Record<string, number>
     gender: raw.gender ?? null,
-    author: raw.author,
+
+    author: raw.author
+      ? {
+          id: raw.author.id ?? "",
+          username: raw.author.username ?? "Anonymous",
+          avatar: raw.author.avatar ?? undefined, // convert null → undefined
+        }
+      : { id: "", username: "Anonymous" },
     ...(raw._demo !== undefined ? { _demo: raw._demo } : {}),
   };
 }

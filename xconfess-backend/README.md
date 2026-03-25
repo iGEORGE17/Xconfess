@@ -32,11 +32,28 @@ All cleanup activity is logged in the audit log with action type `NOTIFICATION_D
 
 # xConfess Backend
 
+For operational details on managing email templates and rollouts, see the [Template Rollout Runbook](../docs/template-rollout-runbook.md).
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
 > NestJS-based backend for the xConfess anonymous confession platform.
+
+## Auth Endpoint Split (`/users/*` vs `/auth/*`)
+
+Both route groups are active in this codebase:
+
+- `/api/users/*`: user lifecycle endpoints (`register`, `login`, `profile`, account status, user notification preferences)
+- `/api/auth/*`: auth-centric endpoints (`login`, `me`, `logout`, password reset flow)
+
+Examples:
+
+- `POST /api/users/register`
+- `POST /api/users/login`
+- `POST /api/auth/login`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
 
 ## Active Modules
 
@@ -60,7 +77,8 @@ All cleanup activity is logged in the audit log with action type `NOTIFICATION_D
 | Analytics     | `src/analytics/`     | View counts, trending                                  |
 | Data Export   | `src/data-export/`   | GDPR data export                                       |
 | WebSocket     | `src/websocket/`     | Real-time event gateway                                |
-| Notifications | `src/notifications/` | Notification system (Bull/Redis — disabled by default) |
+| Notification (outbox/DLQ replay) | `src/notification/` | Active notification queue, replay, and retention cleanup |
+| Notifications (Bull queue APIs) | `src/notifications/` | Additional notification endpoints and DLQ admin queue tooling |
 
 ## Project Setup
 
@@ -137,6 +155,8 @@ npm run migration:revert
 ## API Documentation
 
 When running locally, Swagger docs are available at `/api/api-docs`.
+
+For the exact controller-derived route list and DTO-accurate payload examples, see [API_DOCUMENTATION.md](./API_DOCUMENTATION.md).
 
 ## 📄 License
 
