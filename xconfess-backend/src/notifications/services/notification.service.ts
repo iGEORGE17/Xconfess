@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import {
@@ -6,11 +7,11 @@ import {
   NotificationType,
 } from '../entities/notification.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
+import { NOTIFICATION_QUEUE } from '../notification.queue';
 import {
   CreateNotificationDto,
   NotificationQueryDto,
 } from '../dto/notification.dto';
-// removed: using Inject from @nestjs/common instead of @nestjs/bull
 import { Queue } from 'bull';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class NotificationService {
     private notificationRepository: Repository<Notification>,
     @InjectRepository(NotificationPreference)
     private preferenceRepository: Repository<NotificationPreference>,
-    @Inject('notifications')
+    @InjectQueue(NOTIFICATION_QUEUE)
     private notificationQueue: Queue,
   ) {}
 
