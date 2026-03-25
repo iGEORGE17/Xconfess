@@ -41,6 +41,56 @@ export class ModerationRepositoryService {
     return await repo.save(log);
   }
 
+  async syncWebhookResult(params: {
+    confessionId: string;
+    content: string;
+    userId?: string;
+    result: ModerationResult;
+    deliveryHash: string;
+    deliveryTimestamp: string;
+  }): Promise<{ log: ModerationLog; isIdempotent: boolean }> {
+    const existing = await this.moderationLogRepo.findOne({
+      where: { confessionId: params.confessionId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const existingWebhookHash = existing?.metadata?.webhook?.deliveryHash;
+    if (existingWebhookHash === params.deliveryHash) {
+      return { log: existing, isIdempotent: true };
+    }
+
+    const log =
+      existing ??
+      this.moderationLogRepo.create({
+        confessionId: params.confessionId,
+        userId: params.userId,
+        content: params.content.substring(0, 5000),
+      });
+
+    log.userId = params.userId;
+    log.content = params.content.substring(0, 5000);
+    log.moderationScore = params.result.score;
+    log.moderationFlags = params.result.flags;
+    log.moderationStatus = params.result.status;
+    log.details = params.result.details;
+    log.requiresReview = params.result.requiresReview;
+    log.autoActioned = params.result.status !== ModerationStatus.PENDING;
+    log.apiProvider = 'webhook';
+    log.metadata = {
+      ...(existing?.metadata ?? {}),
+      webhook: {
+        deliveryHash: params.deliveryHash,
+        timestamp: params.deliveryTimestamp,
+        processedAt: new Date().toISOString(),
+      },
+    };
+
+    return {
+      log: await this.moderationLogRepo.save(log),
+      isIdempotent: false,
+    };
+  }
+
   async updateReview(
     logId: string,
     status: ModerationStatus,
