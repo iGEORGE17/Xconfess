@@ -44,9 +44,15 @@ export async function GET(request: Request) {
   const searchUrl = `${BASE_API_URL}/confessions/search?${backendParams}`;
 
   try {
+    const authHeader = request.headers.get("Authorization");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const res = await fetch(searchUrl, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers,
       next: { revalidate: 15 },
     });
 
