@@ -1,4 +1,9 @@
 import { registerAs } from '@nestjs/config';
+import {
+  EmailTemplateActiveVersionMissingError,
+  EmailTemplateNotFoundError,
+  EmailTemplateVersionNotFoundError,
+} from '../email/email-template.errors';
 
 // Template registry structure
 export type TemplateVariablePrimitiveType = 'string' | 'number' | 'boolean';
@@ -58,7 +63,7 @@ export function resolveTemplate(
 ): { template: EmailTemplateVersion; isCanary: boolean } {
   const reg = registry[templateKey];
   if (!reg) {
-    throw new Error(`Template "${templateKey}" not found in registry`);
+    throw new EmailTemplateNotFoundError(templateKey);
   }
 
   // Prefer per-key rollout override from rolloutMap
@@ -82,8 +87,12 @@ export function resolveTemplate(
   }
 
   if (!activeVersion) {
-    throw new Error(
-      `Active version "${activeKey}" not found for template "${templateKey}"`,
+    if (activeKey) {
+      throw new EmailTemplateVersionNotFoundError(templateKey, activeKey);
+    }
+    throw new EmailTemplateActiveVersionMissingError(
+      templateKey,
+      String(reg.activeVersion),
     );
   }
   return { template: activeVersion, isCanary: false };

@@ -6,6 +6,7 @@ import {
   IContractInvocation,
   ITransactionResult,
 } from './interfaces/stellar-config.interface';
+import { handleStellarError } from './utils/stellar-error.handler';
 
 @Injectable()
 export class ContractService {
@@ -48,7 +49,7 @@ export class ContractService {
       };
     } catch (error) {
       this.logger.error(`Contract invocation failed: ${error.message}`);
-      throw new Error(`Contract call failed: ${error.message}`);
+      throw handleStellarError(error);
     }
   }
 

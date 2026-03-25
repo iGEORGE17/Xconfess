@@ -8,7 +8,12 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { SearchDiscoveryService } from './search-discovery.service';
 import { CreateSavedSearchDto } from './dto/create-saved-search.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

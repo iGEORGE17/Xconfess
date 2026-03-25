@@ -14,6 +14,7 @@ import { ModerationTemplateService } from '../../comment/moderation-template.ser
 import { AuditAction } from '../entities/audit-log.entity';
 import { Request } from 'express';
 import { decryptConfession } from '../../utils/confession-encryption';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UserAnonymousUser } from '../../user/entities/user-anonymous-link.entity';
 import { ConfigService } from '@nestjs/config';
 
@@ -46,6 +47,7 @@ export class AdminService {
     private readonly moderationService: ModerationService,
     private readonly moderationTemplateService: ModerationTemplateService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private get aesKey(): string {
@@ -158,6 +160,8 @@ export class AdminService {
       request,
     );
 
+    this.eventEmitter.emit('report.updated', saved);
+
     return saved;
   }
 
@@ -189,6 +193,8 @@ export class AdminService {
       notes,
       request,
     );
+
+    this.eventEmitter.emit('report.updated', saved);
 
     return saved;
   }
@@ -226,6 +232,8 @@ export class AdminService {
       notes,
       request,
     );
+
+    this.eventEmitter.emit('reports.bulk.updated', reports);
 
     return reports.length;
   }

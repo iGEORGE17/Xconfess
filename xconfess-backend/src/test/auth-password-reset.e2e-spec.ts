@@ -376,7 +376,8 @@ describe('Auth – Password Reset (e2e)', () => {
       // Accept either 200 (if service allows first token while second exists)
       // OR 400/422 (if service eagerly invalidates older tokens).
       // The important assertion is below — second token must always work.
-      expect([200, 400, 422]).toContain(res.status);
+      // We may mark older tokens as "used" (Gone) during invalidation.
+      expect([200, 400, 410, 422]).toContain(res.status);
     });
 
     it('the second (latest) token resets the password successfully', async () => {

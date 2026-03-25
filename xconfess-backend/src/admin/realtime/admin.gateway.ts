@@ -69,4 +69,12 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitNewReport(payload: any) {
     this.server.emit('new-report', payload);
   }
+
+  emitReportUpdated(payload: any) {
+    this.server.emit('report-updated', payload);
+  }
+
+  emitReportsBulkUpdated(payload: any) {
+    this.server.emit('reports-bulk-updated', payload);
+  }
 }
