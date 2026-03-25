@@ -1,6 +1,12 @@
-import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  OnModuleDestroy,
+  NotFoundException,
+} from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   EmailService,
   TemplateVariableValidationError,
@@ -57,9 +63,10 @@ export interface ReplayResult {
   attempted: number;
   replayed: number;
   failed: number;
+  skipped: number;
   details: Array<{
     id: string;
-    status: 'replayed' | 'failed';
+    status: 'replayed' | 'failed' | 'skipped';
     reason?: string;
   }>;
 }
@@ -75,6 +82,7 @@ interface IdempotencyFields {
 }
 
 const DEDUPE_KEY_PREFIX = 'notif:dedupe:';
+const DLQ_REPLAY_DEDUPE_KEY_PREFIX = 'notif:dlq-replay:dedupe:';
 
 @Injectable()
 export class NotificationQueue implements OnModuleDestroy {
@@ -91,6 +99,7 @@ export class NotificationQueue implements OnModuleDestroy {
     private readonly appLogger: AppLogger,
     private readonly auditLogService: AuditLogService,
     private readonly userService: UserService,
+    @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @Inject('DLQ_RETENTION_CONFIG')
     dlqConfig: DlqRetentionConfig,
@@ -110,6 +119,26 @@ export class NotificationQueue implements OnModuleDestroy {
       },
       6 * 60 * 60 * 1000,
     );
+
+    // Optional automatic DLQ replay (disabled by default).
+    const autoReplayEnabled = this.configService.get<boolean>(
+      'DLQ_AUTO_REPLAY_ENABLED',
+      false,
+    );
+    if (autoReplayEnabled) {
+      const intervalMs = this.configService.get<number>(
+        'DLQ_AUTO_REPLAY_INTERVAL_MS',
+        30 * 60 * 1000,
+      );
+      setInterval(
+        () => {
+          this.autoReplayDlq().catch((err) =>
+            this.appLogger.error(`DLQ auto replay failed: ${err.message}`),
+          );
+        },
+        intervalMs,
+      );
+    }
   }
 
   /**
@@ -288,6 +317,12 @@ export class NotificationQueue implements OnModuleDestroy {
     return `${DEDUPE_KEY_PREFIX}${hash}`;
   }
 
+  private buildDlqReplayIdempotencyKey(fields: IdempotencyFields): string {
+    const raw = `${fields.eventType}:${fields.recipientEmail}:${fields.entityId}:dlq-replay`;
+    const hash = crypto.createHash('sha256').update(raw).digest('hex');
+    return `${DLQ_REPLAY_DEDUPE_KEY_PREFIX}${hash}`;
+  }
+
   private async claimIdempotencySlot(key: string): Promise<boolean> {
     const result = await this.redisClient.set(
       key,
@@ -352,6 +387,11 @@ export class NotificationQueue implements OnModuleDestroy {
         this.appLogger.warn(
           `Duplicate ${type} enqueue suppressed (idempotency)`,
           'NotificationQueue',
+        );
+        this.appLogger.incrementCounter(
+          'notification_dedupe_suppressed_total',
+          1,
+          { queue: this.queueName, eventType: type },
         );
         return;
       }
@@ -649,9 +689,48 @@ export class NotificationQueue implements OnModuleDestroy {
     jobId: string,
     actorId: string,
     reason?: string,
-  ): Promise<{ id: string; status: 'replayed'; enqueuedAt: string }> {
+  ): Promise<{
+    id: string;
+    status: 'replayed' | 'skipped';
+    enqueuedAt: string;
+  }> {
     const job = await this.queue.getJob(jobId);
-    if (!job) throw new Error(`DLQ job ${jobId} was not found`);
+    if (!job) throw new NotFoundException(`DLQ job ${jobId} not found`);
+
+    // Prevent duplicate notification delivery caused by repeated operator
+    // replays or concurrent replay attempts.
+    const payload = job.data ?? {};
+    const idempotencyFields: IdempotencyFields = {
+      eventType: `dlq:${job.name}`,
+      recipientEmail: payload.recipientEmail || '',
+      entityId: String(
+        payload.commentId ||
+          payload.messageId ||
+          payload.reactionId ||
+          payload.reportId ||
+          job.id,
+      ),
+    };
+    const replayDedupeKey = this.buildDlqReplayIdempotencyKey(
+      idempotencyFields,
+    );
+    const claimed = await this.claimIdempotencySlot(replayDedupeKey);
+    if (!claimed) {
+      await this.auditLogService.logNotificationDlqReplay(actorId, {
+        replayType: 'single',
+        queue: this.queueName,
+        jobId: String(job.id),
+        reason: reason || null,
+        replayedAt: new Date().toISOString(),
+        summary: { attempted: 1, replayed: 0, failed: 0 },
+      });
+
+      return {
+        id: String(job.id),
+        status: 'skipped',
+        enqueuedAt: new Date().toISOString(),
+      };
+    }
 
     await job.retry();
     await this.updateQueueDepthMetrics();
@@ -697,6 +776,7 @@ export class NotificationQueue implements OnModuleDestroy {
       attempted: jobs.length,
       replayed: 0,
       failed: 0,
+      skipped: 0,
       details: [],
     };
 
@@ -714,6 +794,34 @@ export class NotificationQueue implements OnModuleDestroy {
       }
 
       try {
+        // Deduplicate replay attempts so we don't deliver the same notification
+        // multiple times if an operator retries quickly or concurrently.
+        const payload = queuedJob.data ?? {};
+        const idempotencyFields: IdempotencyFields = {
+          eventType: `dlq:${queuedJob.name}`,
+          recipientEmail: payload.recipientEmail || '',
+          entityId: String(
+            payload.commentId ||
+              payload.messageId ||
+              payload.reactionId ||
+              payload.reportId ||
+              queuedJob.id,
+          ),
+        };
+        const replayDedupeKey = this.buildDlqReplayIdempotencyKey(
+          idempotencyFields,
+        );
+        const claimed = await this.claimIdempotencySlot(replayDedupeKey);
+        if (!claimed) {
+          result.skipped += 1;
+          result.details.push({
+            id: job.id,
+            status: 'skipped',
+            reason: 'duplicate_replay_suppressed',
+          });
+          continue;
+        }
+
         await queuedJob.retry();
         result.replayed += 1;
         result.details.push({ id: job.id, status: 'replayed' });
@@ -756,6 +864,32 @@ export class NotificationQueue implements OnModuleDestroy {
     );
 
     return result;
+  }
+
+  /**
+   * Automatically replay a bounded slice of recent DLQ failures.
+   * This is intentionally conservative and deduped to avoid duplicate emails.
+   */
+  private async autoReplayDlq(): Promise<void> {
+    const lookbackMinutes = this.configService.get<number>(
+      'DLQ_AUTO_REPLAY_LOOKBACK_MINUTES',
+      15,
+    );
+    const limit = this.configService.get<number>(
+      'DLQ_AUTO_REPLAY_MAX_JOBS_PER_RUN',
+      50,
+    );
+
+    const failedAfter = new Date(
+      Date.now() - lookbackMinutes * 60 * 1000,
+    ).toISOString();
+
+    const actorId = 'system';
+    await this.replayDlqJobsBulk(actorId, {
+      limit,
+      failedAfter,
+      reason: 'auto',
+    });
   }
 
   private async shouldSendNotification(
