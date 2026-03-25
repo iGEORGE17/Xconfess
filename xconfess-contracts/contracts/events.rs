@@ -12,6 +12,7 @@ pub const CONFESSION_EVENT: Symbol = symbol_short!("confess");
 pub const REACTION_EVENT: Symbol = symbol_short!("react");
 pub const REPORT_EVENT: Symbol = symbol_short!("report");
 pub const ROLE_EVENT: Symbol = symbol_short!("role");
+pub const BADGE_EVENT: Symbol = symbol_short!("badge");
 
 /// ===========================================
 /// EVENT NONCE STORAGE
@@ -29,6 +30,7 @@ enum EventNonceKey {
     Report(u64),
     Role(Address, Symbol),
     Governance(Symbol),
+    Badge(u64),
 }
 
 fn read_nonce(env: &Env, key: &EventNonceKey) -> u64 {
@@ -61,6 +63,10 @@ pub fn latest_role_nonce(env: &Env, user: Address, role: Symbol) -> u64 {
 
 pub fn latest_governance_nonce(env: &Env, stream: Symbol) -> u64 {
     read_nonce(env, &EventNonceKey::Governance(stream))
+}
+
+pub fn latest_badge_nonce(env: &Env, badge_id: u64) -> u64 {
+    read_nonce(env, &EventNonceKey::Badge(badge_id))
 }
 
 pub fn next_governance_nonce(env: &Env, stream: Symbol) -> u64 {
@@ -216,6 +222,50 @@ pub fn emit_role(
 }
 
 /// ===========================================
+/// BADGE EVENT (V1)
+/// ===========================================
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BadgeAction {
+    Grant,
+    Revoke,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BadgeEvent {
+    pub event_version: u32,
+    pub badge_id: u64,
+    pub badge_type: u32,
+    pub owner: Address,
+    pub action: BadgeAction,
+    pub nonce: u64,
+    pub timestamp: u64,
+}
+
+pub fn emit_badge_event(
+    env: &Env,
+    badge_id: u64,
+    badge_type: u32,
+    owner: Address,
+    action: BadgeAction,
+) {
+    let nonce = bump_nonce(env, EventNonceKey::Badge(badge_id));
+
+    let payload = BadgeEvent {
+        event_version: EVENT_VERSION_V1,
+        badge_id,
+        badge_type,
+        owner,
+        action,
+        nonce,
+        timestamp: env.ledger().timestamp(),
+    };
+
+    env.events().publish((BADGE_EVENT,), payload);
+}
+
+/// ===========================================
 /// BACKWARD COMPATIBLE DECODERS
 /// ===========================================
 pub fn decode_confession_event(event: &ConfessionEvent) {
@@ -243,5 +293,12 @@ pub fn decode_role_event(event: &RoleEvent) {
     match event.event_version {
         1 => {}
         _ => panic!("Unsupported role event version"),
+    }
+}
+
+pub fn decode_badge_event(event: &BadgeEvent) {
+    match event.event_version {
+        1 => {}
+        _ => panic!("Unsupported badge event version"),
     }
 }
