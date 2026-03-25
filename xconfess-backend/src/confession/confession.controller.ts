@@ -11,6 +11,7 @@ import {
   Delete,
   Req,
   Patch,
+  UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
 import {
@@ -28,6 +29,8 @@ import { GetConfessionsByTagDto } from './dto/get-confessions-by-tag.dto';
 import { GetConfessionsDto } from './dto/get-confessions.dto';
 import { SearchConfessionDto } from './dto/search-confession.dto';
 import { UpdateConfessionDto } from './dto/update-confession.dto';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { SearchDiscoveryService } from '../search-discovery/search-discovery.service';
 
 @ApiTags('Confessions')
 @Controller('confessions')
@@ -37,7 +40,10 @@ export class ConfessionController {
     return this.getById(id, req);
   }
 
-  constructor(private readonly service: ConfessionService) {}
+  constructor(
+    private readonly service: ConfessionService,
+    private readonly searchDiscoveryService: SearchDiscoveryService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new anonymous confession' })
@@ -56,17 +62,27 @@ export class ConfessionController {
   }
 
   @Get('search')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Search confessions (hybrid)' })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  search(@Query() dto: SearchConfessionDto) {
-    return this.service.search(dto);
+  async search(@Query() dto: SearchConfessionDto, @Req() req: any) {
+    const result = await this.service.search(dto);
+    if (req.user) {
+      await this.searchDiscoveryService.recordSearch(req.user.id, dto);
+    }
+    return result;
   }
 
   @Get('search/fulltext')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Full-text search confessions' })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  fullTextSearch(@Query() dto: SearchConfessionDto) {
-    return this.service.fullTextSearch(dto);
+  async fullTextSearch(@Query() dto: SearchConfessionDto, @Req() req: any) {
+    const result = await this.service.fullTextSearch(dto);
+    if (req.user) {
+      await this.searchDiscoveryService.recordSearch(req.user.id, dto);
+    }
+    return result;
   }
 
   @Get('trending/top')

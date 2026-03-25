@@ -9,6 +9,7 @@ import appConfig from './config/app.config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfessionModule } from './confession/confession.module';
+import { SearchDiscoveryModule } from './search-discovery/search-discovery.module';
 import { ReactionModule } from './reaction/reaction.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { TerminusModule } from '@nestjs/terminus';
@@ -66,6 +67,7 @@ import { DatabaseModule } from './database/database.module';
     UserModule,
     AuthModule,
     ConfessionModule,
+    SearchDiscoveryModule,
     ReactionModule,
     MessagesModule,
     AdminModule,
