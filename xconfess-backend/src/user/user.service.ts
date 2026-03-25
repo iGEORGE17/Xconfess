@@ -121,6 +121,41 @@ export class UserService {
   }
 
   // =========================
+  // Password reset helpers
+  // =========================
+
+  /**
+   * Persist legacy reset fields on the user row.
+   * (Some flows still use these columns in addition to the password_resets table.)
+   */
+  async setResetPasswordToken(
+    userId: number,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = expiresAt;
+    await this.userRepository.save(user);
+  }
+
+  /**
+   * Update the user's password and clear any reset token fields.
+   */
+  async updatePassword(userId: number, newPassword: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await this.userRepository.save(user);
+  }
+
+  // =========================
   // ACCOUNT STATUS
   // =========================
 

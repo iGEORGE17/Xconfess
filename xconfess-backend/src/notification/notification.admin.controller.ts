@@ -12,6 +12,8 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { NotificationQueue } from './notification.queue';
+import { RateLimit } from '../auth/guard/rate-limit.decorator';
+import { RateLimitGuard } from '../auth/guard/rate-limit.guard';
 
 @Controller('admin/notifications')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -34,6 +36,8 @@ export class NotificationAdminController {
   }
 
   @Post('dlq/:jobId/replay')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(3, 60)
   async replayDlqJob(
     @Param('jobId') jobId: string,
     @Body('reason') reason: string | undefined,
@@ -44,6 +48,8 @@ export class NotificationAdminController {
   }
 
   @Post('dlq/replay')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(2, 60)
   async replayDlqJobsBulk(
     @Body()
     body: {
