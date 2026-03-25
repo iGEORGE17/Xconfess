@@ -91,8 +91,14 @@ export class UserService {
           normalizedEmail,
           savedUser.username,
         );
-      } catch {}
-
+      } catch (err) {
+        // Ignore email sending failures as they shouldn't block user creation
+        this.logger.warn(
+          `Failed to send welcome email to ${normalizedEmail}: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
       return savedUser;
     } catch {
       throw new InternalServerErrorException('Failed to create user');
