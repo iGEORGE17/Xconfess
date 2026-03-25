@@ -123,11 +123,7 @@ export class ConfessionDraftService {
     return this.sanitizeForResponse(draft);
   }
 
-  async updateDraft(
-    userId: number,
-    id: string,
-    dto: UpdateConfessionDraftDto,
-  ) {
+  async updateDraft(userId: number, id: string, dto: UpdateConfessionDraftDto) {
     const draft = await this.draftRepo.findOne({ where: { id } });
     if (!draft) throw new NotFoundException('Draft not found');
     if (draft.userId !== userId) throw new ForbiddenException();
@@ -138,7 +134,8 @@ export class ConfessionDraftService {
 
     if (draft.version !== dto.version) {
       throw new ConflictException({
-        message: 'Conflict detected: draft has been modified by another session',
+        message:
+          'Conflict detected: draft has been modified by another session',
         currentDraft: this.sanitizeForResponse(draft),
       });
     }

@@ -189,14 +189,11 @@ export class UserService {
     };
 
     user.privacySettings = {
-      isDiscoverable:
-        dto.isDiscoverable ?? current.isDiscoverable,
+      isDiscoverable: dto.isDiscoverable ?? current.isDiscoverable,
 
-      canReceiveReplies:
-        dto.canReceiveReplies ?? current.canReceiveReplies,
+      canReceiveReplies: dto.canReceiveReplies ?? current.canReceiveReplies,
 
-      showReactions:
-        dto.showReactions ?? current.showReactions,
+      showReactions: dto.showReactions ?? current.showReactions,
     };
 
     await this.userRepository.save(user);
