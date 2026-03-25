@@ -59,4 +59,3 @@ export class EmailTemplateActiveVersionMissingError extends EmailTemplateError {
     this.name = 'EmailTemplateActiveVersionMissingError';
   }
 }
-
