@@ -29,8 +29,15 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
   onAnchorSuccess,
   className,
 }) => {
-  const { isAvailable, isConnected, connect, anchor, isLoading } =
-    useStellarWallet();
+  const {
+    isAvailable,
+    isConnected,
+    isReady,
+    readinessError,
+    connect,
+    anchor,
+    isLoading,
+  } = useStellarWallet();
   const [isAnchoring, setIsAnchoring] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(stellarTxHash);
   const [error, setError] = useState<string | null>(null);
@@ -64,20 +71,23 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
 
       if (result.success && result.txHash) {
         // Call backend to store the anchor data
-        const response = await fetch(`/api/confessions/${confessionId}/anchor`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const response = await fetch(
+          `/api/confessions/${confessionId}/anchor`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              stellarTxHash: result.txHash,
+            }),
           },
-          body: JSON.stringify({
-            stellarTxHash: result.txHash,
-          }),
-        });
+        );
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message || "Failed to save anchor data to server"
+            errorData.message || "Failed to save anchor data to server",
           );
         }
 
@@ -119,7 +129,10 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
   if (!isAvailable) {
     return (
       <div
-        className={cn("flex items-center gap-1 text-xs text-zinc-500", className)}
+        className={cn(
+          "flex items-center gap-1 text-xs text-zinc-500",
+          className,
+        )}
         title="Install Freighter wallet to anchor confessions"
       >
         <Anchor className="h-3 w-3" />
@@ -134,9 +147,13 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
         variant="outline"
         size="sm"
         onClick={handleAnchor}
-        disabled={isAnchoring || isLoading}
+        disabled={isAnchoring || isLoading || (isConnected && !isReady)}
         className="h-7 px-2 text-xs"
-        title="Anchor this confession on Stellar blockchain"
+        title={
+          isConnected && !isReady
+            ? readinessError || "Wallet not ready"
+            : "Anchor this confession on Stellar blockchain"
+        }
       >
         {isAnchoring || isLoading ? (
           <>
@@ -155,6 +172,17 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
           <AlertCircle className="h-3 w-3" />
           <span className="truncate max-w-[150px]" title={error}>
             {error}
+          </span>
+        </div>
+      )}
+      {isConnected && !isReady && !error && (
+        <div className="flex items-center gap-1 text-xs text-orange-400 mt-1">
+          <AlertCircle className="h-3 w-3" />
+          <span
+            className="truncate max-w-[200px]"
+            title={readinessError || "Wallet not ready"}
+          >
+            {readinessError}
           </span>
         </div>
       )}
