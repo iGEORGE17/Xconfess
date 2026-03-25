@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { sendTip, verifyTip, getTipStats, type TipStats } from "@/lib/services/tipping.service";
+import {
+  sendTip,
+  verifyTip,
+  getTipStats,
+  type TipStats,
+} from "@/lib/services/tipping.service";
 import { useWallet } from "@/lib/hooks/useWallet";
 
 interface TipButtonProps {
@@ -22,7 +27,8 @@ export const TipButton = ({
   const [success, setSuccess] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
   const [stats, setStats] = useState<TipStats | null>(initialStats || null);
-  const { publicKey, isConnected, connect } = useWallet();
+  const { publicKey, isConnected, isReady, readinessError, connect } =
+    useWallet();
 
   // Fetch stats on mount and when confession changes
   useEffect(() => {
@@ -60,7 +66,7 @@ export const TipButton = ({
       if (!verifyResult.success) {
         throw new Error(
           verifyResult.error ||
-            "Verification is still pending. Please retry in a moment."
+            "Verification is still pending. Please retry in a moment.",
         );
       }
       setPendingTxHash(null);
@@ -76,7 +82,9 @@ export const TipButton = ({
 
   const handleTip = async () => {
     if (!recipientAddress) {
-      setError("Recipient address not available. The confession creator needs to provide their Stellar address.");
+      setError(
+        "Recipient address not available. The confession creator needs to provide their Stellar address.",
+      );
       return;
     }
 
@@ -115,7 +123,7 @@ export const TipButton = ({
         setPendingTxHash(result.txHash);
         throw new Error(
           verifyResult.error ||
-            "Tip was sent on-chain, but verification is pending. Retry verification without resending."
+            "Tip was sent on-chain, but verification is pending. Retry verification without resending.",
         );
       }
 
@@ -145,7 +153,11 @@ export const TipButton = ({
         disabled={!recipientAddress}
         className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-w-[44px] min-h-[44px] justify-center touch-manipulation"
         aria-label="Tip confession"
-        title={!recipientAddress ? "Recipient address not available" : "Tip this confession"}
+        title={
+          !recipientAddress
+            ? "Recipient address not available"
+            : "Tip this confession"
+        }
       >
         <span className="text-lg">💰</span>
         {tipCount > 0 && (
@@ -173,7 +185,9 @@ export const TipButton = ({
 
           {!isConnected && (
             <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded text-sm text-yellow-200">
-              <p className="mb-2">Please connect your Freighter wallet to send tips.</p>
+              <p className="mb-2">
+                Please connect your Freighter wallet to send tips.
+              </p>
               <button
                 type="button"
                 onClick={handleConnectWallet}
@@ -183,9 +197,10 @@ export const TipButton = ({
               </button>
             </div>
           )}
-          {isConnected && !publicKey && (
+          {isConnected && !isReady && (
             <div className="mb-4 p-3 bg-amber-900/30 border border-amber-700 rounded text-sm text-amber-100">
-              Wallet signer is unavailable. Unlock Freighter and try again.
+              {readinessError ||
+                "Wallet is not ready. Please check connection and network."}
             </div>
           )}
 
@@ -203,9 +218,7 @@ export const TipButton = ({
                 className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 placeholder="0.1"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Minimum: 0.1 XLM
-              </p>
+              <p className="text-xs text-gray-400 mt-1">Minimum: 0.1 XLM</p>
             </div>
 
             {error && (
@@ -235,14 +248,19 @@ export const TipButton = ({
 
             <button
               onClick={handleTip}
-              disabled={isSending || !isConnected || !publicKey || !!pendingTxHash}
+              disabled={
+                isSending ||
+                (isConnected && !isReady) ||
+                !publicKey ||
+                !!pendingTxHash
+              }
               className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed rounded font-medium text-white transition-all"
             >
               {isSending
                 ? "Sending..."
                 : pendingTxHash
-                ? "Verification pending"
-                : `Send ${tipAmount} XLM Tip`}
+                  ? "Verification pending"
+                  : `Send ${tipAmount} XLM Tip`}
             </button>
 
             {stats && (

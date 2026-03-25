@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
-import * as WalletService from '../services/wallet.service';
+import { useState, useCallback, useEffect, useRef } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import * as WalletService from "../services/wallet.service";
 
 export interface WalletState {
   publicKey: string | null;
-  network: 'TESTNET_SOROBAN' | 'PUBLIC_NETWORK' | string;
+  network: "TESTNET_SOROBAN" | "PUBLIC_NETWORK" | string;
   isConnected: boolean;
   isLoading: boolean;
   error: string | null;
@@ -14,6 +14,8 @@ export interface WalletState {
 }
 
 export interface UseWalletReturn extends WalletState {
+  isReady: boolean;
+  readinessError: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
   signTransaction: (xdr: string) => Promise<string>;
@@ -22,8 +24,8 @@ export interface UseWalletReturn extends WalletState {
   clearError: () => void;
 }
 
-const WALLET_STORAGE_KEY = 'xconfess_wallet_session';
-const NETWORK_STORAGE_KEY = 'xconfess_network';
+const WALLET_STORAGE_KEY = "xconfess_wallet_session";
+const NETWORK_STORAGE_KEY = "xconfess_network";
 
 /**
  * Custom hook for managing wallet connection and state
@@ -32,7 +34,7 @@ const NETWORK_STORAGE_KEY = 'xconfess_network';
 export const useWallet = (): UseWalletReturn => {
   const [state, setState] = useState<WalletState>({
     publicKey: null,
-    network: 'TESTNET_SOROBAN',
+    network: "TESTNET_SOROBAN",
     isConnected: false,
     isLoading: false,
     error: null,
@@ -45,7 +47,10 @@ export const useWallet = (): UseWalletReturn => {
    * Store session in localStorage
    */
   const storeSession = useCallback((publicKey: string, network: string) => {
-    localStorage.setItem(WALLET_STORAGE_KEY, JSON.stringify({ publicKey, network }));
+    localStorage.setItem(
+      WALLET_STORAGE_KEY,
+      JSON.stringify({ publicKey, network }),
+    );
     localStorage.setItem(NETWORK_STORAGE_KEY, network);
   }, []);
 
@@ -59,7 +64,10 @@ export const useWallet = (): UseWalletReturn => {
   /**
    * Get stored session from localStorage
    */
-  const getStoredSession = useCallback((): { publicKey: string; network: string } | null => {
+  const getStoredSession = useCallback((): {
+    publicKey: string;
+    network: string;
+  } | null => {
     try {
       const stored = localStorage.getItem(WALLET_STORAGE_KEY);
       return stored ? JSON.parse(stored) : null;
@@ -93,7 +101,7 @@ export const useWallet = (): UseWalletReturn => {
             ...prev,
             publicKey: null,
             isConnected: false,
-            error: 'Wallet disconnected. Please reconnect.',
+            error: "Wallet disconnected. Please reconnect.",
           }));
           clearSession();
         } else if (walletInfo.publicKey !== state.publicKey) {
@@ -125,7 +133,7 @@ export const useWallet = (): UseWalletReturn => {
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          error: 'Freighter wallet is not installed',
+          error: "Freighter wallet is not installed",
         }));
         return;
       }
@@ -156,7 +164,7 @@ export const useWallet = (): UseWalletReturn => {
             network: stored.network,
             isConnected: false,
             isLoading: false,
-            error: 'Wallet disconnected. Please reconnect.',
+            error: "Wallet disconnected. Please reconnect.",
           }));
         } else {
           setState((prev) => ({
@@ -168,7 +176,7 @@ export const useWallet = (): UseWalletReturn => {
       }
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to initialize wallet';
+        error instanceof Error ? error.message : "Failed to initialize wallet";
       setState((prev) => ({
         ...prev,
         isLoading: false,
@@ -198,7 +206,7 @@ export const useWallet = (): UseWalletReturn => {
       storeSession(walletInfo.publicKey, walletInfo.network);
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to connect wallet';
+        error instanceof Error ? error.message : "Failed to connect wallet";
       setState((prev) => ({
         ...prev,
         isLoading: false,
@@ -226,7 +234,7 @@ export const useWallet = (): UseWalletReturn => {
       clearSession();
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to disconnect wallet';
+        error instanceof Error ? error.message : "Failed to disconnect wallet";
       setState((prev) => ({
         ...prev,
         error: errorMessage,
@@ -248,7 +256,7 @@ export const useWallet = (): UseWalletReturn => {
       return signedXDR;
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to sign transaction';
+        error instanceof Error ? error.message : "Failed to sign transaction";
       setState((prev) => ({
         ...prev,
         isLoading: false,
@@ -282,7 +290,9 @@ export const useWallet = (): UseWalletReturn => {
       }
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to check wallet connection';
+        error instanceof Error
+          ? error.message
+          : "Failed to check wallet connection";
       setState((prev) => ({
         ...prev,
         error: errorMessage,
@@ -311,8 +321,47 @@ export const useWallet = (): UseWalletReturn => {
     }));
   }, []);
 
+  /**
+   * Compute wallet readiness state continuously based on current app configuration
+   */
+  const getReadinessState = () => {
+    if (!state.isConnected) return { isReady: false, readinessError: null };
+
+    const expected = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
+    const actual = (state.network || "").toUpperCase();
+
+    let isNetworkMatch = false;
+    if (expected === "mainnet") {
+      isNetworkMatch = ["PUBLIC", "PUBLIC_NETWORK", "MAINNET"].includes(actual);
+    } else {
+      isNetworkMatch = ["TESTNET", "TESTNET_SOROBAN"].includes(actual);
+    }
+
+    if (!isNetworkMatch) {
+      const displayExpected = expected === "mainnet" ? "Mainnet" : "Testnet";
+      return {
+        isReady: false,
+        readinessError: `Wallet on wrong network. Please switch to ${displayExpected}.`,
+      };
+    }
+
+    if (!state.publicKey) {
+      return {
+        isReady: false,
+        readinessError:
+          "Wallet signer is unavailable. Unlock Freighter and try again.",
+      };
+    }
+
+    return { isReady: true, readinessError: null };
+  };
+
+  const { isReady, readinessError } = getReadinessState();
+
   return {
     ...state,
+    isReady,
+    readinessError,
     connect,
     disconnect,
     signTransaction,
