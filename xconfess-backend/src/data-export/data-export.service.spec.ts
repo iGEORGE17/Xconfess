@@ -459,4 +459,330 @@ describe('DataExportService', () => {
       });
     });
   });
+
+  // ── Export Retention and Expiry Tests ────────────────────────────────────────
+
+  describe('Export Retention and Expiry Behavior', () => {
+    it('should correctly identify expired exports based on 24-hour window', () => {
+      const createdAt = new Date('2026-03-23T10:00:00.000Z'); // 2 days ago
+      const request = { status: 'READY', createdAt };
+
+      // Mock current time to be after expiry
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        const isStillValid = (service as any).isDownloadStillValid(request);
+        expect(isStillValid).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should correctly identify valid exports within 24-hour window', () => {
+      const createdAt = new Date('2026-03-25T09:00:00.000Z'); // 2 hours ago
+      const request = { status: 'READY', createdAt };
+
+      // Mock current time to be within expiry window
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        const isStillValid = (service as any).isDownloadStillValid(request);
+        expect(isStillValid).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should reject non-READY status regardless of timestamp', () => {
+      const createdAt = new Date(); // recent
+      const nonReadyStatuses = ['PENDING', 'PROCESSING', 'FAILED', 'EXPIRED'];
+
+      nonReadyStatuses.forEach((status) => {
+        const request = { status, createdAt };
+        const isStillValid = (service as any).isDownloadStillValid(request);
+        expect(isStillValid).toBe(false);
+      });
+    });
+
+    it('should normalize READY status to EXPIRED when download window elapsed', async () => {
+      const oldCreatedAt = new Date('2026-03-23T10:00:00.000Z');
+      mockExportRepository.findOne.mockResolvedValue({
+        id: 'req-expired',
+        userId: 'user-1',
+        status: 'READY',
+        createdAt: oldCreatedAt,
+        queuedAt: oldCreatedAt,
+        processingAt: null,
+        completedAt: null,
+        failedAt: null,
+        expiredAt: null,
+        retryCount: 0,
+        lastFailureReason: null,
+      } as ExportRequest);
+
+      // Mock current time to be after expiry
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        const status = await service.getJobStatus('req-expired', 'user-1');
+        expect(status.status).toBe('EXPIRED');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should preserve READY status when within download window', async () => {
+      const recentCreatedAt = new Date('2026-03-25T09:00:00.000Z');
+      mockExportRepository.findOne.mockResolvedValue({
+        id: 'req-valid',
+        userId: 'user-1',
+        status: 'READY',
+        createdAt: recentCreatedAt,
+        queuedAt: recentCreatedAt,
+        processingAt: null,
+        completedAt: null,
+        failedAt: null,
+        expiredAt: null,
+        retryCount: 0,
+        lastFailureReason: null,
+      } as ExportRequest);
+
+      // Mock current time to be within expiry window
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        const status = await service.getJobStatus('req-valid', 'user-1');
+        expect(status.status).toBe('READY');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  // ── Download Token Invalidation and Regeneration Tests ─────────────────────
+
+  describe('Download Token Security', () => {
+    it('should generate unique signatures for different expiry times', () => {
+      jest.useFakeTimers();
+
+      try {
+        // First URL
+        jest.setSystemTime(new Date('2026-03-25T10:00:00.000Z'));
+        const url1 = service.generateSignedDownloadUrl('req-1', 'user-1');
+
+        // Second URL (different time = different expiry)
+        jest.setSystemTime(new Date('2026-03-25T10:01:00.000Z'));
+        const url2 = service.generateSignedDownloadUrl('req-1', 'user-1');
+
+        const signature1 = new URL(url1).searchParams.get('signature');
+        const signature2 = new URL(url2).searchParams.get('signature');
+
+        expect(signature1).not.toBe(signature2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should generate unique signatures for different users', () => {
+      const url1 = service.generateSignedDownloadUrl('req-1', 'user-1');
+      const url2 = service.generateSignedDownloadUrl('req-1', 'user-2');
+
+      const signature1 = new URL(url1).searchParams.get('signature');
+      const signature2 = new URL(url2).searchParams.get('signature');
+
+      expect(signature1).not.toBe(signature2);
+    });
+
+    it('should generate unique signatures for different request IDs', () => {
+      const url1 = service.generateSignedDownloadUrl('req-1', 'user-1');
+      const url2 = service.generateSignedDownloadUrl('req-2', 'user-1');
+
+      const signature1 = new URL(url1).searchParams.get('signature');
+      const signature2 = new URL(url2).searchParams.get('signature');
+
+      expect(signature1).not.toBe(signature2);
+    });
+
+    it('should include chunk index in signature for chunked exports', () => {
+      const url1 = service.generateSignedDownloadUrl('req-1', 'user-1', 0);
+      const url2 = service.generateSignedDownloadUrl('req-1', 'user-1', 1);
+
+      const signature1 = new URL(url1).searchParams.get('signature');
+      const signature2 = new URL(url2).searchParams.get('signature');
+
+      expect(signature1).not.toBe(signature2);
+      expect(url1).toContain('chunk=0');
+      expect(url2).toContain('chunk=1');
+    });
+
+    it('should reject redownload link request for expired exports', async () => {
+      const oldCreatedAt = new Date('2026-03-23T10:00:00.000Z');
+      mockExportRepository.findOne.mockResolvedValue({
+        id: 'req-expired',
+        userId: 'user-1',
+        status: 'READY',
+        createdAt: oldCreatedAt,
+      } as ExportRequest);
+
+      // Mock current time to be after expiry
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        await expect(
+          service.getRedownloadLink('req-expired', 'user-1'),
+        ).rejects.toThrow(
+          'Secure download link is no longer available. Request a new export.',
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should allow redownload link request for valid exports', async () => {
+      const recentCreatedAt = new Date('2026-03-25T09:00:00.000Z');
+      mockExportRepository.findOne.mockResolvedValue({
+        id: 'req-valid',
+        userId: 'user-1',
+        status: 'READY',
+        createdAt: recentCreatedAt,
+      } as ExportRequest);
+
+      // Mock current time to be within expiry window
+      jest.useFakeTimers().setSystemTime(new Date('2026-03-25T11:00:00.000Z'));
+
+      try {
+        const result = await service.getRedownloadLink('req-valid', 'user-1');
+        expect(result.downloadUrl).toContain(
+          '/api/data-export/download/req-valid',
+        );
+        expect(result.downloadUrl).toContain('signature=');
+        expect(result.downloadUrl).toContain('expires=');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should reject redownload link request for non-READY status', async () => {
+      const nonReadyStatuses = ['PENDING', 'PROCESSING', 'FAILED', 'EXPIRED'];
+
+      for (const status of nonReadyStatuses) {
+        mockExportRepository.findOne.mockResolvedValue({
+          id: `req-${status.toLowerCase()}`,
+          userId: 'user-1',
+          status,
+          createdAt: new Date(),
+        } as ExportRequest);
+
+        await expect(
+          service.getRedownloadLink(`req-${status.toLowerCase()}`, 'user-1'),
+        ).rejects.toThrow(
+          'Secure download link is no longer available. Request a new export.',
+        );
+      }
+    });
+  });
+
+  // ── Export Lifecycle Edge Cases ─────────────────────────────────────────────
+
+  describe('Export Lifecycle Edge Cases', () => {
+    it('should handle rapid status transitions correctly', async () => {
+      const requestId = 'req-rapid';
+      const userId = 'user-rapid';
+
+      // Start with PENDING
+      mockExportRepository.findOne.mockResolvedValue({
+        id: requestId,
+        userId,
+        status: 'PENDING',
+        createdAt: new Date('2026-03-25T10:00:00.000Z'),
+        queuedAt: new Date('2026-03-25T10:00:01.000Z'),
+        processingAt: null,
+        completedAt: null,
+        failedAt: null,
+        expiredAt: null,
+        retryCount: 0,
+        lastFailureReason: null,
+      } as ExportRequest);
+
+      let status = await service.getJobStatus(requestId, userId);
+      expect(status.status).toBe('PENDING');
+
+      // Transition to PROCESSING
+      mockExportRepository.findOne.mockResolvedValue({
+        ...mockExportRepository.findOne.mock.results[0].value,
+        status: 'PROCESSING',
+        processingAt: new Date('2026-03-25T10:01:00.000Z'),
+      });
+
+      status = await service.getJobStatus(requestId, userId);
+      expect(status.status).toBe('PROCESSING');
+      expect(status.progress.processingAt).toEqual(
+        new Date('2026-03-25T10:01:00.000Z'),
+      );
+
+      // Transition to READY
+      mockExportRepository.findOne.mockResolvedValue({
+        ...mockExportRepository.findOne.mock.results[1].value,
+        status: 'READY',
+        completedAt: new Date('2026-03-25T10:05:00.000Z'),
+      });
+
+      status = await service.getJobStatus(requestId, userId);
+      expect(status.status).toBe('READY');
+      expect(status.progress.completedAt).toEqual(
+        new Date('2026-03-25T10:05:00.000Z'),
+      );
+    });
+
+    it('should preserve retry history across status transitions', async () => {
+      const requestId = 'req-retry';
+      const userId = 'user-retry';
+
+      mockExportRepository.findOne.mockResolvedValue({
+        id: requestId,
+        userId,
+        status: 'READY',
+        createdAt: new Date('2026-03-25T09:00:00.000Z'),
+        queuedAt: new Date('2026-03-25T09:00:01.000Z'),
+        processingAt: new Date('2026-03-25T09:01:00.000Z'),
+        completedAt: new Date('2026-03-25T09:05:00.000Z'),
+        failedAt: new Date('2026-03-25T09:04:00.000Z'),
+        expiredAt: null,
+        retryCount: 2,
+        lastFailureReason: 'timeout',
+      } as ExportRequest);
+
+      const status = await service.getJobStatus(requestId, userId);
+      expect(status.progress.retryCount).toBe(2);
+      expect(status.progress.lastFailureReason).toBe('timeout');
+      expect(status.progress.failedAt).toEqual(
+        new Date('2026-03-25T09:04:00.000Z'),
+      );
+    });
+
+    it('should handle exports that never reached READY status', async () => {
+      const requestId = 'req-failed';
+      const userId = 'user-failed';
+
+      mockExportRepository.findOne.mockResolvedValue({
+        id: requestId,
+        userId,
+        status: 'FAILED',
+        createdAt: new Date('2026-03-25T09:00:00.000Z'),
+        queuedAt: new Date('2026-03-25T09:00:01.000Z'),
+        processingAt: new Date('2026-03-25T09:01:00.000Z'),
+        completedAt: null,
+        failedAt: new Date('2026-03-25T09:02:00.000Z'),
+        expiredAt: null,
+        retryCount: 3,
+        lastFailureReason: 'memory limit exceeded',
+      } as ExportRequest);
+
+      const status = await service.getJobStatus(requestId, userId);
+      expect(status.status).toBe('FAILED');
+      expect(status.progress.retryCount).toBe(3);
+      expect(status.progress.lastFailureReason).toBe('memory limit exceeded');
+      expect(status.progress.completedAt).toBeNull();
+    });
+  });
 });

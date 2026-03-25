@@ -130,14 +130,11 @@ export class NotificationQueue implements OnModuleDestroy {
         'DLQ_AUTO_REPLAY_INTERVAL_MS',
         30 * 60 * 1000,
       );
-      setInterval(
-        () => {
-          this.autoReplayDlq().catch((err) =>
-            this.appLogger.error(`DLQ auto replay failed: ${err.message}`),
-          );
-        },
-        intervalMs,
-      );
+      setInterval(() => {
+        this.autoReplayDlq().catch((err) =>
+          this.appLogger.error(`DLQ auto replay failed: ${err.message}`),
+        );
+      }, intervalMs);
     }
   }
 
@@ -711,9 +708,8 @@ export class NotificationQueue implements OnModuleDestroy {
           job.id,
       ),
     };
-    const replayDedupeKey = this.buildDlqReplayIdempotencyKey(
-      idempotencyFields,
-    );
+    const replayDedupeKey =
+      this.buildDlqReplayIdempotencyKey(idempotencyFields);
     const claimed = await this.claimIdempotencySlot(replayDedupeKey);
     if (!claimed) {
       await this.auditLogService.logNotificationDlqReplay(actorId, {
@@ -808,9 +804,8 @@ export class NotificationQueue implements OnModuleDestroy {
               queuedJob.id,
           ),
         };
-        const replayDedupeKey = this.buildDlqReplayIdempotencyKey(
-          idempotencyFields,
-        );
+        const replayDedupeKey =
+          this.buildDlqReplayIdempotencyKey(idempotencyFields);
         const claimed = await this.claimIdempotencySlot(replayDedupeKey);
         if (!claimed) {
           result.skipped += 1;

@@ -85,8 +85,7 @@ export class AuthService {
     const anonymousUser =
       await this.anonymousUserService.getOrCreateForUserSession(user.id);
     const role = user.role || UserRole.USER;
-    const scopes =
-      role === UserRole.ADMIN ? ['stellar:invoke-contract'] : [];
+    const scopes = role === UserRole.ADMIN ? ['stellar:invoke-contract'] : [];
     const payload: JwtPayload = {
       email: user.email,
       sub: user.id, // Keep as number for consistency
