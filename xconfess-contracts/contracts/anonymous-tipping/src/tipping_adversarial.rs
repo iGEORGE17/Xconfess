@@ -2,7 +2,7 @@
 ///
 /// Uses the Soroban-generated `AnonymousTippingClient` (emitted by `#[contractimpl]`)
 /// after registering the contract in the test sandbox. Because the crate uses
-/// `#![no_std]`, `extern crate std;` is declared here so the `std::panic` and
+/// `#![no_std]`, `extern crate std;` is declared here so that `std::panic` and
 /// `std::string` items are reachable inside this `#[cfg(test)]` submodule.
 #[cfg(test)]
 mod adversarial {
@@ -18,7 +18,7 @@ mod adversarial {
 
     fn setup() -> (Env, Address) {
         let env = Env::default();
-        let contract_id = env.register_contract(None, AnonymousTipping);
+        let contract_id = env.register(None, AnonymousTipping);
         AnonymousTippingClient::new(&env, &contract_id).init();
         (env, contract_id)
     }
@@ -283,7 +283,7 @@ mod adversarial {
     #[test]
     fn send_tip_and_proof_none_produce_equal_totals() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, AnonymousTipping);
+        let contract_id = env.register(None, AnonymousTipping);
         let c = mk_client(&env, &contract_id);
         c.init();
 
@@ -301,7 +301,7 @@ mod adversarial {
     #[test]
     fn tip_without_explicit_init_still_succeeds() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, AnonymousTipping);
+        let contract_id = env.register(None, AnonymousTipping);
         let c = mk_client(&env, &contract_id);
         // No c.init() call — storage defaults to 0 via `unwrap_or`
         let recipient = Address::generate(&env);
@@ -341,5 +341,86 @@ mod adversarial {
         let sid = c.send_tip(&recipient, &1i128);
         assert_eq!(sid, 1);
         assert_eq!(c.get_tips(&recipient), 1);
+    }
+
+    // ── overflow edge cases ─────────────────────────────────────────────────────
+
+    #[test]
+    fn total_overflow_panics() {
+        let (env, id) = setup();
+        let c = mk_client(&env, &id);
+        let recipient = Address::generate(&env);
+        
+        // Send a tip that brings total to near max
+        c.send_tip(&recipient, &(i128::MAX - 100));
+        
+        // Next tip should overflow
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            c.send_tip(&recipient, &200i128);
+        }));
+        assert_panics(r, "recipient tip total overflow");
+    }
+
+    #[test]
+    fn nonce_overflow_panics() {
+        let (env, id) = setup();
+        let c = mk_client(&env, &id);
+        let recipient = Address::generate(&env);
+        
+        // Simulate reaching near max nonce by setting it manually
+        env.storage().instance().set(&crate::DataKey::SettlementNonce, &u64::MAX);
+        
+        // Next tip should overflow nonce
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            c.send_tip(&recipient, &1i128);
+        }));
+        assert_panics(r, "settlement nonce overflow");
+    }
+
+    // ── metadata edge cases ───────────────────────────────────────────────────
+
+    #[test]
+    fn metadata_unicode_succeeds() {
+        let (env, id) = setup();
+        let c = mk_client(&env, &id);
+        let recipient = Address::generate(&env);
+        
+        // Test with Unicode characters (emoji, Chinese, etc.)
+        let unicode_str = "🚀💰测试🔥";
+        let metadata = SorobanString::from_str(&env, unicode_str);
+        
+        let sid = c.send_tip_with_proof(&recipient, &5i128, &Some(metadata));
+        assert_eq!(sid, 1);
+        assert_eq!(c.get_tips(&recipient), 5);
+    }
+
+    #[test]
+    fn metadata_whitespace_succeeds() {
+        let (env, id) = setup();
+        let c = mk_client(&env, &id);
+        let recipient = Address::generate(&env);
+        
+        // Test with various whitespace characters
+        let whitespace_str = " \t\n\r ";
+        let metadata = SorobanString::from_str(&env, whitespace_str);
+        
+        let sid = c.send_tip_with_proof(&recipient, &3i128, &Some(metadata));
+        assert_eq!(sid, 1);
+        assert_eq!(c.get_tips(&recipient), 3);
+    }
+
+    // ── amount precision tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn max_valid_amount_succeeds() {
+        let (env, id) = setup();
+        let c = mk_client(&env, &id);
+        let recipient = Address::generate(&env);
+        
+        // Test with maximum valid amount (less than would cause overflow)
+        let max_amount = i128::MAX / 2;
+        let sid = c.send_tip(&recipient, &max_amount);
+        assert_eq!(sid, 1);
+        assert_eq!(c.get_tips(&recipient), max_amount);
     }
 }
