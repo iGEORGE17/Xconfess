@@ -1,17 +1,17 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository, UpdateResult } from 'typeorm';
-import { CommentService } from './comment.service';
-import { Comment } from './entities/comment.entity';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { OutboxEvent } from '../common/entities/outbox-event.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { NotificationQueue } from '../notification/notification.queue';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { CommentService } from './comment.service';
+import { Comment } from './entities/comment.entity';
 import {
   ModerationComment,
   ModerationStatus,
 } from './entities/moderation-comment.entity';
-import { OutboxEvent } from '../common/entities/outbox-event.entity';
-import { AnalyticsService } from '../analytics/analytics.service';
 
 describe('CommentService (soft‑delete)', () => {
   let service: CommentService;
@@ -671,6 +671,199 @@ describe('CommentService – analytics cache invalidation', () => {
       ).rejects.toThrow(NotFoundException);
       expect(analyticsService.invalidateTrendingCache).not.toHaveBeenCalled();
       expect(analyticsService.invalidateStatsCache).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// ─── Cursor Pagination Tests ─────────────────────────────────────────────────────
+
+describe('CommentService (cursor pagination)', () => {
+  let service: CommentService;
+  let commentRepo: jest.Mocked<Repository<Comment>>;
+  let confessionRepo: jest.Mocked<Repository<AnonymousConfession>>;
+  let moderationRepo: jest.Mocked<Repository<ModerationComment>>;
+
+  beforeEach(async () => {
+    const commentRepoMock = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
+    const moderationRepoMock = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+    };
+    const outboxRepoMock = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CommentService,
+        {
+          provide: getRepositoryToken(Comment),
+          useValue: commentRepoMock,
+        },
+        {
+          provide: getRepositoryToken(AnonymousConfession),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ModerationComment),
+          useValue: moderationRepoMock,
+        },
+        {
+          provide: NotificationQueue,
+          useValue: { enqueueCommentNotification: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(OutboxEvent),
+          useValue: outboxRepoMock,
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn().mockImplementation((cb: any) =>
+              cb({
+                getRepository: jest.fn().mockImplementation((entity: any) => {
+                  if (entity === Comment) return commentRepoMock;
+                  if (entity === ModerationComment) return moderationRepoMock;
+                  return outboxRepoMock;
+                }),
+              }),
+            ),
+          },
+        },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            invalidateTrendingCache: jest.fn().mockResolvedValue(undefined),
+            invalidateStatsCache: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
+    }).compile();
+
+    service = module.get(CommentService);
+    commentRepo = module.get(getRepositoryToken(Comment));
+    moderationRepo = module.get(getRepositoryToken(ModerationComment));
+  });
+
+  describe('findByConfessionId with cursor pagination', () => {
+    const mockComments = [
+      {
+        id: 1,
+        content: 'First comment',
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+        isDeleted: false,
+      },
+      {
+        id: 2,
+        content: 'Second comment',
+        createdAt: new Date('2024-01-01T11:00:00Z'),
+        isDeleted: false,
+      },
+      {
+        id: 3,
+        content: 'Third comment',
+        createdAt: new Date('2024-01-01T12:00:00Z'),
+        isDeleted: false,
+      },
+    ] as Comment[];
+
+    it('returns paginated results without cursor', async () => {
+      const fakeQB: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockComments.slice(0, 2)),
+      };
+      (commentRepo as any).createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(fakeQB);
+
+      const queryDto: GetCommentsQueryDto = {
+        limit: 2,
+        sortField: CommentSortField.CREATED_AT,
+        sortOrder: SortOrder.DESC,
+        includeOrphanedReplies: false,
+      };
+
+      const result = await service.findByConfessionId('conf1', queryDto);
+
+      expect(result.comments).toHaveLength(2);
+      expect(result.hasMore).toBe(false);
+      expect(result.nextCursor).toBeUndefined();
+    });
+
+    it('includes orphaned replies when requested', async () => {
+      const fakeQB: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockComments),
+      };
+      (commentRepo as any).createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(fakeQB);
+
+      const queryDto: GetCommentsQueryDto = {
+        limit: 10,
+        sortField: CommentSortField.CREATED_AT,
+        sortOrder: SortOrder.DESC,
+        includeOrphanedReplies: true,
+      };
+
+      await service.findByConfessionId('conf1', queryDto);
+
+      // Should not filter out orphaned replies
+      expect(fakeQB.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining(
+          'comment.parent IS NULL OR comment.parent.isDeleted = false',
+        ),
+        expect.anything(),
+      );
+    });
+
+    it('filters orphaned replies by default', async () => {
+      const fakeQB: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockComments),
+      };
+      (commentRepo as any).createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(fakeQB);
+
+      const queryDto: GetCommentsQueryDto = {
+        limit: 10,
+        sortField: CommentSortField.CREATED_AT,
+        sortOrder: SortOrder.DESC,
+        includeOrphanedReplies: false,
+      };
+
+      await service.findByConfessionId('conf1', queryDto);
+
+      // Should filter out orphaned replies
+      expect(fakeQB.andWhere).toHaveBeenCalledWith(
+        '(comment.parent IS NULL OR comment.parent.isDeleted = false)',
+        {},
+      );
     });
   });
 });
