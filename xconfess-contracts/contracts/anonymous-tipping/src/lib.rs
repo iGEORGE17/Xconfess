@@ -1,7 +1,8 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String as SorobanString,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env,
+    String as SorobanString,
 };
 
 const SETTLEMENT_EVENT: soroban_sdk::Symbol = symbol_short!("tip_settl");
@@ -48,17 +49,14 @@ impl AnonymousTipping {
             return;
         }
 
-        env.storage().instance().set(&DataKey::SettlementNonce, &0_u64);
+        env.storage()
+            .instance()
+            .set(&DataKey::SettlementNonce, &0_u64);
     }
 
     /// Send anonymous tip to a recipient
     pub fn send_tip(env: Env, recipient: Address, amount: i128) -> u64 {
-        Self::send_tip_with_proof(
-            env,
-            recipient,
-            amount,
-            None,
-        )
+        Self::send_tip_with_proof(env, recipient, amount, None)
     }
 
     /// Send anonymous tip with optional bounded settlement proof metadata.
