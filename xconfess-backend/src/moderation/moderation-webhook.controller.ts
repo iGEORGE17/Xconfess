@@ -67,7 +67,8 @@ export class ModerationWebhookController {
       return { success: false, error: 'Confession not found' };
     }
 
-    const requiresReview = payload.moderationStatus === ModerationStatus.FLAGGED;
+    const requiresReview =
+      payload.moderationStatus === ModerationStatus.FLAGGED;
     const shouldHide = payload.moderationStatus === ModerationStatus.REJECTED;
     const moderationResult: ModerationResult = {
       score: payload.moderationScore,
@@ -77,13 +78,15 @@ export class ModerationWebhookController {
       requiresReview,
     };
     const deliveryHash = this.buildDeliveryHash(serializedPayload);
-    const { isIdempotent } = await this.moderationRepoService.syncWebhookResult({
-      confessionId: confession.id,
-      content: confession.message,
-      result: moderationResult,
-      deliveryHash,
-      deliveryTimestamp: payload.timestamp,
-    });
+    const { isIdempotent } = await this.moderationRepoService.syncWebhookResult(
+      {
+        confessionId: confession.id,
+        content: confession.message,
+        result: moderationResult,
+        deliveryHash,
+        deliveryTimestamp: payload.timestamp,
+      },
+    );
 
     if (isIdempotent) {
       this.logger.log(

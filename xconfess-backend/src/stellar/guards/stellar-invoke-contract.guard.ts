@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Request } from 'express';
 
 type AuthenticatedRequest = Request & {
@@ -16,12 +21,9 @@ export class StellarInvokeContractGuard implements CanActivate {
     const scopes = request.user?.scopes ?? [];
 
     if (!Array.isArray(scopes) || !scopes.includes(REQUIRED_SCOPE)) {
-      throw new ForbiddenException(
-        `Missing required scope: ${REQUIRED_SCOPE}`,
-      );
+      throw new ForbiddenException(`Missing required scope: ${REQUIRED_SCOPE}`);
     }
 
     return true;
   }
 }
-

@@ -21,7 +21,11 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
     AuditLogModule,
   ],
   controllers: [ModerationController, ModerationWebhookController],
-  providers: [AiModerationService, ModerationRepositoryService, ModerationEventsListener],
+  providers: [
+    AiModerationService,
+    ModerationRepositoryService,
+    ModerationEventsListener,
+  ],
   exports: [AiModerationService, ModerationRepositoryService],
 })
 export class ModerationModule {}

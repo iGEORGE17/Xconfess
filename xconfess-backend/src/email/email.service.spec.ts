@@ -227,7 +227,7 @@ describe('EmailService template missing/version error messaging', () => {
       throw new Error('Expected previewTemplate to throw');
     } catch (err) {
       expect(err).toBeInstanceOf(NotFoundException);
-      const res = err.response as any;
+      const res = err.response;
       expect(res.templateKey).toBe('missing_key');
     }
   });
@@ -245,7 +245,7 @@ describe('EmailService template missing/version error messaging', () => {
       throw new Error('Expected previewTemplate to throw');
     } catch (err) {
       expect(err).toBeInstanceOf(NotFoundException);
-      const res = err.response as any;
+      const res = err.response;
       expect(res.templateKey).toBe('welcome');
       expect(res.templateVersion).toBe('v2');
     }
@@ -260,11 +260,9 @@ describe('EmailService template missing/version error messaging', () => {
     };
 
     await expect(
-      service.sendGenericNotification(
-        'user@example.com',
-        'welcome',
-        { username: 'Alice' },
-      ),
+      service.sendGenericNotification('user@example.com', 'welcome', {
+        username: 'Alice',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     try {
@@ -273,7 +271,7 @@ describe('EmailService template missing/version error messaging', () => {
       });
       throw new Error('Expected sendGenericNotification to throw');
     } catch (err) {
-      const res = err.response as any;
+      const res = err.response;
       expect(res.templateKey).toBe('welcome');
       expect(res.templateVersion).toBe('v2');
       expect(res.code).toBeDefined();

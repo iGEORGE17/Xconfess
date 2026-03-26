@@ -48,7 +48,7 @@ export function handleStellarError(error: any): Error {
 
   // Map result codes from horizon
   if (error.response?.data?.extras?.result_codes) {
-    const codes = error.response.data.extras.result_codes as any;
+    const codes = error.response.data.extras.result_codes;
     const txCode = codes.transaction;
 
     if (txCode === 'tx_bad_auth') {
