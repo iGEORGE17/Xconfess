@@ -4,7 +4,7 @@ import { AnonymousConfessionRepository } from './repository/confession.repositor
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { AnonymousConfession } from './entities/confession.entity';
-import { GetConfessionsDto, SortOrder } from './dto/get-confessions.dto';
+import { GetConfessionsDto, SortOrder, Gender } from './dto/get-confessions.dto';
 import { ModerationStatus } from '../moderation/ai-moderation.service';
 
 /**
@@ -70,6 +70,7 @@ describe('ConfessionService Gas Regression Tests', () => {
           leftJoinAndSelect: jest.fn().mockReturnThis(),
           orderBy: jest.fn().mockReturnThis(),
           addSelect: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
           getCount: jest.fn().mockResolvedValue(100),
           skip: jest.fn().mockReturnThis(),
           take: jest.fn().mockReturnThis(),
@@ -86,12 +87,8 @@ describe('ConfessionService Gas Regression Tests', () => {
         });
 
         // Assert - Verify query structure is efficient
-        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-          expect.objectContaining({
-            'confession.isDeleted = false',
-            'confession.isHidden = false',
-          })
-        );
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('confession.isDeleted = false');
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('confession.isHidden = false');
         expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(3); // user, reactions, links
         expect(mockQueryBuilder.getCount).toHaveBeenCalled();
         expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
@@ -101,7 +98,7 @@ describe('ConfessionService Gas Regression Tests', () => {
         // Gas assertion: Should not exceed baseline
         // In real environment, this would measure actual gas consumption
         // For now, we verify that query structure is optimized
-        expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith(
+        expect(mockQueryBuilder.select).toHaveBeenCalledWith(
           expect.arrayContaining([
             'confession.id',
             'confession.message',
@@ -167,14 +164,13 @@ describe('ConfessionService Gas Regression Tests', () => {
           page: 1,
           limit: 20,
           sort: SortOrder.NEWEST,
-          gender: 'F'
+          gender: Gender.FEMALE
         });
 
         // Assert
         expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-          expect.objectContaining({
-            'confession.gender = :gender'
-          })
+          'confession.gender = :gender',
+          { gender: Gender.FEMALE }
         );
       });
 
@@ -184,8 +180,8 @@ describe('ConfessionService Gas Regression Tests', () => {
           andWhere: jest.fn().mockReturnThis(),
           leftJoinAndSelect: jest.fn().mockReturnThis(),
           orderBy: jest.fn().mockReturnThis(),
-          addSelect: jest.fn().mockReturnValue(mockQueryBuilder),
-          addOrderBy: jest.fn().mockReturnValue(mockQueryBuilder),
+          addSelect: jest.fn().mockReturnThis(),
+          addOrderBy: jest.fn().mockReturnThis(),
           getCount: jest.fn().mockResolvedValue(1000),
           skip: jest.fn().mockReturnThis(),
           take: jest.fn().mockReturnThis(),
@@ -203,9 +199,8 @@ describe('ConfessionService Gas Regression Tests', () => {
 
         // Assert
         expect(mockQueryBuilder.addSelect).toHaveBeenCalledWith(
-          expect.objectContaining({
-            'reaction_count'
-          })
+          expect.any(Function),
+          'reaction_count'
         );
         expect(mockQueryBuilder.addOrderBy).toHaveBeenCalledWith(
           'reaction_count',
@@ -427,7 +422,7 @@ describe('ConfessionService Gas Regression Tests', () => {
 
       repo.createQueryBuilder = jest.fn().mockReturnValue(mockQueryBuilder2 as any);
       
-      await service.search({ query: 'search term', page: 1, limit: 10 });
+      await service.search({ q: 'search term', page: 1, limit: 10 });
       
       // Gas measurement for complete flow
       const totalOperations = 3; // pagination + read + search
