@@ -10,6 +10,7 @@ import { NotificationController } from './notifications.controller';
 import { NotificationProcessor } from './processors/notification.processor';
 import { NotificationGateway } from './gateways/notification.gateway';
 import { DlqAdminController } from './dlq-admin.controller';
+import { WebSocketLogger } from '../websocket/websocket.logger';
 
 /**
  * Retry / backoff strategy
@@ -63,6 +64,7 @@ import { DlqAdminController } from './dlq-admin.controller';
     EmailNotificationService,
     NotificationProcessor,
     NotificationGateway,
+    WebSocketLogger,
   ],
   exports: [NotificationService],
 })

@@ -5,12 +5,18 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
+  ConnectedSocket,
+  MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WsJwtGuard } from '../../auth/guards/ws-jwt.guard';
 import { NotificationService } from '../services/notification.service';
+import { WebSocketLogger } from '../../websocket/websocket.logger';
+
+/** Channel prefix for per-user private rooms */
+const USER_ROOM_PREFIX = 'user:';
 
 @WebSocketGateway({
   cors: true,
@@ -29,6 +35,7 @@ export class NotificationGateway
   constructor(
     private notificationService: NotificationService,
     private configService: ConfigService,
+    private readonly wsLogger: WebSocketLogger,
   ) {}
 
   afterInit(server: Server) {
@@ -44,10 +51,17 @@ export class NotificationGateway
     this.logger.log('Notification Gateway initialized');
   }
 
+  // ─── Connection lifecycle ─────────────────────────────────────────────────
+
   handleConnection(client: Socket) {
     const userId = client.data.userId;
 
     if (!userId) {
+      this.wsLogger.logSubscriptionRejected({
+        socketId: client.id,
+        channel: `${USER_ROOM_PREFIX}<unknown>`,
+        reason: 'No authenticated userId on socket — WsJwtGuard may have been bypassed',
+      });
       client.disconnect();
       return;
     }
@@ -63,8 +77,15 @@ export class NotificationGateway
 
     this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
 
-    // Join user-specific room
-    client.join(`user:${userId}`);
+    // Join the user-specific room — scoped fanout enforced here
+    const userRoom = `${USER_ROOM_PREFIX}${userId}`;
+    client.join(userRoom);
+
+    this.wsLogger.logSubscriptionGranted({
+      socketId: client.id,
+      userId,
+      channel: userRoom,
+    });
   }
 
   handleDisconnect(client: Socket) {
@@ -83,6 +104,78 @@ export class NotificationGateway
 
     this.logger.log(`Client disconnected: ${client.id}`);
   }
+
+  // ─── Subscription handlers ────────────────────────────────────────────────
+
+  /**
+   * Explicit channel-subscription handler.
+   *
+   * Clients call this after connecting to confirm they want to receive
+   * events for a specific user room. The handler enforces that the
+   * requested userId matches the authenticated socket owner, preventing
+   * any client from subscribing to another user's private channel.
+   */
+  @SubscribeMessage('subscribe:user-notifications')
+  handleSubscribeUserNotifications(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { userId?: string },
+  ) {
+    const authenticatedUserId = String(client.data.userId);
+    const requestedUserId = data?.userId ? String(data.userId) : null;
+
+    // If the client specifies a userId, it must match their own
+    if (requestedUserId && requestedUserId !== authenticatedUserId) {
+      this.wsLogger.logSubscriptionRejected({
+        socketId: client.id,
+        userId: authenticatedUserId,
+        channel: `${USER_ROOM_PREFIX}${requestedUserId}`,
+        reason: `Ownership violation — authenticated as '${authenticatedUserId}', attempted to subscribe to '${requestedUserId}'`,
+      });
+      client.emit('subscription:rejected', {
+        channel: `${USER_ROOM_PREFIX}${requestedUserId}`,
+        reason: 'You can only subscribe to your own notification channel',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const userRoom = `${USER_ROOM_PREFIX}${authenticatedUserId}`;
+
+    // Ensure the socket is in its own room (idempotent — socket.io handles duplicates)
+    client.join(userRoom);
+
+    this.wsLogger.logSubscriptionGranted({
+      socketId: client.id,
+      userId: authenticatedUserId,
+      channel: userRoom,
+    });
+
+    client.emit('subscription:confirmed', {
+      channel: userRoom,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Unsubscribe from the user-notifications channel.
+   * The client leaves their private room but the WS connection stays open.
+   */
+  @SubscribeMessage('unsubscribe:user-notifications')
+  async handleUnsubscribeUserNotifications(
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = String(client.data.userId);
+    const userRoom = `${USER_ROOM_PREFIX}${userId}`;
+    await client.leave(userRoom);
+
+    this.logger.log(`User ${userId} left ${userRoom} (${client.id})`);
+    client.emit('subscription:cancelled', {
+      channel: userRoom,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // ─── Existing message handlers ────────────────────────────────────────────
 
   @SubscribeMessage('mark-read')
   async handleMarkRead(client: Socket, payload: { notificationId: string }) {
@@ -135,9 +228,13 @@ export class NotificationGateway
     }
   }
 
-  // Public method to send notifications to users
+  // ─── Scoped fanout helpers ─────────────────────────────────────────────────
+  // All emissions target `user:<userId>` rooms — never broadcast to the full
+  // namespace, ensuring strict per-user isolation.
+
   async sendNotificationToUser(userId: string, notification: any) {
-    this.server.to(`user:${userId}`).emit('new-notification', notification);
+    const userRoom = `${USER_ROOM_PREFIX}${userId}`;
+    this.server.to(userRoom).emit('new-notification', notification);
 
     // Also send updated unread count
     const { unreadCount } = await this.notificationService.getUserNotifications(
@@ -145,9 +242,7 @@ export class NotificationGateway
       { page: 1, limit: 1, unreadOnly: true },
     );
 
-    this.server
-      .to(`user:${userId}`)
-      .emit('unread-count', { count: unreadCount });
+    this.server.to(userRoom).emit('unread-count', { count: unreadCount });
   }
 
   isUserOnline(userId: string): boolean {
