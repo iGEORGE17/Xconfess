@@ -222,6 +222,80 @@ export class AppLogger implements NestLoggerService {
     return next;
   }
 
+  /**
+   * Emit a structured warning when a search query exceeds the configured slow-query
+   * threshold. Sensitive terms are redacted before logging; enough metadata is
+   * retained for query-shape diagnosis (term length, word count, filter shape,
+   * pagination, and result count).
+   *
+   * @param opts.durationMs  Wall-clock time the repository call took.
+   * @param opts.rawTerm     The original search term (will be redacted in the log).
+   * @param opts.searchType  'fulltext' | 'hybrid' | 'ilike' – the strategy used.
+   * @param opts.page        Requested page number.
+   * @param opts.limit       Page size requested.
+   * @param opts.resultCount Number of rows returned.
+   * @param opts.thresholdMs The configured latency threshold.
+   * @param opts.filters     Optional free-form filter shape descriptor.
+   */
+  logSlowSearch(opts: {
+    durationMs: number;
+    rawTerm: string;
+    searchType: 'fulltext' | 'hybrid' | 'ilike';
+    page: number;
+    limit: number;
+    resultCount: number;
+    thresholdMs: number;
+    filters?: Record<string, unknown>;
+  }): void {
+    const redactedTerm = `[REDACTED:len=${opts.rawTerm.length},words=${opts.rawTerm.trim().split(/\s+/).filter(Boolean).length}]`;
+
+    this.emitWarningEvent(
+      'search.slow_query',
+      {
+        durationMs: opts.durationMs,
+        thresholdMs: opts.thresholdMs,
+        searchType: opts.searchType,
+        termShape: redactedTerm,
+        page: opts.page,
+        limit: opts.limit,
+        resultCount: opts.resultCount,
+        filters: opts.filters ?? {},
+      },
+      'SearchObservability',
+    );
+  }
+
+  /**
+   * Emit a structured info log for a sampled (non-slow) search query.
+   * Same redaction rules apply.
+   */
+  logSampledSearch(opts: {
+    durationMs: number;
+    rawTerm: string;
+    searchType: 'fulltext' | 'hybrid' | 'ilike';
+    page: number;
+    limit: number;
+    resultCount: number;
+    filters?: Record<string, unknown>;
+  }): void {
+    const redactedTerm = `[REDACTED:len=${opts.rawTerm.length},words=${opts.rawTerm.trim().split(/\s+/).filter(Boolean).length}]`;
+
+    this.emitEvent(
+      'info',
+      'search.sampled_query',
+      {
+        durationMs: opts.durationMs,
+        searchType: opts.searchType,
+        termShape: redactedTerm,
+        page: opts.page,
+        limit: opts.limit,
+        resultCount: opts.resultCount,
+        filters: opts.filters ?? {},
+      },
+      'SearchObservability',
+    );
+  }
+
   getMetricsSnapshot() {
     const parseMetric = (key: string) => {
       const [name, rawLabels] = key.split('|');

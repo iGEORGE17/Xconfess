@@ -6,6 +6,7 @@ import { Reaction } from 'src/reaction/entities/reaction.entity';
 import { User } from 'src/user/entities/user.entity';
 import { AnonymousConfession } from 'src/confession/entities/confession.entity';
 import { CacheService } from 'src/cache/cache.service';
+import { toWindowBoundaries } from 'src/types/analytics.types';
 
 @Injectable()
 export class AnalyticsService {
@@ -31,13 +32,15 @@ export class AnalyticsService {
       return cached;
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    // Use UTC-normalized window boundaries so edge timestamps are never
+    // ambiguously shifted between buckets regardless of server timezone.
+    const { startAt, endAt } = toWindowBoundaries(days);
 
     const trending = await this.confessionRepository
       .createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reaction')
-      .where('confession.createdAt >= :startDate', { startDate })
+      .where('confession.createdAt >= :startAt', { startAt })
+      .andWhere('confession.createdAt < :endAt', { endAt })
       .andWhere('confession.isPublished = :isPublished', { isPublished: true })
       .loadRelationCountAndMap(
         'confession.reactionCount',
@@ -69,14 +72,14 @@ export class AnalyticsService {
       return cached;
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const { startAt, endAt } = toWindowBoundaries(days);
 
     const distribution = await this.reactionRepository
       .createQueryBuilder('reaction')
       .select('reaction.type', 'type')
       .addSelect('COUNT(*)', 'count')
-      .where('reaction.createdAt >= :startDate', { startDate })
+      .where('reaction.createdAt >= :startAt', { startAt })
+      .andWhere('reaction.createdAt < :endAt', { endAt })
       .groupBy('reaction.type')
       .getRawMany();
 
@@ -108,25 +111,34 @@ export class AnalyticsService {
       return cached;
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const { startAt, endAt } = toWindowBoundaries(days);
 
     // Get daily active users (anonymous users who created confessions or reactions)
+    // DATE() is applied to the UTC-cast timestamp to ensure consistent bucketing
+    // regardless of the database server's local timezone setting.
     const dailyActivity = await this.confessionRepository
       .createQueryBuilder('confession')
-      .select('DATE(confession.created_at)', 'date')
+      .select(
+        "DATE(confession.created_at AT TIME ZONE 'UTC')",
+        'date',
+      )
       .addSelect('COUNT(DISTINCT confession.anonymous_user_id)', 'activeUsers')
-      .where('confession.created_at >= :startDate', { startDate })
-      .groupBy('DATE(confession.created_at)')
+      .where('confession.created_at >= :startAt', { startAt })
+      .andWhere('confession.created_at < :endAt', { endAt })
+      .groupBy("DATE(confession.created_at AT TIME ZONE 'UTC')")
       .orderBy('date', 'ASC')
       .getRawMany();
 
     const reactionActivity = await this.reactionRepository
       .createQueryBuilder('reaction')
-      .select('DATE(reaction.createdAt)', 'date')
+      .select(
+        "DATE(reaction.createdAt AT TIME ZONE 'UTC')",
+        'date',
+      )
       .addSelect('COUNT(DISTINCT reaction.anonymous_user_id)', 'activeUsers')
-      .where('reaction.createdAt >= :startDate', { startDate })
-      .groupBy('DATE(reaction.createdAt)')
+      .where('reaction.createdAt >= :startAt', { startAt })
+      .andWhere('reaction.createdAt < :endAt', { endAt })
+      .groupBy("DATE(reaction.createdAt AT TIME ZONE 'UTC')")
       .orderBy('date', 'ASC')
       .getRawMany();
 
@@ -210,15 +222,18 @@ export class AnalyticsService {
       return cached;
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const { startAt, endAt } = toWindowBoundaries(days);
 
     const dailyGrowth = await this.confessionRepository
       .createQueryBuilder('confession')
-      .select('DATE(confession.createdAt)', 'date')
+      .select(
+        "DATE(confession.createdAt AT TIME ZONE 'UTC')",
+        'date',
+      )
       .addSelect('COUNT(*)', 'count')
-      .where('confession.createdAt >= :startDate', { startDate })
-      .groupBy('DATE(confession.createdAt)')
+      .where('confession.createdAt >= :startAt', { startAt })
+      .andWhere('confession.createdAt < :endAt', { endAt })
+      .groupBy("DATE(confession.createdAt AT TIME ZONE 'UTC')")
       .orderBy('date', 'ASC')
       .getRawMany();
 

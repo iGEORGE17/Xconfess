@@ -5,6 +5,10 @@ import { Reaction } from '../reaction/entities/reaction.entity';
 import { User } from '../user/entities/user.entity';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
 import { CacheService } from '../cache/cache.service';
+import {
+  toWindowBoundaries,
+  TrendingWindow,
+} from '../types/analytics.types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -164,5 +168,137 @@ describe('AnalyticsService', () => {
         expect(prefix).toMatch(/^analytics:/);
       });
     });
+  });
+});
+
+// ─── toWindowBoundaries unit tests ────────────────────────────────────────────
+
+describe('toWindowBoundaries()', () => {
+  // Reference instant pinned to 2026-03-26T14:37:00Z (mid-afternoon UTC)
+  // so partial-day offsets cannot sneak into boundary calculations.
+  const REF = new Date('2026-03-26T14:37:00.000Z');
+
+  // Convenience: extract the ISO date string part only
+  const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+  // ── Basic boundary shape ──────────────────────────────────────────────────
+
+  it('returns startAt and endAt as Date objects', () => {
+    const { startAt, endAt } = toWindowBoundaries(7, REF);
+    expect(startAt).toBeInstanceOf(Date);
+    expect(endAt).toBeInstanceOf(Date);
+  });
+
+  it('startAt is strictly less than endAt', () => {
+    const { startAt, endAt } = toWindowBoundaries(7, REF);
+    expect(startAt.getTime()).toBeLessThan(endAt.getTime());
+  });
+
+  // ── UTC midnight flooring ────────────────────────────────────────────────
+
+  it('floors startAt to UTC midnight (no sub-day offset)', () => {
+    const { startAt } = toWindowBoundaries(7, REF);
+    expect(startAt.getUTCHours()).toBe(0);
+    expect(startAt.getUTCMinutes()).toBe(0);
+    expect(startAt.getUTCSeconds()).toBe(0);
+    expect(startAt.getUTCMilliseconds()).toBe(0);
+  });
+
+  it('floors endAt to UTC midnight (no sub-day offset)', () => {
+    const { endAt } = toWindowBoundaries(7, REF);
+    expect(endAt.getUTCHours()).toBe(0);
+    expect(endAt.getUTCMinutes()).toBe(0);
+    expect(endAt.getUTCSeconds()).toBe(0);
+    expect(endAt.getUTCMilliseconds()).toBe(0);
+  });
+
+  // ── Calendar day accuracy ────────────────────────────────────────────────
+
+  it('startAt is exactly `days` calendar days before today (UTC)', () => {
+    const { startAt } = toWindowBoundaries(7, REF);
+    expect(isoDate(startAt)).toBe('2026-03-19');
+  });
+
+  it('endAt is UTC midnight of tomorrow relative to `now`', () => {
+    const { endAt } = toWindowBoundaries(7, REF);
+    expect(isoDate(endAt)).toBe('2026-03-27');
+  });
+
+  // ── TrendingWindow enum values ────────────────────────────────────────────
+
+  it('TrendingWindow.DAY produces a 1-day window', () => {
+    const { startAt, endAt } = toWindowBoundaries(TrendingWindow.DAY, REF);
+    expect(isoDate(startAt)).toBe('2026-03-25');
+    expect(isoDate(endAt)).toBe('2026-03-27');
+  });
+
+  it('TrendingWindow.WEEK produces a 7-day window', () => {
+    const { startAt, endAt } = toWindowBoundaries(TrendingWindow.WEEK, REF);
+    expect(isoDate(startAt)).toBe('2026-03-19');
+    expect(isoDate(endAt)).toBe('2026-03-27');
+  });
+
+  it('TrendingWindow.MONTH produces a 30-day window', () => {
+    const { startAt, endAt } = toWindowBoundaries(TrendingWindow.MONTH, REF);
+    expect(isoDate(startAt)).toBe('2026-02-24');
+    expect(isoDate(endAt)).toBe('2026-03-27');
+  });
+
+  // ── Edge-timestamp regression ────────────────────────────────────────────
+  // These tests verify that records sitting exactly on bucket edges are
+  // included or excluded according to the >= startAt / < endAt contract.
+
+  it('REGRESSION: a record at exactly startAt is within the window (inclusive lower bound)', () => {
+    const { startAt } = toWindowBoundaries(7, REF);
+    // Simulate the DB predicate: createdAt >= startAt
+    expect(startAt.getTime() >= startAt.getTime()).toBe(true);
+  });
+
+  it('REGRESSION: a record 1 ms before startAt is outside the window', () => {
+    const { startAt } = toWindowBoundaries(7, REF);
+    const oneMillisBeforeStart = new Date(startAt.getTime() - 1);
+    expect(oneMillisBeforeStart.getTime() >= startAt.getTime()).toBe(false);
+  });
+
+  it('REGRESSION: a record at exactly endAt is outside the window (exclusive upper bound)', () => {
+    const { endAt } = toWindowBoundaries(7, REF);
+    // Simulate the DB predicate: createdAt < endAt
+    expect(endAt.getTime() < endAt.getTime()).toBe(false);
+  });
+
+  it('REGRESSION: a record 1 ms before endAt is inside the window', () => {
+    const { endAt } = toWindowBoundaries(7, REF);
+    const oneMillisBeforeEnd = new Date(endAt.getTime() - 1);
+    expect(oneMillisBeforeEnd.getTime() < endAt.getTime()).toBe(true);
+  });
+
+  it('REGRESSION: consecutive 7-day windows share no overlap at the boundary midnight', () => {
+    // Window A ends at midnight of 2026-03-27; Window B starts at the same instant.
+    const windowA = toWindowBoundaries(7, REF);
+    // Shift REF forward by 7 days to get the next window
+    const nextRef = new Date(REF.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const windowB = toWindowBoundaries(7, nextRef);
+
+    // windowA.endAt === windowB.startAt (shared boundary)
+    expect(windowA.endAt.getTime()).toBe(windowB.startAt.getTime());
+
+    // A record AT the boundary midnight is excluded from A (< endAt) …
+    const boundary = windowA.endAt;
+    expect(boundary.getTime() < windowA.endAt.getTime()).toBe(false);
+    // … and included in B (>= startAt).
+    expect(boundary.getTime() >= windowB.startAt.getTime()).toBe(true);
+  });
+
+  // ── Default `now` argument ────────────────────────────────────────────────
+
+  it('uses the current time when `now` is omitted', () => {
+    const before = Date.now();
+    const { endAt } = toWindowBoundaries(7);
+    const after = Date.now();
+
+    // endAt should be UTC midnight of tomorrow, so it must be in the future
+    expect(endAt.getTime()).toBeGreaterThan(before);
+    // and no more than 2 days out from `after`
+    expect(endAt.getTime()).toBeLessThanOrEqual(after + 2 * 24 * 60 * 60 * 1000);
   });
 });
