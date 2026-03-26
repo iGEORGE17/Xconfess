@@ -1,21 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import {
   Notification,
   NotificationType,
 } from '../entities/notification.entity';
+import { NotificationPreference } from '../entities/notification-preference.entity';
 import { NotificationJobData } from '../notification.queue';
 
 @Injectable()
 export class EmailNotificationService {
-  sendEmail(data: NotificationJobData) {
-    throw new Error('Method not implemented.');
-  }
   private readonly logger = new Logger(EmailNotificationService.name);
   private transporter: nodemailer.Transporter;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(NotificationPreference)
+    private preferenceRepository: Repository<NotificationPreference>,
+  ) {
     this.transporter = nodemailer.createTransport({
       host: this.configService.get('SMTP_HOST'),
       port: this.configService.get('SMTP_PORT'),
@@ -25,6 +29,48 @@ export class EmailNotificationService {
         pass: this.configService.get('SMTP_PASS'),
       },
     });
+  }
+
+  async sendEmail(data: NotificationJobData) {
+    const preference = await this.preferenceRepository.findOne({
+      where: { userId: data.userId },
+    });
+
+    if (
+      !preference ||
+      !preference.enableEmailNotifications ||
+      !preference.emailAddress
+    ) {
+      this.logger.log(`Email notifications disabled for user ${data.userId}`);
+      return;
+    }
+
+    if (
+      data.type === NotificationType.NEW_MESSAGE &&
+      !preference.emailNewMessage
+    ) {
+      this.logger.log(`New message email notifications disabled for user ${data.userId}`);
+      return;
+    }
+
+    if (
+      data.type === NotificationType.MESSAGE_BATCH &&
+      !preference.emailMessageBatch
+    ) {
+      this.logger.log(`Batch message email notifications disabled for user ${data.userId}`);
+      return;
+    }
+
+    const mockNotification = {
+      id: data._meta?.originalJobId || 'job-' + Date.now(),
+      type: data.type,
+      userId: data.userId,
+      title: data.title,
+      message: data.message,
+      metadata: data.metadata,
+    } as Notification;
+
+    await this.sendNotificationEmail(mockNotification, preference.emailAddress);
   }
 
   async sendNotificationEmail(
