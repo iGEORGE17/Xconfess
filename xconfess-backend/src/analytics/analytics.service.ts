@@ -6,6 +6,7 @@ import { Reaction } from 'src/reaction/entities/reaction.entity';
 import { User } from 'src/user/entities/user.entity';
 import { AnonymousConfession } from 'src/confession/entities/confession.entity';
 import { CacheService } from 'src/cache/cache.service';
+import { AnalyticsCacheKeys, InvalidationPrefixes } from 'src/cache/cache-namespace';
 
 @Injectable()
 export class AnalyticsService {
@@ -23,7 +24,8 @@ export class AnalyticsService {
   ) {}
 
   async getTrendingConfessions(days: number = 7) {
-    const cacheKey = `analytics:trending:${days}d`;
+    // Use namespace-compliant cache key
+    const cacheKey = AnalyticsCacheKeys.trending(days);
 
     // Try to get from cache
     const cached = await this.cacheService.get(cacheKey);
@@ -62,7 +64,8 @@ export class AnalyticsService {
   }
 
   async getReactionDistribution(days: number = 7) {
-    const cacheKey = `analytics:reactions:${days}d`;
+    // Use namespace-compliant cache key
+    const cacheKey = AnalyticsCacheKeys.reactions(days);
 
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
@@ -101,7 +104,8 @@ export class AnalyticsService {
   }
 
   async getDailyActiveUsers(days: number = 7) {
-    const cacheKey = `analytics:users:${days}d`;
+    // Use namespace-compliant cache key
+    const cacheKey = AnalyticsCacheKeys.users(days);
 
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
@@ -156,7 +160,8 @@ export class AnalyticsService {
   }
 
   async getPlatformStats() {
-    const cacheKey = 'analytics:stats';
+    // Use namespace-compliant cache key
+    const cacheKey = AnalyticsCacheKeys.stats();
 
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
@@ -203,7 +208,8 @@ export class AnalyticsService {
   }
 
   async getConfessionGrowth(days: number = 7) {
-    const cacheKey = `analytics:growth:${days}d`;
+    // Use namespace-compliant cache key
+    const cacheKey = AnalyticsCacheKeys.growth(days);
 
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
@@ -276,7 +282,7 @@ export class AnalyticsService {
     this.logger.log(
       `Invalidating trending analytics cache (reason: ${reason})`,
     );
-    await this.cacheService.invalidateSegment('analytics:trending', reason);
+    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsTrending, reason);
   }
 
   async invalidateReactionDistributionCache(
@@ -285,22 +291,23 @@ export class AnalyticsService {
     this.logger.log(
       `Invalidating reaction distribution cache (reason: ${reason})`,
     );
-    await this.cacheService.invalidateSegment('analytics:reactions', reason);
+    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsReactions, reason);
   }
 
   async invalidateGrowthCache(reason = 'mutation'): Promise<void> {
     this.logger.log(`Invalidating growth metrics cache (reason: ${reason})`);
-    await this.cacheService.invalidateSegment('analytics:growth', reason);
+    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsGrowth, reason);
   }
 
   async invalidateUserActivityCache(reason = 'mutation'): Promise<void> {
     this.logger.log(`Invalidating user activity cache (reason: ${reason})`);
-    await this.cacheService.invalidateSegment('analytics:users', reason);
+    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsUsers, reason);
   }
 
   async invalidateStatsCache(reason = 'mutation'): Promise<void> {
     this.logger.log(`Invalidating platform stats cache (reason: ${reason})`);
-    await this.cacheService.del('analytics:stats');
+    // Use the namespace-compliant cache key for single key deletion
+    await this.cacheService.del(AnalyticsCacheKeys.stats());
   }
 
   /**
