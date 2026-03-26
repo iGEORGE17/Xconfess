@@ -1,23 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Clock3, Download, RotateCw, ShieldCheck, XCircle } from 'lucide-react';
 import ErrorState from '@/app/components/common/ErrorState';
+import { useGlobalToast } from '@/app/components/common/Toast';
 import {
   dataExportApi,
   type DataExportHistoryItem,
   type DataExportStatus,
 } from '@/app/lib/api/client';
 
+const STORAGE_KEY = 'xconfess-active-export-job';
+const POLLING_INTERVAL = 5000;
+const FOCUS_RECOVERY_DELAY = 1000;
+
 export default function DataExportRequest() {
+  const { addToast } = useGlobalToast();
   const [history, setHistory] = useState<DataExportHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [requestingExport, setRequestingExport] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastNotifiedStatus, setLastNotifiedStatus] = useState<Record<string, DataExportStatus>>({});
+  
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const focusRecoveryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isPageVisibleRef = useRef(true);
 
-  const loadHistory = async (isRefresh = false) => {
+  const loadHistory = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -28,6 +39,26 @@ export default function DataExportRequest() {
       const data = await dataExportApi.getHistory();
       setHistory(data.history);
       setError(null);
+      
+      // Update active job tracking
+      const activeJobs = data.history.filter((item: DataExportHistoryItem) => 
+        item.status === 'PENDING' || item.status === 'PROCESSING'
+      );
+      
+      if (activeJobs.length > 0) {
+        localStorage.setItem(STORAGE_KEY, activeJobs[0].id);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+      
+      // Check for status changes to show notifications
+      activeJobs.forEach((job: DataExportHistoryItem) => {
+        const prevStatus = lastNotifiedStatus[job.id];
+        if (prevStatus && prevStatus !== job.status) {
+          handleStatusChange(job.id, job.status, prevStatus);
+        }
+      });
+      
     } catch {
       setError('Failed to load data export history. Please try again.');
     } finally {
@@ -37,35 +68,133 @@ export default function DataExportRequest() {
         setLoadingHistory(false);
       }
     }
-  };
+  }, [lastNotifiedStatus]);
 
   useEffect(() => {
-    loadHistory();
-  }, []);
+    // Restore active job from localStorage on mount
+    const savedJobId = localStorage.getItem(STORAGE_KEY);
+    
+    const initialize = async () => {
+      await loadHistory();
+      
+      // If we had a saved job ID, check if it's still active
+      if (savedJobId) {
+        const hasActiveJob = history.some((item: DataExportHistoryItem) => 
+          item.id === savedJobId && (item.status === 'PENDING' || item.status === 'PROCESSING')
+        );
+        
+        if (!hasActiveJob) {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    };
+    
+    initialize();
+  }, [loadHistory]);
 
   const hasInProgressJob = useMemo(
-    () => history.some((item) => item.status === 'PENDING' || item.status === 'PROCESSING'),
+    () => history.some((item: DataExportHistoryItem) => item.status === 'PENDING' || item.status === 'PROCESSING'),
     [history],
   );
 
   const latest = history[0] ?? null;
 
+  const startPolling = useCallback(() => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+    }
+    
+    pollingTimerRef.current = setInterval(() => {
+      if (isPageVisibleRef.current) {
+        loadHistory(true);
+      }
+    }, POLLING_INTERVAL);
+  }, [loadHistory]);
+  
+  const stopPolling = useCallback(() => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!hasInProgressJob) {
+      stopPolling();
       return;
     }
 
-    const timer = setInterval(() => {
-      loadHistory(true);
-    }, 5000);
+    startPolling();
 
-    return () => clearInterval(timer);
-  }, [hasInProgressJob]);
+    return () => stopPolling();
+  }, [hasInProgressJob, startPolling, stopPolling]);
+  
+  // Handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      isPageVisibleRef.current = !document.hidden;
+      
+      if (!document.hidden && hasInProgressJob) {
+        // Page became visible again, reconcile after a short delay
+        if (focusRecoveryTimerRef.current) {
+          clearTimeout(focusRecoveryTimerRef.current);
+        }
+        
+        focusRecoveryTimerRef.current = setTimeout(() => {
+          loadHistory(true);
+        }, FOCUS_RECOVERY_DELAY);
+      }
+    };
+    
+    const handleFocus = () => {
+      if (hasInProgressJob) {
+        loadHistory(true);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      if (focusRecoveryTimerRef.current) {
+        clearTimeout(focusRecoveryTimerRef.current);
+      }
+    };
+  }, [hasInProgressJob, loadHistory]);
 
+  const handleStatusChange = useCallback((jobId: string, newStatus: DataExportStatus, oldStatus: DataExportStatus) => {
+    // Only show notification for meaningful transitions
+    const meaningfulTransitions: Record<DataExportStatus, DataExportStatus[]> = {
+      'PENDING': ['PROCESSING'],
+      'PROCESSING': ['READY', 'FAILED'],
+      'READY': [],
+      'FAILED': [],
+      'EXPIRED': []
+    };
+    
+    if (meaningfulTransitions[oldStatus]?.includes(newStatus)) {
+      const message = newStatus === 'READY' 
+        ? 'Your data export is ready for download!'
+        : newStatus === 'FAILED'
+        ? 'Your data export failed. Please try again.'
+        : `Export status changed to ${newStatus.toLowerCase()}`;
+      
+      // Use toast notification here - would need to integrate with toast system
+      addToast(message, newStatus === 'READY' ? 'success' : newStatus === 'FAILED' ? 'error' : 'info');
+      
+      setLastNotifiedStatus((prev: Record<string, DataExportStatus>) => ({ ...prev, [jobId]: newStatus }));
+    }
+  }, []);
+  
   const handleRequestExport = async () => {
     setRequestingExport(true);
     try {
-      await dataExportApi.requestExport();
+      const response = await dataExportApi.requestExport();
+      if (response.jobId) {
+        localStorage.setItem(STORAGE_KEY, response.jobId);
+      }
       await loadHistory(true);
     } catch {
       setError('Unable to request a new archive right now. Please try again shortly.');
