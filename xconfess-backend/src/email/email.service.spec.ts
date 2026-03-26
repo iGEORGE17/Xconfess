@@ -1,4 +1,5 @@
 import {
+  EmailService,
   renderTemplate,
   TemplateVariableValidationError,
 } from './email.service';
@@ -7,6 +8,7 @@ import {
   recipientBucket,
   normalizeRecipientForBucketing,
 } from './email.config';
+import { NotFoundException } from '@nestjs/common';
 
 describe('EmailService template variable schema validation', () => {
   const template: EmailTemplateVersion = {
@@ -207,5 +209,72 @@ describe('normalizeRecipientForBucketing', () => {
   it('should handle edge case emails', () => {
     expect(normalizeRecipientForBucketing('')).toBe('');
     expect(normalizeRecipientForBucketing('TEST')).toBe('test');
+  });
+});
+
+describe('EmailService template missing/version error messaging', () => {
+  const configServiceMock: any = { get: jest.fn() };
+  const service = new EmailService(configServiceMock);
+
+  beforeEach(() => {
+    (service as any).templateRegistry = {};
+    (service as any).rolloutMap = {};
+  });
+
+  it('previewTemplate throws 404 with templateKey context', () => {
+    try {
+      service.previewTemplate('missing_key', { username: 'Alice' });
+      throw new Error('Expected previewTemplate to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotFoundException);
+      const res = err.response;
+      expect(res.templateKey).toBe('missing_key');
+    }
+  });
+
+  it('previewTemplate throws 404 with templateVersion context', () => {
+    (service as any).templateRegistry = {
+      welcome: {
+        activeVersion: 'v1',
+        versions: {},
+      },
+    };
+
+    try {
+      service.previewTemplate('welcome', { username: 'Alice' }, 'v2');
+      throw new Error('Expected previewTemplate to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotFoundException);
+      const res = err.response;
+      expect(res.templateKey).toBe('welcome');
+      expect(res.templateVersion).toBe('v2');
+    }
+  });
+
+  it('sendGenericNotification throws 404 with templateKey + templateVersion', async () => {
+    (service as any).templateRegistry = {
+      welcome: {
+        activeVersion: 'v2',
+        versions: {},
+      },
+    };
+
+    await expect(
+      service.sendGenericNotification('user@example.com', 'welcome', {
+        username: 'Alice',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    try {
+      await service.sendGenericNotification('user@example.com', 'welcome', {
+        username: 'Alice',
+      });
+      throw new Error('Expected sendGenericNotification to throw');
+    } catch (err) {
+      const res = err.response;
+      expect(res.templateKey).toBe('welcome');
+      expect(res.templateVersion).toBe('v2');
+      expect(res.code).toBeDefined();
+    }
   });
 });

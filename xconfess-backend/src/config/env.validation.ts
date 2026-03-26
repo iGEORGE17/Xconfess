@@ -114,4 +114,10 @@ export const envValidationSchema = Joi.object({
   DLQ_RETENTION_DAYS: Joi.number().default(14),
   DLQ_CLEANUP_BATCH_SIZE: Joi.number().default(100),
   DLQ_CLEANUP_DRY_RUN: Joi.string().valid('true', 'false').default('false'),
+
+  // ── DLQ automatic replay (optional) ────────────────────────────────
+  DLQ_AUTO_REPLAY_ENABLED: Joi.string().valid('true', 'false').default('false'),
+  DLQ_AUTO_REPLAY_INTERVAL_MS: Joi.number().default(1800000), // 30 min
+  DLQ_AUTO_REPLAY_LOOKBACK_MINUTES: Joi.number().default(15),
+  DLQ_AUTO_REPLAY_MAX_JOBS_PER_RUN: Joi.number().default(50),
 }).options({ allowUnknown: true, abortEarly: false });

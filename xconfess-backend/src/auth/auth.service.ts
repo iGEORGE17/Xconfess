@@ -3,6 +3,8 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  GoneException,
+  UnprocessableEntityException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -82,11 +84,14 @@ export class AuthService {
     // Create a new AnonymousUser (or reuse per 24h)
     const anonymousUser =
       await this.anonymousUserService.getOrCreateForUserSession(user.id);
+    const role = user.role || UserRole.USER;
+    const scopes = role === UserRole.ADMIN ? ['stellar:invoke-contract'] : [];
     const payload: JwtPayload = {
       email: user.email,
       sub: user.id, // Keep as number for consistency
       username: user.username,
-      role: user.role || UserRole.USER,
+      role,
+      scopes,
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -119,23 +124,30 @@ export class AuthService {
     newPassword: string,
   ): Promise<{ message: string }> {
     try {
-      // Find and validate the reset token
-      const passwordReset =
-        await this.passwordResetService.findValidToken(token);
-      if (!passwordReset) {
-        this.logger.warn(`Invalid or expired reset token attempted`, { token });
-        throw new BadRequestException('Invalid or expired reset token');
+      const { reset, reason } =
+        await this.passwordResetService.consumeValidToken(token);
+
+      if (!reset) {
+        this.logger.warn(`Reset token rejected`, { token, reason });
+
+        switch (reason) {
+          case 'invalid':
+            throw new BadRequestException('Invalid reset token');
+          case 'expired':
+            throw new UnprocessableEntityException('Reset token expired');
+          case 'reused':
+            throw new GoneException('Reset token already used');
+          default:
+            throw new BadRequestException('Invalid reset token');
+        }
       }
 
-      // Update the user's password
-      await this.userService.updatePassword(passwordReset.userId, newPassword);
-
-      // Mark the token as used
-      await this.passwordResetService.markTokenAsUsed(passwordReset.id);
+      // Atomic token consumption already marked the token as used.
+      await this.userService.updatePassword(reset.userId, newPassword);
 
       this.logger.log(`Password reset successful`, {
-        maskedUserId: maskUserId(passwordReset.userId),
-        tokenId: passwordReset.id,
+        maskedUserId: maskUserId(reset.userId),
+        tokenId: reset.id,
       });
 
       return { message: 'Password has been reset successfully' };
@@ -143,7 +155,11 @@ export class AuthService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      if (error instanceof BadRequestException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof GoneException ||
+        error instanceof UnprocessableEntityException
+      ) {
         throw error;
       }
 

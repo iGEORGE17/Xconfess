@@ -1,4 +1,11 @@
-import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '../logger/logger.service';
@@ -19,6 +26,10 @@ import {
   TemplateRolloutMap,
   resolveTemplate,
 } from '../config/email.config';
+import {
+  EmailTemplateError,
+  EmailTemplateNotFoundError,
+} from './email-template.errors';
 
 // ── Template variable validation ──────────────────────────────────────────────
 
@@ -183,6 +194,16 @@ export interface TemplateMeta {
   isCanary?: boolean;
 }
 
+export interface TemplatePreviewResult {
+  templateKey: string;
+  version: string;
+  lifecycleState: string;
+  rendered: { subject: string; html: string; text: string } | null;
+  validationErrors: string[];
+  missingVars: string[];
+  requiredVars: string[];
+}
+
 // ── SLO tracking ─────────────────────────────────────────────────────────────
 
 interface TemplateSloSeriesEntry {
@@ -201,12 +222,47 @@ interface TemplateSloSeries {
 
 @Injectable()
 export class EmailService implements OnModuleInit {
-  sendGenericNotification(
-    recipientEmail: any,
+  /**
+   * Sends a notification using the registered template key + rendered variables.
+   * Throws typed/structured HTTP errors when a template or version is missing.
+   */
+  async sendGenericNotification(
+    recipientEmail: string,
     templateKey: string,
-    templateData: any,
-  ) {
-    throw new Error('Method not implemented.');
+    templateData: Record<string, unknown>,
+  ): Promise<void> {
+    const channel = `email_${templateKey}`;
+    try {
+      const rendered = this.resolveAndRender(
+        templateKey,
+        recipientEmail,
+        templateData,
+      );
+      await this.sendEmail(
+        recipientEmail,
+        rendered.subject,
+        rendered.html,
+        rendered.text,
+        channel,
+        rendered.meta,
+      );
+    } catch (err) {
+      if (err instanceof EmailTemplateError) {
+        this.logger.error('Email template resolution failed', {
+          code: err.code,
+          templateKey: err.templateKey,
+          templateVersion: err.templateVersion,
+        });
+
+        throw new NotFoundException({
+          message: 'Email template not found',
+          code: err.code,
+          templateKey: err.templateKey,
+          templateVersion: err.templateVersion,
+        });
+      }
+      throw err;
+    }
   }
   private readonly logger = new Logger(EmailService.name);
 
@@ -316,7 +372,16 @@ export class EmailService implements OnModuleInit {
     const template = reg?.versions[version];
 
     if (!template) {
-      throw new Error(`Template version not found: ${templateKey} v${version}`);
+      this.logger.error('Email template version not found', {
+        templateKey,
+        templateVersion: version,
+      });
+      throw new NotFoundException({
+        message: 'Email template version not found',
+        templateKey,
+        templateVersion: version,
+        code: 'template_version_not_found',
+      });
     }
 
     const currentState = template.lifecycleState;
@@ -354,9 +419,16 @@ export class EmailService implements OnModuleInit {
   ): Promise<void> {
     const reg = this.templateRegistry?.[templateKey];
     if (!reg?.versions[version]) {
-      throw new Error(
-        `Template or version not found: ${templateKey} v${version}`,
-      );
+      this.logger.error('Email template or version not found', {
+        templateKey,
+        templateVersion: version,
+      });
+      throw new NotFoundException({
+        message: 'Email template not found',
+        templateKey,
+        templateVersion: version,
+        code: 'template_version_not_found',
+      });
     }
 
     const before = {
@@ -393,7 +465,14 @@ export class EmailService implements OnModuleInit {
     },
   ): Promise<void> {
     const reg = this.templateRegistry?.[templateKey];
-    if (!reg) throw new Error(`Template not found: ${templateKey}`);
+    if (!reg) {
+      this.logger.error('Email template not found', { templateKey });
+      throw new NotFoundException({
+        message: 'Email template not found',
+        templateKey,
+        code: 'template_not_found',
+      });
+    }
 
     const before = {
       activeVersion: reg.activeVersion,
@@ -435,7 +514,14 @@ export class EmailService implements OnModuleInit {
   ): Promise<void> {
     if (templateKey) {
       const reg = this.templateRegistry?.[templateKey];
-      if (!reg) throw new Error(`Template not found: ${templateKey}`);
+      if (!reg) {
+        this.logger.error('Email template not found', { templateKey });
+        throw new NotFoundException({
+          message: 'Email template not found',
+          templateKey,
+          code: 'template_not_found',
+        });
+      }
 
       const before = { rollout: reg.rollout || {} };
       reg.rollout = { ...(reg.rollout || {}), killSwitchEnabled: enabled };
@@ -600,12 +686,31 @@ export class EmailService implements OnModuleInit {
     recipientEmail: string,
     vars: Record<string, unknown>,
   ): { subject: string; html: string; text: string; meta: TemplateMeta } {
-    const { template, isCanary } = resolveTemplate(
-      this.templateRegistry,
-      this.rolloutMap,
-      templateKey,
-      recipientEmail,
-    );
+    let template;
+    let isCanary = false;
+    try {
+      ({ template, isCanary } = resolveTemplate(
+        this.templateRegistry,
+        this.rolloutMap,
+        templateKey,
+        recipientEmail,
+      ));
+    } catch (err) {
+      if (err instanceof EmailTemplateError) {
+        this.logger.error('Email template resolution failed', {
+          code: err.code,
+          templateKey: err.templateKey,
+          templateVersion: err.templateVersion,
+        });
+        throw new NotFoundException({
+          message: 'Email template not found',
+          code: err.code,
+          templateKey: err.templateKey,
+          templateVersion: err.templateVersion,
+        });
+      }
+      throw err;
+    }
     const rendered = renderTemplate(templateKey, template, vars);
     return {
       ...rendered,
@@ -1107,6 +1212,84 @@ export class EmailService implements OnModuleInit {
     };
   }
 
+  // ── Template preview ─────────────────────────────────────────────────────
+
+  previewTemplate(
+    templateKey: string,
+    vars: Record<string, string>,
+    version?: string,
+  ): TemplatePreviewResult {
+    const reg = this.templateRegistry?.[templateKey];
+    if (!reg) {
+      this.logger.error('Email template not found', { templateKey });
+      throw new NotFoundException({
+        message: 'Email template not found',
+        templateKey,
+        code: 'template_not_found',
+      });
+    }
+
+    const targetVersion = version ?? reg.activeVersion;
+    const template = reg.versions?.[targetVersion];
+    if (!template) {
+      this.logger.error('Email template version not found', {
+        templateKey,
+        templateVersion: targetVersion,
+      });
+      throw new NotFoundException({
+        message: 'Email template version not found',
+        templateKey,
+        templateVersion: targetVersion,
+        code: 'template_version_not_found',
+      });
+    }
+
+    const requiredVars = template.requiredVars || [];
+    try {
+      const rendered = renderTemplate(templateKey, template, vars);
+      return {
+        templateKey,
+        version: template.version,
+        lifecycleState: template.lifecycleState,
+        rendered,
+        validationErrors: [],
+        missingVars: [],
+        requiredVars,
+      };
+    } catch (err) {
+      if (err instanceof TemplateVariableValidationError) {
+        const missingVars = err.violations
+          .filter((v) => v.code === 'missing')
+          .map((v) => v.key);
+
+        const validationErrors = err.violations.map((v) => {
+          switch (v.code) {
+            case 'missing':
+              return `Missing required variable: "${v.key}"`;
+            case 'unknown':
+              return `Unknown variable: "${v.key}"`;
+            case 'type_mismatch':
+              return `Type mismatch for "${v.key}": expected ${v.expected}, got ${v.actual}`;
+            default:
+              return `Template variable validation failed: "${v.key}"`;
+          }
+        });
+
+        return {
+          templateKey,
+          version: template.version,
+          lifecycleState: template.lifecycleState,
+          rendered: null,
+          validationErrors,
+          missingVars,
+          requiredVars,
+        };
+      }
+
+      throw err;
+    }
+  }
+
   // ── Public email methods ──────────────────────────────────────────────────
 
   async sendWelcomeEmail(email: string, username: string): Promise<void> {
@@ -1129,7 +1312,16 @@ export class EmailService implements OnModuleInit {
         },
       );
     } else {
-      throw new Error('No valid template for welcome');
+      this.logger.error('No valid email template for welcome', {
+        templateKey,
+        activeVersion: this.templateRegistry?.[templateKey]?.activeVersion,
+      });
+      throw new NotFoundException({
+        message: 'No active email template for welcome',
+        templateKey,
+        templateVersion: this.templateRegistry?.[templateKey]?.activeVersion,
+        code: 'template_active_version_missing',
+      });
     }
   }
 
