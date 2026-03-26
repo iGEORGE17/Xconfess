@@ -7,7 +7,7 @@ on-chain anchoring of anonymous confession hashes on the Stellar network.
 
 ## Table of contents
 
-- [What the contract does](#what-the-contract-does)
+- [What's contract does](#what-the-contract-does)
 - [Prerequisites](#prerequisites)
 - [Toolchain setup](#toolchain-setup)
 - [Project structure](#project-structure)
@@ -16,6 +16,7 @@ on-chain anchoring of anonymous confession hashes on the Stellar network.
 - [Linting and formatting](#linting-and-formatting)
 - [Deployment](#deployment)
 - [Contract API](#contract-api)
+- [Administration](#administration)
 - [Architecture notes](#architecture-notes)
 - [Threat model](#threat-model)
 - [Troubleshooting](#troubleshooting)
@@ -322,6 +323,36 @@ Utility read method so off-chain consumers can branch behavior safely.
 ### `get_error_registry_version() → u32`
 
 Compatibility markers for event payload schema and error-code registry versions.
+
+---
+
+## Administration
+
+For comprehensive contract administration guidance, see:
+
+- **[Contract Lifecycle Guide](./CONTRACT_LIFECYCLE.md)** - Complete lifecycle management, initialization procedures, and security considerations
+- **[Administration Guide](./ADMIN_GUIDE.md)** - Practical operational procedures, monitoring, and troubleshooting
+
+### Quick Admin Reference
+
+```bash
+# Check contract status
+stellar contract info --id $CONTRACT_ID --network $NETWORK
+
+# Get current administrator
+stellar contract invoke --id $CONTRACT_ID --source-account $ADMIN_KEY -- get_admin
+
+# Transfer administrator rights
+stellar contract invoke --id $CONTRACT_ID --source-account $ADMIN_KEY -- transfer_admin --new_admin $NEW_ADMIN_ADDRESS
+```
+
+### Contract-Specific Admin
+
+| Contract | Admin Functions | Documentation |
+|----------|----------------|---------------|
+| ConfessionAnchor | transfer_admin, get_admin, get_version | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#confessionanchor-contract) |
+| ReputationBadges | create_badge, award_badge, adjust_reputation | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#reputationbadges-contract) |
+| AnonymousTipping | None (decentralized) | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#anonymoustipping-contract) |
 
 ---
 
