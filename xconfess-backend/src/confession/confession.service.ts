@@ -369,6 +369,7 @@ export class ConfessionService {
       dto.q.trim(),
       dto.page,
       limit,
+      dto,
     );
     return {
       data: result?.confessions || [],
@@ -391,6 +392,7 @@ export class ConfessionService {
       dto.q.trim(),
       dto.page,
       limit,
+      dto,
     );
     return {
       data: result?.confessions || [],

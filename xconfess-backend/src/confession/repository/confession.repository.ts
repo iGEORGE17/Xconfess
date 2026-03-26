@@ -2,6 +2,7 @@
 import { DataSource, Repository, FindOptionsWhere, ILike } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { AnonymousConfession } from '../entities/confession.entity';
+import { SearchConfessionDto } from '../dto/search-confession.dto';
 
 /**
  * Repository for handling database operations related to anonymous confessions.
@@ -47,12 +48,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param searchTerm The search query
    * @param page Page number for pagination
    * @param limit Number of results per page
+   * @param dto Optional search filters including anonymousOnly
    * @returns Array of confessions ranked by relevance
    */
   async fullTextSearch(
     searchTerm: string,
     page: number = 1,
     limit: number = 10,
+    dto?: Partial<SearchConfessionDto>,
   ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
@@ -82,17 +85,30 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       await queryRunner.release();
     }
     if (!hasSearchVector) {
-      // Fallback: log and return empty or fallback to ILIKE
-      // Optionally, throw new Error('Full-text search unavailable: missing search_vector column');
       return { confessions: [], total: 0 };
     }
 
-    // Build the query with ts_rank for relevance scoring, using sanitizedTerm
+    // Build the query with ts_rank for relevance scoring
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.reactions', 'reactions')
       .where('confession.search_vector @@ plainto_tsquery(:sanitizedTerm)', {
         sanitizedTerm,
       })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      });
+
+    // Apply anonymous-only filter if requested
+    if (dto?.anonymousOnly) {
+      queryBuilder
+        .leftJoin('confession.anonymousUser', 'anonUser')
+        .leftJoin('anonUser.userLinks', 'userLink')
+        .andWhere('userLink.id IS NULL');
+    }
+
+    queryBuilder
       .addSelect(
         'ts_rank(confession.search_vector, plainto_tsquery(:sanitizedTerm))',
         'rank',
@@ -103,10 +119,22 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .take(limit);
 
     // Get total count for pagination
-    const totalQuery = this.createQueryBuilder('confession').where(
-      'confession.search_vector @@ plainto_tsquery(:sanitizedTerm)',
-      { sanitizedTerm },
-    );
+    const totalQuery = this.createQueryBuilder('confession')
+      .where('confession.search_vector @@ plainto_tsquery(:sanitizedTerm)', {
+        sanitizedTerm,
+      })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      });
+
+    if (dto?.anonymousOnly) {
+      totalQuery
+        .leftJoin('confession.anonymousUser', 'anonUser')
+        .leftJoin('anonUser.userLinks', 'userLink')
+        .andWhere('userLink.id IS NULL');
+    }
 
     let confessions: AnonymousConfession[] = [];
     let total = 0;
@@ -116,8 +144,6 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
         totalQuery.getCount(),
       ]);
     } catch (err) {
-      // Fallback: log error and return empty
-      // Optionally, fallback to ILIKE here
       return { confessions: [], total: 0 };
     }
 
@@ -129,12 +155,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param searchTerm The search query
    * @param page Page number for pagination
    * @param limit Number of results per page
+   * @param dto Optional search filters including anonymousOnly
    * @returns Array of confessions with relevance ranking
    */
   async hybridSearch(
     searchTerm: string,
     page: number = 1,
     limit: number = 10,
+    dto?: Partial<SearchConfessionDto>,
   ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
@@ -145,6 +173,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       searchTerm,
       page,
       safeLimit,
+      dto,
     );
 
     // If full-text search returns results, use them
@@ -160,14 +189,41 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .where('confession.message ILIKE :searchTerm', {
         searchTerm: `%${searchTerm}%`,
       })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      });
+
+    // Apply anonymous-only filter if requested
+    if (dto?.anonymousOnly) {
+      queryBuilder
+        .leftJoin('confession.anonymousUser', 'anonUser')
+        .leftJoin('anonUser.userLinks', 'userLink')
+        .andWhere('userLink.id IS NULL');
+    }
+
+    queryBuilder
       .orderBy('confession.created_at', 'DESC')
       .skip(offset)
       .take(safeLimit);
 
-    const totalQuery = this.createQueryBuilder('confession').where(
-      'confession.message ILIKE :searchTerm',
-      { searchTerm: `%${searchTerm}%` },
-    );
+    const totalQuery = this.createQueryBuilder('confession')
+      .where('confession.message ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
+      })
+      .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      });
+
+    if (dto?.anonymousOnly) {
+      totalQuery
+        .leftJoin('confession.anonymousUser', 'anonUser')
+        .leftJoin('anonUser.userLinks', 'userLink')
+        .andWhere('userLink.id IS NULL');
+    }
 
     const [confessions, total] = await Promise.all([
       queryBuilder.getMany(),
