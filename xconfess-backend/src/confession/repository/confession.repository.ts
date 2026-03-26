@@ -243,11 +243,33 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * Fetch top trending confessions based on view count, recent reactions, and recency.
    * Filters out confessions from non-discoverable users.
    * Trending score = view_count * 1 + recent_reactions * 3 + 10 / (1 + hours_since_created)
-   * Only considers reactions in the last 24 hours.
+   *
+   * Window boundaries
+   * ─────────────────
+   * • startAt (inclusive) – confessions created on or after this UTC timestamp
+   *   are eligible.  Reactions are also weighted only within this window.
+   * • endAt   (exclusive) – confessions created before this UTC timestamp are
+   *   eligible; equal-to records are excluded so consecutive windows never
+   *   double-count a confession written exactly at midnight.
+   *
+   * When not supplied, falls back to the previous 24-hour rolling window so
+   * existing callers that omit the arguments are unaffected.
    */
-  async findTrending(limit: number = 10): Promise<AnonymousConfession[]> {
+  async findTrending(
+    limit: number = 10,
+    startAt?: Date,
+    endAt?: Date,
+  ): Promise<AnonymousConfession[]> {
+    // Default to UTC-floored boundaries when not provided by the caller.
     const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const todayUTC = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+    const resolvedStartAt =
+      startAt ?? new Date(todayUTC - 24 * 60 * 60 * 1000);
+    const resolvedEndAt = endAt ?? new Date(todayUTC + 24 * 60 * 60 * 1000);
 
     return this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.anonymousUser', 'anonymousUser')
@@ -255,10 +277,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .leftJoinAndSelect('userLinks.user', 'user')
       .leftJoinAndSelect('confession.reactions', 'reactions')
       .addSelect(
-        `confession.view_count + 3 * COUNT(CASE WHEN reactions.createdAt > :oneDayAgo THEN 1 END) + 10.0 / (1 + EXTRACT(EPOCH FROM (NOW() - confession.created_at)) / 3600)`,
+        // Recent-reaction weight uses the same inclusive-start/exclusive-end
+        // boundaries so the score is consistent with the window filter below.
+        `confession.view_count + 3 * COUNT(CASE WHEN reactions.createdAt >= :startAt AND reactions.createdAt < :endAt THEN 1 END) + 10.0 / (1 + EXTRACT(EPOCH FROM (NOW() - confession.created_at)) / 3600)`,
         'trending_score',
       )
       .where('confession.created_at IS NOT NULL')
+      .andWhere('confession.created_at >= :startAt', { startAt: resolvedStartAt })
+      .andWhere('confession.created_at < :endAt', { endAt: resolvedEndAt })
       .andWhere('confession.isDeleted = false')
       .andWhere(
         "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
@@ -266,7 +292,8 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .groupBy('confession.id')
       .orderBy('trending_score', 'DESC')
       .limit(limit)
-      .setParameter('oneDayAgo', oneDayAgo.toISOString())
+      .setParameter('startAt', resolvedStartAt.toISOString())
+      .setParameter('endAt', resolvedEndAt.toISOString())
       .getMany();
   }
 

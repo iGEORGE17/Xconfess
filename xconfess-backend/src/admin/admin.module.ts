@@ -14,6 +14,9 @@ import { AdminGateway } from './realtime/admin.gateway';
 import { ReportsEventsListener } from './realtime/reports.events.listener';
 import { UserModule } from '../user/user.module';
 import { UserAnonymousUser } from '../user/entities/user-anonymous-link.entity';
+import { WebSocketLogger } from '../websocket/websocket.logger';
+import { WsRolesGuard } from '../auth/guards/ws-roles.guard';
+import { Reflector } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -35,7 +38,11 @@ import { UserAnonymousUser } from '../user/entities/user-anonymous-link.entity';
     ModerationTemplateService,
     AdminGateway,
     ReportsEventsListener,
+    WebSocketLogger,
+    WsRolesGuard,
+    Reflector,
   ],
   exports: [AdminService, ModerationService, ModerationTemplateService],
 })
 export class AdminModule {}
+

@@ -26,8 +26,9 @@ export async function POST(request: Request) {
         const data = await response.json();
         const token = data.access_token;
 
-        // Set HttpOnly cookie with the access token
-        cookies().set(SESSION_COOKIE_NAME, token, {
+        // ✅ Await cookies() here
+        const cookieStore = await cookies();
+        cookieStore.set(SESSION_COOKIE_NAME, token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "lax",
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies(); // ✅ Await cookies
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
     if (!token) {
@@ -73,6 +74,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
-    cookies().delete(SESSION_COOKIE_NAME);
+    const cookieStore = await cookies(); // ✅ Await cookies
+    cookieStore.delete(SESSION_COOKIE_NAME);
     return NextResponse.json({ success: true });
 }
