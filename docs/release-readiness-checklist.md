@@ -41,9 +41,9 @@ Use this checklist before any staging or production release that affects the bac
 
 - [ ] Review `maintainer/issues/125-docs-contract-release-and-upgrade-runbook.md` before any contract release or upgrade.
 - [ ] Run contract tests: `./scripts/test-contracts.sh`
-- [ ] Build the contract artifacts: `./scripts/build-contracts.sh`
-- [ ] Verify the expected WASM artifacts exist under `xconfess-contracts/target/wasm32v1-none/release/`.
-- [ ] Record the SHA-256 hash for each artifact being promoted.
+- [ ] Build the contract artifacts: `./scripts/contracts-release.sh build`
+- [ ] Verify the generated artifact manifest exists at `deployments/contract-wasm-manifest.json`.
+- [ ] Confirm the manifest SHA-256 hashes match the artifacts being promoted.
 - [ ] Confirm the target network, deployer identity, and funding state before deployment.
 - [ ] Verify any backend or frontend config that depends on new contract IDs is ready to update in the same release window.
 

@@ -15,6 +15,7 @@ on-chain anchoring of anonymous confession hashes on the Stellar network.
 - [Testing](#testing)
 - [Linting and formatting](#linting-and-formatting)
 - [Deployment](#deployment)
+- [Versioning policy](#versioning-policy)
 - [Contract API](#contract-api)
 - [Administration](#administration)
 - [Architecture notes](#architecture-notes)
@@ -101,6 +102,21 @@ xconfess-contract/
 ---
 
 ## Building
+
+### Canonical reproducible flow (recommended)
+
+From the monorepo root, use one script for all contract crates:
+
+```bash
+./scripts/contracts-release.sh build
+```
+
+This command:
+
+- builds every workspace contract crate in release mode with `--locked`
+- targets `wasm32-unknown-unknown` consistently
+- verifies all expected `.wasm` outputs exist
+- writes `deployments/contract-wasm-manifest.json` with SHA-256 hashes
 
 ### Development build (fast, unoptimised)
 
@@ -218,6 +234,25 @@ attributes are used in contract code; all lints must be resolved.
 
 ## Deployment
 
+### Canonical deployment flow (recommended)
+
+Use the same script used for reproducible builds:
+
+```bash
+# 1) Build and generate deterministic artifact manifest
+./scripts/contracts-release.sh build
+
+# 2) Deploy all contract crates to a network with one command
+./scripts/contracts-release.sh deploy --network testnet --source my-deployer-key
+```
+
+The deploy step writes network metadata to `deployments/<network>.json`, including:
+
+- deployed contract IDs
+- source key alias used for deployment
+- crate versions
+- wasm SHA-256 hashes
+
 ### Prerequisites for deployment
 
 1. Generate or import a Stellar keypair:
@@ -236,11 +271,9 @@ stellar network fund my-deployer-key --network testnet
 ### Deploy to testnet
 
 ```bash
-# Build a release WASM first
-npm run contract:build:release
-
-# Deploy
-STELLAR_SOURCE_ACCOUNT=my-deployer-key npm run contract:deploy:testnet
+# Build + deploy all crates
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network testnet --source my-deployer-key
 ```
 
 Or directly:
@@ -263,13 +296,22 @@ STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 ### Deploy to mainnet
 
 ```bash
-STELLAR_SOURCE_ACCOUNT=my-mainnet-key npm run contract:deploy:mainnet
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network mainnet --source my-mainnet-key
 ```
 
 > **Warning:** Mainnet deployments are permanent and incur real XLM fees.
 > Always test on testnet first.
 
 ---
+
+## Versioning policy
+
+Contract versioning rules are documented in [`VERSIONING.md`](./VERSIONING.md).
+
+Release and deployment automation rely on that policy by recording each crate
+version alongside the built artifact hash in `deployments/contract-wasm-manifest.json`
+and in `deployments/<network>.json`.
 
 ## Contract API
 

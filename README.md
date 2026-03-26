@@ -232,15 +232,15 @@ cargo install --locked stellar-cli --features opt
 # 2. Add WebAssembly target
 rustup target add wasm32-unknown-unknown
 
-# 3. Navigate to contracts
-cd xconfess-contracts
+# 3. Build all contract crates reproducibly (from repo root)
+./scripts/contracts-release.sh build
 
-# 4. Build contracts
-cargo build --release --target wasm32-unknown-unknown
-
-# 5. Run tests
-cargo test
+# 4. Run tests
+./scripts/test-contracts.sh
 ```
+
+Versioning policy for contract crates is documented in
+`xconfess-contracts/VERSIONING.md`.
 
 ### Contract Architecture
 
