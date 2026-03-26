@@ -1,7 +1,9 @@
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { ServerOptions } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
-import { INestApplicationContext } from '@nestjs/common';
+import { INestApplicationContext, Logger } from '@nestjs/common';
+
+const logger = new Logger('WebSocketAdapter');
 
 export function buildWebSocketServerOptions(
   corsOrigin: string,
@@ -49,13 +51,44 @@ export class WebSocketAdapter extends IoAdapter {
 
     const server = super.createIOServer(port, serverOptions);
 
-    // Add connection middleware for authentication and monitoring
-    server.use((socket, next) => {
-      const token =
-        socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+    /**
+     * Global connection middleware — runs before any namespace/gateway logic.
+     *
+     * Responsibilities:
+     *  1. Detect whether a bearer token is present on the handshake.
+     *  2. Log the connection attempt with metadata (namespace, IP, token presence).
+     *  3. Allow the connection to proceed — actual JWT verification and role
+     *     checking happens inside each gateway (AdminGateway / WsJwtGuard).
+     *     Gateways are responsible for disconnecting unauthorised sockets.
+     *
+     * Note: We intentionally do NOT hard-block here for the /reactions namespace
+     * since that is a public channel that supports unauthenticated viewers.
+     */
+    server.use((socket: any, next: (err?: Error) => void) => {
+      const namespace: string =
+        socket.nsp?.name ?? socket.handshake?.headers?.['x-namespace'] ?? '/';
+      const ip: string =
+        socket.handshake?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+        socket.handshake?.address ||
+        'unknown';
 
-      // Optional: Add JWT verification here if you want authenticated WebSocket connections
-      // For now, we'll allow all connections and handle auth at the event level
+      const hasToken = Boolean(
+        socket.handshake?.auth?.token ||
+          socket.handshake?.headers?.authorization,
+      );
+
+      logger.log(
+        `[WS_CONNECT] Namespace: ${namespace}, Socket: ${socket.id}, IP: ${ip}, HasToken: ${hasToken}`,
+      );
+
+      // For sensitive namespaces we log a warning when there's no token so
+      // that ops can spot unauthenticated probes without blocking at this layer.
+      const sensitiveNamespaces = ['/notifications', '/admin'];
+      if (sensitiveNamespaces.some((ns) => namespace.startsWith(ns)) && !hasToken) {
+        logger.warn(
+          `[WS_CONNECT_NO_TOKEN] Unauthenticated connection attempt on sensitive namespace ${namespace} from ${ip} (socket: ${socket.id})`,
+        );
+      }
 
       next();
     });
@@ -63,3 +96,4 @@ export class WebSocketAdapter extends IoAdapter {
     return server;
   }
 }
+

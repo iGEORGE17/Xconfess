@@ -155,6 +155,50 @@ export class WebSocketLogger {
   }
 
   /**
+   * Log a rejected subscription attempt with full audit metadata.
+   * Called whenever a client tries to subscribe to a channel without
+   * the required authentication or role.
+   */
+  logSubscriptionRejected(meta: {
+    socketId: string;
+    userId?: string | number;
+    channel: string;
+    reason: string;
+    timestamp?: Date;
+  }) {
+    this.metrics.errors++;
+
+    const ts = (meta.timestamp ?? new Date()).toISOString();
+    this.logger.warn(
+      `[SUBSCRIPTION_REJECTED] Socket: ${meta.socketId}, User: ${meta.userId ?? 'anonymous'}, Channel: ${meta.channel}, Reason: ${meta.reason}, Timestamp: ${ts}`,
+    );
+
+    // Also capture in the internal event log for metrics queries
+    this.logEvent(
+      'subscription_rejected',
+      meta.socketId,
+      meta.channel,
+      false,
+      meta.reason,
+    );
+  }
+
+  /**
+   * Log a successful subscription for audit trail.
+   */
+  logSubscriptionGranted(meta: {
+    socketId: string;
+    userId?: string | number;
+    channel: string;
+  }) {
+    this.logger.log(
+      `[SUBSCRIPTION_GRANTED] Socket: ${meta.socketId}, User: ${meta.userId ?? 'anonymous'}, Channel: ${meta.channel}`,
+    );
+
+    this.logEvent('subscription_granted', meta.socketId, meta.channel, true);
+  }
+
+  /**
    * Log an error
    */
   logError(context: string, error: Error | string, socketId?: string) {
