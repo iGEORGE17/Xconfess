@@ -1,15 +1,24 @@
 import {
   ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../../user/user.service';
-import { Logger } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import { UserRole } from '../../user/entities/user.entity';
+import { WsJwtGuard } from '../../auth/guards/ws-jwt.guard';
+import { WsRolesGuard } from '../../auth/guards/ws-roles.guard';
+import { WsRoles } from '../../auth/decorators/ws-roles.decorator';
+import { WebSocketLogger } from '../../websocket/websocket.logger';
+
+/** Room name that all verified admin sockets join */
+const ADMIN_ROOM = 'admin:events';
 
 @WebSocketGateway({
   namespace: 'admin',
@@ -24,18 +33,23 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
-  ) { }
+    private readonly wsLogger: WebSocketLogger,
+  ) {}
+
+  // ─── Connection lifecycle ─────────────────────────────────────────────────
 
   async handleConnection(@ConnectedSocket() client: Socket) {
     try {
       const token =
         (client.handshake.auth as any)?.token ||
-        (client.handshake.headers.authorization as string | undefined)?.replace(
-          /^Bearer\s+/i,
-          '',
-        );
+        client.handshake.headers.authorization?.replace(/^Bearer\s+/i, '');
 
       if (!token) {
+        this.wsLogger.logSubscriptionRejected({
+          socketId: client.id,
+          channel: ADMIN_ROOM,
+          reason: 'No authentication token provided',
+        });
         client.disconnect(true);
         return;
       }
@@ -43,19 +57,46 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload: any = this.jwtService.verify(token);
       const userId = Number(payload?.sub ?? payload?.userId);
       if (!Number.isFinite(userId)) {
+        this.wsLogger.logSubscriptionRejected({
+          socketId: client.id,
+          channel: ADMIN_ROOM,
+          reason: 'Invalid token payload — userId could not be resolved',
+        });
         client.disconnect(true);
         return;
       }
 
       const user = await this.userService.findById(userId);
       if (user?.role !== UserRole.ADMIN) {
+        this.wsLogger.logSubscriptionRejected({
+          socketId: client.id,
+          userId,
+          channel: ADMIN_ROOM,
+          reason: `Insufficient role — got '${user?.role ?? 'none'}', required '${UserRole.ADMIN}'`,
+        });
         client.disconnect(true);
         return;
       }
 
+      // Attach full user object so downstream guards can inspect it
       client.data.userId = userId;
+      client.data.user = { id: userId, role: user.role };
+
+      // Place admin into the scoped admin room for targeted fanout
+      await client.join(ADMIN_ROOM);
+
+      this.wsLogger.logSubscriptionGranted({
+        socketId: client.id,
+        userId,
+        channel: ADMIN_ROOM,
+      });
       this.logger.log(`Admin connected: ${userId} (${client.id})`);
     } catch (e) {
+      this.wsLogger.logSubscriptionRejected({
+        socketId: client.id,
+        channel: ADMIN_ROOM,
+        reason: e instanceof Error ? e.message : 'unknown auth error',
+      });
       this.logger.warn(
         `Admin socket auth failed (${client.id}): ${e instanceof Error ? e.message : 'unknown'}`,
       );
@@ -64,11 +105,74 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(@ConnectedSocket() client: Socket) {
-    this.logger.log(`Admin disconnected: ${client.data?.userId ?? 'unknown'} (${client.id})`);
+    this.logger.log(
+      `Admin disconnected: ${client.data?.userId ?? 'unknown'} (${client.id})`,
+    );
   }
+
+  // ─── Subscription handlers ────────────────────────────────────────────────
+
+  /**
+   * Explicit subscribe:admin-events message handler.
+   *
+   * Although the handleConnection guard already enforces admin-only access
+   * at connection time, this handler provides an explicit channel
+   * subscription surface with secondary guard enforcement (WsJwtGuard +
+   * WsRolesGuard) for defence-in-depth and a clear audit trail.
+   */
+  @UseGuards(WsJwtGuard, WsRolesGuard)
+  @WsRoles(UserRole.ADMIN)
+  @SubscribeMessage('subscribe:admin-events')
+  handleAdminSubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() _data: unknown,
+  ) {
+    const userId = client.data?.userId;
+
+    this.wsLogger.logSubscriptionGranted({
+      socketId: client.id,
+      userId,
+      channel: ADMIN_ROOM,
+    });
+
+    client.emit('subscription:confirmed', {
+      channel: ADMIN_ROOM,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Allow an admin client to explicitly unsubscribe from admin events
+   * without disconnecting (useful for multi-tab scenarios).
+   */
+  @UseGuards(WsJwtGuard, WsRolesGuard)
+  @WsRoles(UserRole.ADMIN)
+  @SubscribeMessage('unsubscribe:admin-events')
+  async handleAdminUnsubscribe(@ConnectedSocket() client: Socket) {
+    await client.leave(ADMIN_ROOM);
+    this.logger.log(
+      `Admin ${client.data?.userId} left ${ADMIN_ROOM} (${client.id})`,
+    );
+    client.emit('subscription:cancelled', {
+      channel: ADMIN_ROOM,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // ─── Scoped fanout helpers ─────────────────────────────────────────────────
+  // Events are emitted only to the ADMIN_ROOM — never to the entire namespace.
+  // This guarantees that non-admin sockets that somehow bypassed connection
+  // auth cannot receive sensitive operational data.
 
   emitNewReport(payload: any) {
-    this.server.emit('new-report', payload);
+    this.server.to(ADMIN_ROOM).emit('new-report', payload);
+  }
+
+  emitReportUpdated(payload: any) {
+    this.server.to(ADMIN_ROOM).emit('report-updated', payload);
+  }
+
+  emitReportsBulkUpdated(payload: any) {
+    this.server.to(ADMIN_ROOM).emit('reports-bulk-updated', payload);
   }
 }
-

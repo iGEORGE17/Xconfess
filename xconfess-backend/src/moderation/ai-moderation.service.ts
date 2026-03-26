@@ -161,7 +161,7 @@ export class AiModerationService {
       }
 
       const scores = Object.values(result.category_scores);
-      const maxScore = Math.max(...scores);
+      const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
 
       return {
         score: maxScore,

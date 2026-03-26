@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, User, ShieldCheck, ShieldAlert, Hash } from "lucide-react";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import apiClient from "@/app/lib/api"; // your axios/fetch wrapper
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
-
 function ProfileSkeleton() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 px-4 py-10">
@@ -33,7 +33,6 @@ function ProfileSkeleton() {
 }
 
 // ── Avatar initials ───────────────────────────────────────────────────────────
-
 function Avatar({ username }: { username: string }) {
   const initials =
     username
@@ -53,7 +52,6 @@ function Avatar({ username }: { username: string }) {
 }
 
 // ── Info row ──────────────────────────────────────────────────────────────────
-
 function InfoRow({
   icon: Icon,
   label,
@@ -79,44 +77,48 @@ function InfoRow({
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-
 export default function ProfilePage() {
   const router = useRouter();
-
-  // AuthProvider shape:
-  //   isLoading: true on mount until checkAuth() resolves
-  //   isAuthenticated: boolean (false when guest)
-  //   user: User | null
-  //   logout(): void  (synchronous — clears cookie + store)
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Redirect once the initial checkAuth() has settled and there's no session
+  // Redirect guest users
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace("/login");
     }
   }, [isLoading, isAuthenticated, router]);
 
-  // checkAuth() still in-flight — show skeleton to avoid layout shift
   if (isLoading) return <ProfileSkeleton />;
-
-  // Resolved as guest — redirect queued above, render nothing to prevent flash
   if (!isAuthenticated || !user) return null;
 
-  // ── Derived values ────────────────────────────────────────────────────────
   const isAdmin = user.role === "admin";
 
+  // Regular logout
   const handleLogout = () => {
-    logout(); // synchronous: clears HttpOnly cookie via authApi + zustand store
+    logout();
     router.replace("/login");
   };
 
-  const handleDeactivate = () => {
-    // TODO: call your deactivate endpoint, then handleLogout()
-    alert("Account deactivation coming soon.");
+  // Deactivate endpoint
+  const handleDeactivate = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await apiClient.post("/user/deactivate");
+      logout();
+      router.replace("/login");
+    } catch (err: any) {
+      console.error("Deactivate failed", err);
+      setError(
+        err?.response?.data?.message || "Failed to deactivate account. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
       <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
@@ -149,11 +151,6 @@ export default function ProfilePage() {
           </h2>
           <InfoRow icon={User} label="Username" value={user.username} />
           <InfoRow icon={Hash} label="Role" value={user.role ?? "member"} />
-          {/*
-            Add more rows as your User type grows, e.g.:
-            <InfoRow icon={Mail} label="Email" value={user.email} />
-            <InfoRow icon={Calendar} label="Member since" value={formatDate(new Date(user.createdAt))} />
-          */}
         </section>
 
         {/* ── Account actions ── */}
@@ -168,7 +165,7 @@ export default function ProfilePage() {
             Account actions
           </h2>
 
-          {/* Sign out — same style as Header's logout button */}
+          {/* Sign out */}
           <div className="flex items-center justify-between py-3 border-b border-zinc-100 dark:border-zinc-800">
             <div>
               <p className="text-sm font-medium text-zinc-800 dark:text-slate-200">
@@ -187,7 +184,7 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          {/* Deactivate (placeholder) */}
+          {/* Deactivate */}
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="text-sm font-medium text-zinc-800 dark:text-slate-200">
@@ -196,14 +193,20 @@ export default function ProfilePage() {
               <p className="text-xs text-zinc-400 dark:text-slate-500">
                 Temporarily disable your account
               </p>
+              {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
             </div>
             <button
               onClick={handleDeactivate}
-              aria-label="Deactivate account (coming soon)"
-              className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 rounded"
+              disabled={loading}
+              aria-label="Deactivate account"
+              className={`flex items-center gap-1.5 text-sm ${
+                loading
+                  ? "text-zinc-400 cursor-not-allowed"
+                  : "text-zinc-500 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+              } transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 rounded`}
             >
               <ShieldAlert aria-hidden className="h-4 w-4" />
-              Deactivate
+              {loading ? "Deactivating..." : "Deactivate"}
             </button>
           </div>
         </section>

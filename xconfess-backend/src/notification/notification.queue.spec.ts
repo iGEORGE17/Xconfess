@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import {
   NotificationQueue,
   CommentNotificationPayload,
@@ -10,9 +12,18 @@ import {
 } from '../email/email.service';
 import { AppLogger } from '../logger/logger.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { UserService } from '../user/user.service';
+import { User } from '../user/entities/user.entity';
+
+// NotificationQueue schedules periodic cleanup via setInterval in its ctor.
+// Disable intervals for unit tests to avoid open-handle warnings.
+const setIntervalSpy = jest
+  .spyOn(global as any, 'setInterval')
+  .mockImplementation(() => 0 as any);
 
 // ── Redis mock ────────────────────────────────────────────────────────────────
 const mockRedisSet = jest.fn();
+const mockLogNotificationDlqReplay = jest.fn();
 jest.mock('ioredis', () => {
   return jest.fn().mockImplementation(() => ({
     set: mockRedisSet,
@@ -26,6 +37,8 @@ const mockQueueClose = jest.fn().mockResolvedValue(undefined);
 const mockQueueGetJobCounts = jest
   .fn()
   .mockResolvedValue({ waiting: 0, active: 0, delayed: 0, failed: 0 });
+const mockQueueGetJobs = jest.fn().mockResolvedValue([]);
+const mockQueueGetJob = jest.fn().mockResolvedValue(null);
 const mockWorkerClose = jest.fn().mockResolvedValue(undefined);
 const mockWorkerOn = jest.fn();
 
@@ -35,8 +48,8 @@ jest.mock('bullmq', () => ({
     close: mockQueueClose,
     getJobCounts: mockQueueGetJobCounts,
     getFailedCount: jest.fn().mockResolvedValue(0),
-    getJobs: jest.fn().mockResolvedValue([]),
-    getJob: jest.fn().mockResolvedValue(null),
+    getJobs: mockQueueGetJobs,
+    getJob: mockQueueGetJob,
   })),
   Worker: jest.fn().mockImplementation(() => ({
     on: mockWorkerOn,
@@ -58,12 +71,12 @@ const makePayload = (
 describe('NotificationQueue', () => {
   let service: NotificationQueue;
   let logger: jest.Mocked<AppLogger>;
-  let emailServiceMock: { sendCommentNotification: jest.Mock };
+  let emailServiceMock: { sendGenericNotification: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     emailServiceMock = {
-      sendCommentNotification: jest.fn().mockResolvedValue(undefined),
+      sendGenericNotification: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -76,6 +89,10 @@ describe('NotificationQueue', () => {
         {
           provide: EmailService,
           useValue: emailServiceMock,
+        },
+        {
+          provide: UserService,
+          useValue: {},
         },
         {
           provide: AppLogger,
@@ -94,13 +111,29 @@ describe('NotificationQueue', () => {
         },
         {
           provide: AuditLogService,
-          useValue: { logNotificationDlqReplay: jest.fn() },
+          useValue: { logNotificationDlqReplay: mockLogNotificationDlqReplay },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            findOne: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
+          provide: 'DLQ_RETENTION_CONFIG',
+          useValue: { retentionDays: 14, cleanupBatchSize: 100, dryRun: false },
         },
       ],
     }).compile();
 
     service = module.get<NotificationQueue>(NotificationQueue);
     logger = module.get(AppLogger);
+  });
+
+  afterAll(() => {
+    setIntervalSpy.mockRestore();
   });
 
   // ── buildIdempotencyKey ──────────────────────────────────────────────────────
@@ -268,8 +301,8 @@ describe('NotificationQueue', () => {
     });
   });
 
-  describe('processCommentNotification', () => {
-    it('records actionable schema validation context on render failure', async () => {
+  describe('processNotification', () => {
+    it('logs and rethrows when sendGenericNotification fails', async () => {
       const validationError = new TemplateVariableValidationError(
         'comment_notification',
         'v2',
@@ -282,35 +315,149 @@ describe('NotificationQueue', () => {
           },
         ],
       );
-      (validationError as any).templateMeta = {
-        templateKey: 'comment_notification',
-        templateVersion: 'v2',
-        isCanary: true,
-      };
 
-      emailServiceMock.sendCommentNotification.mockRejectedValue(validationError);
+      emailServiceMock.sendGenericNotification.mockRejectedValue(
+        validationError,
+      );
 
       await expect(
-        (service as any).processCommentNotification(makePayload()),
+        (service as any).processNotification(
+          'comment-notification',
+          makePayload(),
+        ),
       ).rejects.toThrow(TemplateVariableValidationError);
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          failureContext: expect.objectContaining({
-            code: 'template_variable_validation_error',
-            templateKey: 'comment_notification',
-            templateVersion: 'v2',
-            templateTrack: 'canary',
-            violations: expect.arrayContaining([
-              expect.objectContaining({
-                code: 'unknown',
-                key: 'extraField',
-              }),
-            ]),
-          }),
-        }),
+        `Failed to process comment-notification notification: ${validationError.message}`,
         undefined,
         'NotificationQueue',
+      );
+    });
+  });
+
+  describe('replayDlqJob', () => {
+    it('replays successfully when dedupe slot is available', async () => {
+      const retry = jest.fn().mockResolvedValue(undefined);
+      const job = {
+        id: '1',
+        name: 'comment-notification',
+        data: { recipientEmail: 'user@example.com', commentId: 'c1' },
+        retry,
+      };
+
+      mockQueueGetJob.mockResolvedValue(job as any);
+      mockRedisSet.mockResolvedValue('OK');
+
+      const res = await service.replayDlqJob('1', 'admin-1', 'manual');
+
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(res.status).toBe('replayed');
+      expect(mockLogNotificationDlqReplay).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({
+          replayType: 'single',
+          queue: 'comment-notifications',
+          jobId: '1',
+          reason: 'manual',
+        }),
+      );
+    });
+
+    it('skips replay when dedupe slot is not available', async () => {
+      const retry = jest.fn().mockResolvedValue(undefined);
+      const job = {
+        id: '1',
+        name: 'comment-notification',
+        data: { recipientEmail: 'user@example.com', commentId: 'c1' },
+        retry,
+      };
+
+      mockQueueGetJob.mockResolvedValue(job as any);
+      mockRedisSet.mockResolvedValue(null);
+
+      const res = await service.replayDlqJob('1', 'admin-1', 'manual');
+
+      expect(retry).not.toHaveBeenCalled();
+      expect(res.status).toBe('skipped');
+      expect(mockLogNotificationDlqReplay).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({
+          replayType: 'single',
+          summary: { attempted: 1, replayed: 0, failed: 0 },
+        }),
+      );
+    });
+  });
+
+  describe('replayDlqJobsBulk', () => {
+    it('skips jobs when dedupe suppresses duplicate replays', async () => {
+      const failedJob = {
+        id: 1,
+        name: 'comment-notification',
+        timestamp: Date.now(),
+        finishedOn: null,
+        attemptsMade: 3,
+        failedReason: 'boom',
+        opts: { attempts: 3 },
+        data: {
+          recipientEmail: 'user@example.com',
+          commentId: 'c1',
+          channel: 'email_comment_notification',
+        },
+      };
+
+      const queuedJob = {
+        id: '1',
+        name: 'comment-notification',
+        data: {
+          recipientEmail: 'user@example.com',
+          commentId: 'c1',
+        },
+        retry: jest.fn().mockResolvedValue(undefined),
+      };
+
+      mockQueueGetJobs.mockResolvedValue([failedJob as any]);
+      mockQueueGetJob.mockResolvedValue(queuedJob as any);
+      mockRedisSet.mockResolvedValue(null);
+
+      const result = await service.replayDlqJobsBulk('admin-1', { limit: 1 });
+
+      expect(result.attempted).toBe(1);
+      expect(result.replayed).toBe(0);
+      expect(result.failed).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.details[0]).toEqual(
+        expect.objectContaining({
+          id: '1',
+          status: 'skipped',
+          reason: 'duplicate_replay_suppressed',
+        }),
+      );
+      expect(queuedJob.retry).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('autoReplayDlq', () => {
+    it('calls replayDlqJobsBulk with bounded parameters', async () => {
+      const replaySpy = jest
+        .spyOn(service as any, 'replayDlqJobsBulk')
+        .mockResolvedValue({
+          attempted: 0,
+          replayed: 0,
+          skipped: 0,
+          failed: 0,
+          details: [],
+        });
+
+      await (service as any).autoReplayDlq();
+
+      expect(replaySpy).toHaveBeenCalledWith(
+        'system',
+        expect.objectContaining({
+          limit: 50,
+          reason: 'auto',
+          failedAfter: expect.any(String),
+        }),
       );
     });
   });

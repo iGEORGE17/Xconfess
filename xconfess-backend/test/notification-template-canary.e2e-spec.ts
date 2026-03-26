@@ -422,9 +422,7 @@ describe('Notification Template Canary Routing (e2e)', () => {
     });
 
     it('should throw when requested version does not exist', () => {
-      expect(() =>
-        getTemplateVersion(REGISTRY, TEMPLATE_KEY, 'v99'),
-      ).toThrow(
+      expect(() => getTemplateVersion(REGISTRY, TEMPLATE_KEY, 'v99')).toThrow(
         /Template version 'v99' not found for key 'comment_notification'/,
       );
     });

@@ -9,6 +9,6 @@ import { ExportProcessor } from './export.processor';
 @Module({
   imports: [TypeOrmModule.forFeature([ExportRequest, ExportChunk])],
   controllers: [DataExportController],
-  providers: [DataExportService, ExportProcessor]
+  providers: [DataExportService, ExportProcessor],
 })
 export class DataExportModule {}

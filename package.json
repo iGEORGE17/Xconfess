@@ -14,12 +14,10 @@
     "dev": "concurrently \"npm run dev --workspace=xconfess-backend\" \"npm run dev --workspace=xconfess-frontend\"",
     "dev:backend": "npm run dev --workspace=xconfess-backend",
     "dev:frontend": "npm run dev --workspace=xconfess-frontend",
-
     "backend:build": "npm run build --workspace=xconfess-backend",
     "backend:test": "npm run test --workspace=xconfess-backend",
     "backend:test:e2e": "npm run test:e2e --workspace=xconfess-backend",
     "backend:lint": "npm run lint --workspace=xconfess-backend",
-
     "contract:build": "npm run build --workspace=xconfess-contract",
     "contract:build:release": "npm run build:release --workspace=xconfess-contract",
     "contract:test": "npm run test --workspace=xconfess-contract",
@@ -29,7 +27,6 @@
     "contract:fmt:check": "npm run fmt:check --workspace=xconfess-contract",
     "contract:clean": "npm run clean --workspace=xconfess-contract",
     "contract:deploy:testnet": "npm run deploy:testnet --workspace=xconfess-contract",
-
     "build": "npm run backend:build && npm run contract:build:release",
     "test": "npm run backend:test && npm run contract:test",
     "lint": "npm run backend:lint && npm run contract:lint",
@@ -44,6 +41,7 @@
     "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/testing": "^11.1.5",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^14.4.3",
     "express": "^5.1.0",
@@ -60,6 +58,7 @@
     "babel-jest": "^30.2.0",
     "concurrently": "^8.2.2",
     "jest": "^30.0.5",
+    "minimatch": "^9.0.5",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2"
   },

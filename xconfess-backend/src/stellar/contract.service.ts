@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { StellarConfigService } from './stellar-config.service';
 import { TransactionBuilderService } from './transaction-builder.service';
-import { IContractInvocation, ITransactionResult } from './interfaces/stellar-config.interface';
+import {
+  IContractInvocation,
+  ITransactionResult,
+} from './interfaces/stellar-config.interface';
+import { handleStellarError } from './utils/stellar-error.handler';
 
 @Injectable()
 export class ContractService {
@@ -11,7 +15,7 @@ export class ContractService {
   constructor(
     private stellarConfig: StellarConfigService,
     private txBuilder: TransactionBuilderService,
-  ) { }
+  ) {}
 
   /**
    * Invoke Soroban contract function
@@ -45,7 +49,7 @@ export class ContractService {
       };
     } catch (error) {
       this.logger.error(`Contract invocation failed: ${error.message}`);
-      throw new Error(`Contract call failed: ${error.message}`);
+      throw handleStellarError(error);
     }
   }
 

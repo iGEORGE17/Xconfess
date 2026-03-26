@@ -1,13 +1,14 @@
 "use client";
 
 import {
-  NotificationFilter,
-  PaginatedNotifications,
+    NotificationFilter,
+    PaginatedNotifications,
 } from "@/app/types/notifications";
-import type {Notification} from "@/app/types/notifications"
+import type { Notification } from "@/app/types/notifications";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { AUTH_TOKEN_KEY } from "@/app/lib/api/constants";
+import { useApiError } from "@/app/lib/hooks/useApiError";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
 
@@ -30,6 +31,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
   const [loading, setLoading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { handleError } = useApiError({ context: 'Notifications' });
 
   // Initialize notification sound
   useEffect(() => {
@@ -79,7 +81,7 @@ export function useNotifications(userId: string): UseNotificationsReturn {
 
         setUnreadCount(data.unreadCount);
       } catch (error) {
-        console.error("Error fetching notifications:", error);
+        handleError(error, 'Unable to load notifications. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -108,9 +110,9 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error("Error marking notification as read:", error);
+      handleError(error, 'Unable to mark notification as read. Please try again.');
     }
-  }, []);
+  }, [handleError]);
 
   const markAllAsRead = useCallback(async () => {
     try {
@@ -128,9 +130,9 @@ export function useNotifications(userId: string): UseNotificationsReturn {
       );
       setUnreadCount(0);
     } catch (error) {
-      console.error("Error marking all as read:", error);
+      handleError(error, 'Unable to mark all notifications as read. Please try again.');
     }
-  }, []);
+  }, [handleError]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
@@ -147,9 +149,9 @@ export function useNotifications(userId: string): UseNotificationsReturn {
         prev.filter((notif) => notif.id !== notificationId)
       );
     } catch (error) {
-      console.error("Error deleting notification:", error);
+      handleError(error, 'Unable to delete notification. Please try again.');
     }
-  }, []);
+  }, [handleError]);
 
   // WebSocket connection
   useEffect(() => {

@@ -1,11 +1,10 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from 'src/notifications/services/notification.service';
 import { NotificationType } from 'src/notifications/entities/notification.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditActionType } from '../audit-log/audit-log.entity';
-import { ModerationRepositoryService } from './moderation-repository.service';
-import { ModerationStatus, ModerationCategory } from './ai-moderation.service';
+import { ModerationStatus } from './ai-moderation.service';
 import { UserRole } from '../user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -32,7 +31,6 @@ export class ModerationEventsListener {
   constructor(
     private readonly notificationService: NotificationService,
     private readonly auditLogService: AuditLogService,
-    private readonly moderationRepoService: ModerationRepositoryService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
@@ -44,23 +42,17 @@ export class ModerationEventsListener {
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
     );
     try {
-      // Find all admin users
-      const admins = await this.userRepository.find({
-        where: { role: UserRole.ADMIN, is_active: true },
+      await this.notifyActiveAdmins({
+        title: 'High-Severity Content Detected',
+        message: `Confession ${event.confessionId} was rejected by moderation. Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
+        metadata: {
+          confessionId: event.confessionId,
+          score: event.score,
+          flags: event.flags,
+          eventType: 'high-severity',
+          moderationStatus: ModerationStatus.REJECTED,
+        },
       });
-      for (const admin of admins) {
-        await this.notificationService.createNotification({
-          type: NotificationType.SYSTEM,
-          userId: String(admin.id),
-          title: 'High-Severity Content Detected',
-          message: `Confession ${event.confessionId} flagged as high-severity. Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
-          metadata: {
-            confessionId: event.confessionId,
-            score: event.score,
-            flags: event.flags,
-          },
-        });
-      }
       await this.auditLogService.log({
         actionType: AuditActionType.MODERATION_ESCALATION,
         metadata: {
@@ -86,20 +78,17 @@ export class ModerationEventsListener {
         `Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
     );
     try {
-      // Persist moderation log entry for review queue
-      await this.moderationRepoService.createLog(
-        '', // content not needed for escalation
-        {
+      await this.notifyActiveAdmins({
+        title: 'Confession Requires Moderation Review',
+        message: `Confession ${event.confessionId} requires review. Score: ${event.score}, Flags: ${event.flags.join(', ')}`,
+        metadata: {
+          confessionId: event.confessionId,
           score: event.score,
-          flags: event.flags as unknown as ModerationCategory[],
-          status: ModerationStatus.FLAGGED,
-          requiresReview: true,
-          details: {}
+          flags: event.flags,
+          eventType: 'requires-review',
+          moderationStatus: ModerationStatus.FLAGGED,
         },
-        event.confessionId,
-        event.userId,
-        'escalation',
-      );
+      });
       await this.auditLogService.log({
         actionType: AuditActionType.MODERATION_ESCALATION,
         metadata: {
@@ -116,5 +105,27 @@ export class ModerationEventsListener {
       );
       throw err;
     }
+  }
+
+  private async notifyActiveAdmins(params: {
+    title: string;
+    message: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    const admins = await this.userRepository.find({
+      where: { role: UserRole.ADMIN, is_active: true },
+    });
+
+    await Promise.all(
+      admins.map((admin) =>
+        this.notificationService.createNotification({
+          type: NotificationType.SYSTEM,
+          userId: String(admin.id),
+          title: params.title,
+          message: params.message,
+          metadata: params.metadata,
+        }),
+      ),
+    );
   }
 }

@@ -1,11 +1,20 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, String as SorobanString,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String as SorobanString,
 };
 
 const SETTLEMENT_EVENT: soroban_sdk::Symbol = symbol_short!("tip_settl");
 const EVENT_VERSION_V1: u32 = 1;
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum Error {
+    InvalidTipAmount = 1,
+    MetadataTooLong = 2,
+    TotalOverflow = 3,
+    NonceOverflow = 4,
+}
 
 #[contract]
 pub struct AnonymousTipping;
@@ -126,3 +135,6 @@ impl AnonymousTipping {
             .unwrap_or(0_u64)
     }
 }
+
+#[cfg(test)]
+mod tipping_adversarial;
