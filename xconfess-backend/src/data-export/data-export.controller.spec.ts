@@ -4,6 +4,7 @@ import { DataExportService } from './data-export.service';
 import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
+  ConflictException,
   UnauthorizedException,
   NotFoundException,
 } from '@nestjs/common';
@@ -370,6 +371,75 @@ describe('DataExportController', () => {
       expect(mockExportService.getExportHistory).toHaveBeenCalledWith(userId);
       expect(result.latest).toBe(mockLatest);
       expect(result.history).toEqual(mockHistory);
+    });
+  });
+
+  // ── Request Export Tests ─────────────────────────────────────────────────────
+
+  describe('Request Export Endpoint', () => {
+    it('should create a new export job and return 201', async () => {
+      const userId = 'user-1';
+      const mockUser = { id: userId };
+      const mockResult = { requestId: 'req-new', status: 'PENDING', queuedAt: new Date() };
+
+      mockExportService.requestExport.mockResolvedValue(mockResult as any);
+
+      const result = await controller.requestExport({ user: mockUser } as any);
+
+      expect(mockExportService.requestExport).toHaveBeenCalledWith(userId);
+      expect(result.requestId).toBe('req-new');
+      expect(result.status).toBe('PENDING');
+    });
+
+    it('should propagate ConflictException (409) when an active export already exists', async () => {
+      const userId = 'user-2';
+      const mockUser = { id: userId };
+
+      mockExportService.requestExport.mockRejectedValue(
+        new ConflictException('An export is already in progress. Please wait for it to complete.'),
+      );
+
+      await expect(
+        controller.requestExport({ user: mockUser } as any),
+      ).rejects.toThrow(ConflictException);
+
+      expect(mockExportService.requestExport).toHaveBeenCalledWith(userId);
+    });
+
+    it('should propagate BadRequestException (400) for the 7-day rate limit', async () => {
+      const userId = 'user-3';
+      const mockUser = { id: userId };
+
+      mockExportService.requestExport.mockRejectedValue(
+        new BadRequestException('Export allowed once every 7 days.'),
+      );
+
+      await expect(
+        controller.requestExport({ user: mockUser } as any),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockExportService.requestExport).toHaveBeenCalledWith(userId);
+    });
+
+    it('should not create a second job when called twice concurrently for the same user', async () => {
+      const userId = 'user-4';
+      const mockUser = { id: userId };
+      const mockResult = { requestId: 'req-first', status: 'PENDING', queuedAt: new Date() };
+
+      // First call succeeds; second call raises ConflictException as if an active job exists.
+      mockExportService.requestExport
+        .mockResolvedValueOnce(mockResult as any)
+        .mockRejectedValueOnce(
+          new ConflictException('An export is already in progress. Please wait for it to complete.'),
+        );
+
+      const first = controller.requestExport({ user: mockUser } as any);
+      const second = controller.requestExport({ user: mockUser } as any);
+
+      const [firstResult] = await Promise.allSettled([first, second]);
+
+      expect(firstResult.status).toBe('fulfilled');
+      expect(mockExportService.requestExport).toHaveBeenCalledTimes(2);
     });
   });
 });

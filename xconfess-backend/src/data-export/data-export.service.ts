@@ -2,6 +2,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
@@ -67,7 +68,21 @@ export class DataExportService {
   ) {}
 
   async requestExport(userId: string) {
-    // 1. Rate Limit Check: Find any request created in the last 7 days
+    // 1a. Duplicate-submission guard: reject if a job is already PENDING or PROCESSING.
+    const activeJob = await this.exportRepository.findOne({
+      where: [
+        { userId, status: 'PENDING' },
+        { userId, status: 'PROCESSING' },
+      ],
+    });
+
+    if (activeJob) {
+      throw new ConflictException(
+        'An export is already in progress. Please wait for it to complete.',
+      );
+    }
+
+    // 1b. Rate Limit Check: Find any request created in the last 7 days
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
