@@ -143,10 +143,12 @@ describe('EmailNotificationService', () => {
 
       expect(mockTransporter.sendMail).toHaveBeenCalledTimes(1);
       const mailOptions = mockTransporter.sendMail.mock.calls[0][0];
-      
+
       expect(mailOptions.to).toBe('test@example.com');
       expect(mailOptions.subject).toBe('New Message on xConfess');
-      expect(mailOptions.html).toContain('You\'ve received a new anonymous message');
+      expect(mailOptions.html).toContain(
+        "You've received a new anonymous message",
+      );
       expect(mailOptions.html).toContain('You got a new message');
     });
 
@@ -161,9 +163,9 @@ describe('EmailNotificationService', () => {
 
       expect(mockTransporter.sendMail).toHaveBeenCalledTimes(1);
       const mailOptions = mockTransporter.sendMail.mock.calls[0][0];
-      
+
       expect(mailOptions.subject).toBe('5 New Messages on xConfess');
-      expect(mailOptions.html).toContain('You\'ve received multiple messages');
+      expect(mailOptions.html).toContain("You've received multiple messages");
       expect(mailOptions.html).toContain('5');
     });
 
@@ -179,7 +181,7 @@ describe('EmailNotificationService', () => {
 
       expect(mockTransporter.sendMail).toHaveBeenCalledTimes(1);
       const mailOptions = mockTransporter.sendMail.mock.calls[0][0];
-      
+
       expect(mailOptions.subject).toBe('System Alert');
       expect(mailOptions.html).toContain('System Alert');
       expect(mailOptions.html).toContain('Scheduled maintenance soon.');

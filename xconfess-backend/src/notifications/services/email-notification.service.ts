@@ -21,19 +21,20 @@ export class EmailNotificationService {
     private preferenceRepository: Repository<NotificationPreference>,
   ) {
     this.transporter = nodemailer.createTransport({
-      host: this.configService.get('SMTP_HOST'),
-      port: this.configService.get('SMTP_PORT'),
-      secure: this.configService.get('SMTP_SECURE') === 'true',
+      host: this.configService.get<string>('SMTP_HOST'),
+      port: this.configService.get<number>('SMTP_PORT'),
+      secure: this.configService.get<string>('SMTP_SECURE') === 'true',
       auth: {
-        user: this.configService.get('SMTP_USER'),
-        pass: this.configService.get('SMTP_PASS'),
+        user: this.configService.get<string>('SMTP_USER'),
+        pass: this.configService.get<string>('SMTP_PASS'),
       },
     });
   }
 
   async sendEmail(data: NotificationJobData) {
+    const userId = data.userId;
     const preference = await this.preferenceRepository.findOne({
-      where: { userId: data.userId },
+      where: { userId },
     });
 
     if (
@@ -41,7 +42,7 @@ export class EmailNotificationService {
       !preference.enableEmailNotifications ||
       !preference.emailAddress
     ) {
-      this.logger.log(`Email notifications disabled for user ${data.userId}`);
+      this.logger.log(`Email notifications disabled for user ${userId}`);
       return;
     }
 
@@ -49,7 +50,9 @@ export class EmailNotificationService {
       data.type === NotificationType.NEW_MESSAGE &&
       !preference.emailNewMessage
     ) {
-      this.logger.log(`New message email notifications disabled for user ${data.userId}`);
+      this.logger.log(
+        `New message email notifications disabled for user ${userId}`,
+      );
       return;
     }
 
@@ -57,14 +60,16 @@ export class EmailNotificationService {
       data.type === NotificationType.MESSAGE_BATCH &&
       !preference.emailMessageBatch
     ) {
-      this.logger.log(`Batch message email notifications disabled for user ${data.userId}`);
+      this.logger.log(
+        `Batch message email notifications disabled for user ${userId}`,
+      );
       return;
     }
 
     const mockNotification = {
       id: data._meta?.originalJobId || 'job-' + Date.now(),
       type: data.type,
-      userId: data.userId,
+      userId: userId,
       title: data.title,
       message: data.message,
       metadata: data.metadata,
@@ -81,7 +86,7 @@ export class EmailNotificationService {
       const { subject, html, text } = this.buildEmailContent(notification);
 
       await this.transporter.sendMail({
-        from: this.configService.get('SMTP_FROM_EMAIL'),
+        from: this.configService.get<string>('SMTP_FROM_EMAIL'),
         to: recipientEmail,
         subject,
         html,
@@ -92,7 +97,7 @@ export class EmailNotificationService {
     } catch (error) {
       this.logger.error(
         `Failed to send email for notification ${notification.id}:`,
-        error,
+        error instanceof Error ? error.message : String(error),
       );
       throw error;
     }
@@ -103,7 +108,7 @@ export class EmailNotificationService {
     html: string;
     text: string;
   } {
-    const appUrl = this.configService.get('APP_URL');
+    const appUrl = (this.configService.get<string>('APP_URL') as string) || '';
 
     switch (notification.type) {
       case NotificationType.NEW_MESSAGE:
@@ -123,7 +128,7 @@ export class EmailNotificationService {
       default:
         return {
           subject: notification.title,
-          html: this.buildGenericEmail(notification, appUrl),
+          html: this.buildGenericEmail(notification),
           text: notification.message,
         };
     }
@@ -231,10 +236,7 @@ export class EmailNotificationService {
     `;
   }
 
-  private buildGenericEmail(
-    notification: Notification,
-    appUrl: string,
-  ): string {
+  private buildGenericEmail(notification: Notification): string {
     return `
       <!DOCTYPE html>
       <html>
@@ -268,13 +270,13 @@ export class EmailNotificationService {
   }
 
   private escapeHtml(text: string): string {
-    const map = {
+    const map: Record<string, string> = {
       '&': '&amp;',
       '<': '&lt;',
       '>': '&gt;',
       '"': '&quot;',
       "'": '&#039;',
     };
-    return text.replace(/[&<>"']/g, (m) => map[m]);
+    return text.replace(/[&<>"']/g, (m) => map[m] || m);
   }
 }
