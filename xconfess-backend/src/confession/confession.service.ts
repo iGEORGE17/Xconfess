@@ -36,6 +36,7 @@ import { AnchorConfessionDto } from '../stellar/dto/anchor-confession.dto';
 import { CacheService } from '../cache/cache.service';
 import { TagService } from './tag.service';
 import { ConfessionTag } from './entities/confession-tag.entity';
+import { toWindowBoundaries, TrendingWindow } from 'src/types/analytics.types';
 
 @Injectable()
 export class ConfessionService {
@@ -365,16 +366,91 @@ export class ConfessionService {
     };
   }
 
+  /**
+   * Determine whether this query should be sampled for observability.
+   * Uses Math.random() against the configured sample rate so that overhead
+   * stays bounded under high traffic.
+   */
+  private shouldSampleSearch(): boolean {
+    const rate = this.configService.get<number>(
+      'app.searchSampleRate',
+      0.1,
+    );
+    return Math.random() < rate;
+  }
+
+  /**
+   * Emit observability signals after a search call completes.
+   * Always warns on slow queries; emits a sampled info log otherwise.
+   */
+  private emitSearchObservability(opts: {
+    durationMs: number;
+    rawTerm: string;
+    searchType: 'fulltext' | 'hybrid' | 'ilike';
+    page: number;
+    limit: number;
+    resultCount: number;
+    sampled: boolean;
+  }): void {
+    const thresholdMs = this.configService.get<number>(
+      'app.searchSlowQueryThresholdMs',
+      500,
+    );
+
+    this.logger.observeTimer('search.duration_ms', opts.durationMs, {
+      searchType: opts.searchType,
+    });
+
+    if (opts.durationMs >= thresholdMs) {
+      this.logger.logSlowSearch({
+        durationMs: opts.durationMs,
+        rawTerm: opts.rawTerm,
+        searchType: opts.searchType,
+        page: opts.page,
+        limit: opts.limit,
+        resultCount: opts.resultCount,
+        thresholdMs,
+      });
+      return;
+    }
+
+    if (opts.sampled) {
+      this.logger.logSampledSearch({
+        durationMs: opts.durationMs,
+        rawTerm: opts.rawTerm,
+        searchType: opts.searchType,
+        page: opts.page,
+        limit: opts.limit,
+        resultCount: opts.resultCount,
+      });
+    }
+  }
+
   async search(dto: SearchConfessionDto) {
     if (!dto.q.trim())
       throw new BadRequestException('Search term cannot be empty');
     const limit =
       typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const sampled = this.shouldSampleSearch();
+    const t0 = Date.now();
     const result = await this.confessionRepo.hybridSearch(
       dto.q.trim(),
       dto.page,
       limit,
     );
+    const durationMs = Date.now() - t0;
+    const resultCount = result?.confessions?.length ?? 0;
+
+    this.emitSearchObservability({
+      durationMs,
+      rawTerm: dto.q,
+      searchType: 'hybrid',
+      page: dto.page ?? 1,
+      limit,
+      resultCount,
+      sampled,
+    });
+
     return {
       data: result?.confessions || [],
       meta: {
@@ -392,11 +468,26 @@ export class ConfessionService {
       throw new BadRequestException('Search term cannot be empty');
     const limit =
       typeof dto.limit === 'number' ? dto.limit : Number(dto.limit) || 10;
+    const sampled = this.shouldSampleSearch();
+    const t0 = Date.now();
     const result = await this.confessionRepo.fullTextSearch(
       dto.q.trim(),
       dto.page,
       limit,
     );
+    const durationMs = Date.now() - t0;
+    const resultCount = result?.confessions?.length ?? 0;
+
+    this.emitSearchObservability({
+      durationMs,
+      rawTerm: dto.q,
+      searchType: 'fulltext',
+      page: dto.page ?? 1,
+      limit,
+      resultCount,
+      sampled,
+    });
+
     return {
       data: result?.confessions || [],
       meta: {
@@ -482,7 +573,10 @@ export class ConfessionService {
   }
 
   async getTrendingConfessions() {
-    const confs = await this.confessionRepo.findTrending(10);
+    // Standardize the trending window to 24 h with UTC-floored boundaries
+    // so edge-of-day records are counted consistently.
+    const { startAt, endAt } = toWindowBoundaries(TrendingWindow.DAY);
+    const confs = await this.confessionRepo.findTrending(10, startAt, endAt);
     return { data: confs };
   }
 
