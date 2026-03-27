@@ -186,6 +186,9 @@ Key supporting references:
    STELLAR_NETWORK=testnet
    STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
    CONFESSION_ANCHOR_CONTRACT=<contract-id>
+
+   # Encryption Configuration (64-char hex)
+   CONFESSION_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
    ```
 
 5. **Set up the database**
