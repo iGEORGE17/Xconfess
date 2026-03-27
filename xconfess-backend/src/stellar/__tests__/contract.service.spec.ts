@@ -1,3 +1,4 @@
+// src/stellar/__tests__/stellar.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { ContractService } from '../contract.service';
 import { StellarConfigService } from '../stellar-config.service';
@@ -10,6 +11,7 @@ import {
 describe('ContractService', () => {
   let service: ContractService;
   let module: TestingModule;
+  let txBuilderService: TransactionBuilderService;
 
   beforeEach(async () => {
     module = await Test.createTestingModule({
@@ -19,7 +21,9 @@ describe('ContractService', () => {
         TransactionBuilderService,
       ],
     }).compile();
+
     service = module.get<ContractService>(ContractService);
+    txBuilderService = module.get(TransactionBuilderService);
   });
 
   it('should be defined', () => {
@@ -27,7 +31,7 @@ describe('ContractService', () => {
   });
 
   describe('encodeContractArgs', () => {
-    it('should return args as-is (buggy, to be fixed)', () => {
+    it('should return args as-is (temporary placeholder)', () => {
       const args = ['foo', 123, true];
       expect(service['encodeContractArgs'](args)).toEqual(args);
     });
@@ -35,15 +39,14 @@ describe('ContractService', () => {
 
   describe('Negative Paths & Error Handling', () => {
     it('should throw StellarTimeoutError when transaction times out', async () => {
+      // Mock internal methods
       jest.spyOn(service as any, 'encodeContractArgs').mockReturnValue([]);
       jest
-        .spyOn(module.get(TransactionBuilderService), 'buildTransaction')
+        .spyOn(txBuilderService, 'buildTransaction')
         .mockResolvedValue({} as any);
+      jest.spyOn(txBuilderService, 'signTransaction').mockReturnValue({} as any);
       jest
-        .spyOn(module.get(TransactionBuilderService), 'signTransaction')
-        .mockReturnValue({} as any);
-      jest
-        .spyOn(module.get(TransactionBuilderService), 'submitTransaction')
+        .spyOn(txBuilderService, 'submitTransaction')
         .mockRejectedValue(new Error('Transaction timeout'));
 
       await expect(
@@ -59,14 +62,12 @@ describe('ContractService', () => {
       ).rejects.toThrow(StellarTimeoutError);
     });
 
-    it('should throw StellarMalformedTransactionError on tx_bad_seq (prevents duplicate writes)', async () => {
+    it('should throw StellarMalformedTransactionError on tx_bad_seq', async () => {
       jest.spyOn(service as any, 'encodeContractArgs').mockReturnValue([]);
       jest
-        .spyOn(module.get(TransactionBuilderService), 'buildTransaction')
+        .spyOn(txBuilderService, 'buildTransaction')
         .mockResolvedValue({} as any);
-      jest
-        .spyOn(module.get(TransactionBuilderService), 'signTransaction')
-        .mockReturnValue({} as any);
+      jest.spyOn(txBuilderService, 'signTransaction').mockReturnValue({} as any);
 
       const badSeqError = {
         response: {
@@ -77,8 +78,9 @@ describe('ContractService', () => {
           },
         },
       };
+
       jest
-        .spyOn(module.get(TransactionBuilderService), 'submitTransaction')
+        .spyOn(txBuilderService, 'submitTransaction')
         .mockRejectedValue(badSeqError);
 
       await expect(
