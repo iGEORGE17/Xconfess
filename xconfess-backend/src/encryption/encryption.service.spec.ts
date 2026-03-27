@@ -107,7 +107,9 @@ describe('EncryptionService', () => {
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile(),
-    ).rejects.toThrow('ENCRYPTION_KEY must be set in environment variables');
+    ).rejects.toThrow(
+      'CONFESSION_ENCRYPTION_KEY must be set in environment variables',
+    );
   });
 
   it('should enforce ENCRYPTION_KEY size at construction time', async () => {
@@ -120,6 +122,8 @@ describe('EncryptionService', () => {
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile(),
-    ).rejects.toThrow('ENCRYPTION_KEY must be 32 bytes (64 hex characters)');
+    ).rejects.toThrow(
+      'CONFESSION_ENCRYPTION_KEY must be 32 bytes (64 hex characters)',
+    );
   });
 });
