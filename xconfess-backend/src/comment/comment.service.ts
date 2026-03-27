@@ -231,8 +231,10 @@ export class CommentService {
           whereCondition: '',
         };
 
-      default:
-        throw new BadRequestException(`Unsupported sort field: ${sortField}`);
+      default: {
+  const _exhaustiveCheck: never = sortField;
+  throw new BadRequestException(`Unsupported sort field: ${_exhaustiveCheck}`);
+}
     }
   }
 
