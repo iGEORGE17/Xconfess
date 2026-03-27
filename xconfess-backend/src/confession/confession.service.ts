@@ -437,6 +437,7 @@ export class ConfessionService {
       dto.q.trim(),
       dto.page,
       limit,
+      dto,
     );
     const durationMs = Date.now() - t0;
     const resultCount = result?.confessions?.length ?? 0;
@@ -474,6 +475,7 @@ export class ConfessionService {
       dto.q.trim(),
       dto.page,
       limit,
+      dto,
     );
     const durationMs = Date.now() - t0;
     const resultCount = result?.confessions?.length ?? 0;

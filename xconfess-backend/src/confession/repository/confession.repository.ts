@@ -2,6 +2,7 @@
 import { DataSource, Repository, FindOptionsWhere, ILike } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { AnonymousConfession } from '../entities/confession.entity';
+import { SearchConfessionDto } from '../dto/search-confession.dto';
 
 /**
  * Repository for handling database operations related to anonymous confessions.
@@ -52,12 +53,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param searchTerm The search query
    * @param page Page number for pagination
    * @param limit Number of results per page
+   * @param dto Optional search filters including anonymousOnly
    * @returns Array of confessions ranked by relevance
    */
   async fullTextSearch(
     searchTerm: string,
     page: number = 1,
     limit: number = 10,
+    dto?: Partial<SearchConfessionDto>,
   ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
@@ -88,6 +91,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       return { confessions: [], total: 0 };
     }
 
+    // Build the query with ts_rank for relevance scoring
     const queryBuilder = this.createQueryBuilder('confession')
       .leftJoinAndSelect('confession.anonymousUser', 'anonymousUser')
       .leftJoinAndSelect('anonymousUser.userLinks', 'userLinks')
@@ -97,9 +101,20 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
         sanitizedTerm,
       })
       .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      })
       .andWhere(
         "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
-      )
+      );
+
+    // Apply anonymous-only filter if requested
+    if (dto?.anonymousOnly) {
+      queryBuilder.andWhere('userLinks.id IS NULL');
+    }
+
+    queryBuilder
       .addSelect(
         'ts_rank(confession.search_vector, plainto_tsquery(:sanitizedTerm))',
         'rank',
@@ -109,6 +124,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       .skip(offset)
       .take(limit);
 
+    // Get total count for pagination
     const totalQuery = this.createQueryBuilder('confession')
       .leftJoin('confession.anonymousUser', 'anonymousUser')
       .leftJoin('anonymousUser.userLinks', 'userLinks')
@@ -117,9 +133,17 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
         sanitizedTerm,
       })
       .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      })
       .andWhere(
         "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
       );
+
+    if (dto?.anonymousOnly) {
+      totalQuery.andWhere('userLinks.id IS NULL');
+    }
 
     let confessions: AnonymousConfession[] = [];
     let total = 0;
@@ -141,12 +165,14 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
    * @param searchTerm The search query
    * @param page Page number for pagination
    * @param limit Number of results per page
+   * @param dto Optional search filters including anonymousOnly
    * @returns Array of confessions with relevance ranking
    */
   async hybridSearch(
     searchTerm: string,
     page: number = 1,
     limit: number = 10,
+    dto?: Partial<SearchConfessionDto>,
   ): Promise<{
     confessions: AnonymousConfession[];
     total: number;
@@ -156,6 +182,7 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
       searchTerm,
       page,
       safeLimit,
+      dto,
     );
 
     if (fullTextResult.total > 0) {
@@ -173,9 +200,20 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
         searchTerm: `%${searchTerm}%`,
       })
       .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      })
       .andWhere(
         "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
-      )
+      );
+
+    // Apply anonymous-only filter if requested
+    if (dto?.anonymousOnly) {
+      queryBuilder.andWhere('userLinks.id IS NULL');
+    }
+
+    queryBuilder
       .orderBy('confession.created_at', 'DESC')
       .skip(offset)
       .take(safeLimit);
@@ -188,9 +226,17 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
         searchTerm: `%${searchTerm}%`,
       })
       .andWhere('confession.isDeleted = false')
+      .andWhere('confession.isHidden = false')
+      .andWhere('confession.moderationStatus IN (:...statuses)', {
+        statuses: ['approved', 'pending'],
+      })
       .andWhere(
         "(anonymousUser.userLinks IS NULL OR anonymousUser.userLinks = '{}' OR user.privacy_settings IS NULL OR user.privacy_settings->>'isDiscoverable' = 'true' OR JSON_TYPE(user.privacy_settings, '$.isDiscoverable') IS NULL)",
       );
+
+    if (dto?.anonymousOnly) {
+      totalQuery.andWhere('userLinks.id IS NULL');
+    }
 
     const [confessions, total] = await Promise.all([
       queryBuilder.getMany(),
