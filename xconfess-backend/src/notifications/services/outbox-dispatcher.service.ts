@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, In } from 'typeorm';
+import { Repository, LessThan } from 'typeorm';
 import {
   OutboxEvent,
   OutboxStatus,
-} from '../common/entities/outbox-event.entity';
-import { NotificationQueue } from './notification.queue';
+} from '../../common/entities/outbox-event.entity';
+import { NotificationService } from './notification.service';
 
 @Injectable()
 export class OutboxDispatcherService {
@@ -16,7 +16,7 @@ export class OutboxDispatcherService {
   constructor(
     @InjectRepository(OutboxEvent)
     private readonly outboxRepo: Repository<OutboxEvent>,
-    private readonly notificationQueue: NotificationQueue,
+    private readonly notificationService: NotificationService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS)
@@ -61,30 +61,16 @@ export class OutboxDispatcherService {
       // Dispatch based on type
       switch (event.type) {
         case 'comment_notification':
-          await this.notificationQueue.enqueueCommentNotification(
-            event.payload,
-          );
-          break;
         case 'message_notification':
-          await this.notificationQueue.enqueueMessageNotification(
-            event.payload,
-          );
-          break;
         case 'reply_notification':
-          await this.notificationQueue.enqueueReplyNotification(event.payload);
-          break;
         case 'reaction_notification':
         case 'reaction_update':
-          await this.notificationQueue.enqueueReactionNotification(
-            event.payload,
-          );
-          break;
         case 'report_notification':
-          await this.notificationQueue.enqueueReportNotification(event.payload);
+          await this.notificationService.enqueueNotification(event.type, event.payload);
           break;
         default:
           this.logger.warn(`Unknown outbox event type: ${event.type}`);
-          event.status = OutboxStatus.COMPLETED; // Mark as completed to stop retrying unknown types
+          event.status = OutboxStatus.COMPLETED;
           event.processedAt = new Date();
           await this.outboxRepo.save(event);
           return;
