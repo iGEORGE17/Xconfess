@@ -152,8 +152,8 @@ print_success "All contract tests completed successfully! ✓"
 
 echo ""
 print_info "Next steps:"
-echo "  1. Build contracts: ./scripts/build-contracts.sh"
-echo "  2. Deploy to testnet: ./scripts/deploy-contracts.sh"
+echo "  1. Build contracts: ./scripts/contracts-release.sh build"
+echo "  2. Deploy to testnet: ./scripts/contracts-release.sh deploy --network testnet --source deployer"
 echo "  3. Run with coverage: cargo tarpaulin --workspace"
 
 # Return to original directory

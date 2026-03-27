@@ -172,7 +172,7 @@ rustup target add wasm32-unknown-unknown
 #### Step 1: Navigate to Contract Directory
 
 ```bash
-cd contracts/soroban-xconfess/confession-anchor
+cd xconfess-contracts
 ```
 
 #### Step 2: Build with Stellar CLI (Recommended)
@@ -194,8 +194,8 @@ cargo build --target wasm32-unknown-unknown --release
 #### Using the Build Script
 
 ```bash
-# From project root
-./scripts/build-contracts.sh
+# From project root (recommended canonical flow)
+./scripts/contracts-release.sh build
 ```
 
 ---
@@ -207,7 +207,7 @@ cargo build --target wasm32-unknown-unknown --release
 #### Step 1: Navigate to Contract Directory
 
 ```bash
-cd contracts/soroban-xconfess/confession-anchor
+cd xconfess-contracts
 ```
 
 #### Step 2: Run All Tests
@@ -291,14 +291,9 @@ curl "https://friendbot.stellar.org?addr=$(stellar keys address deployer)"
 #### Step 4: Deploy Contract
 
 ```bash
-# Navigate to contract directory
-cd contracts/soroban-xconfess/confession-anchor
-
-# Deploy
-stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/confession_anchor.wasm \
-  --source deployer \
-  --network testnet
+# Build and deploy all contract crates with one flow
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network testnet --source deployer
 ```
 
 Save the returned contract ID (e.g., `CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD7E7IGV74ZP5XFB`)
@@ -307,7 +302,7 @@ Save the returned contract ID (e.g., `CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD
 
 ```bash
 # From project root
-./scripts/deploy-contracts.sh
+./scripts/contracts-release.sh deploy --network testnet --source deployer
 ```
 
 ---

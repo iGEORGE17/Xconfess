@@ -2,6 +2,23 @@
 
 Complete guide for deploying xConfess smart contracts to Stellar networks.
 
+## Canonical Reproducible Flow
+
+Use the single root script for both build and deploy operations:
+
+```bash
+# From repository root
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network testnet --source deployer
+```
+
+This flow builds all workspace contract crates with locked dependencies, verifies
+the expected WASM artifacts, and writes deployment metadata including crate
+versions and SHA-256 hashes.
+
+Versioning expectations for crate releases are defined in
+[`VERSIONING.md`](./VERSIONING.md).
+
 ## 📋 Prerequisites
 
 Before deploying contracts, ensure you have:
