@@ -1,4 +1,14 @@
 #![no_std]
+#[cfg(test)]
+#[path = "confession_reg_auth.rs"]
+mod confession_reg_auth;
+
+use crate::{
+    ConfessionRegistry,
+    ConfessionRegistryClient,
+    ConfessionStatus,
+    governance,
+};
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Symbol, Vec,
@@ -12,6 +22,7 @@ mod error;
 mod events;
 #[path = "../../governance/mod.rs"]
 mod governance;
+// mod confession_reg_auth;
 
 // ─── Data Types ───
 
@@ -230,43 +241,58 @@ impl ConfessionRegistry {
     ///
     /// Emits: `("confession_updated", id)` → `(old_status, new_status, timestamp)`
     pub fn update_status(
-        env: Env,
-        caller: Address,
-        id: u64,
-        new_status: ConfessionStatus,
-        timestamp: u64,
-    ) {
-        caller.require_auth();
+    env: Env,
+    caller: Address,
+    id: u64,
+    new_status: ConfessionStatus,
+    timestamp: u64,
+) {
+    caller.require_auth();
 
-        let mut confession: Confession = env
-            .storage()
-            .instance()
-            .get(&DataKey::Confession(id))
-            .expect("confession not found");
-
-        // Only author or admin may update
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("contract not initialized");
-
-        if caller != confession.author && caller != admin {
-            panic!("unauthorized: only author or admin can update status");
-        }
-
-        let old_status = confession.status.clone();
-        confession.status = new_status;
-        confession.updated_at = timestamp;
-
-        env.storage()
-            .instance()
-            .set(&DataKey::Confession(id), &confession);
-
-        let event_topic = Symbol::new(&env, "confession_updated");
-        env.events()
-            .publish((event_topic, id), (old_status, confession.status, timestamp));
+    // Pause guard — mirrors create_confession
+    let paused: bool = env
+        .storage()
+        .instance()
+        .get(&symbol_short!("paused"))
+        .unwrap_or(false);
+    if paused {
+        panic!("contract paused");
     }
+
+    let mut confession: Confession = env
+        .storage()
+        .instance()
+        .get(&DataKey::Confession(id))
+        .expect("confession not found");
+
+    // Terminal-state guard — a deleted confession is immutable.
+    // Prevents resurrection (Deleted → Active) and double-delete side effects.
+    if confession.status == ConfessionStatus::Deleted {
+        panic!("confession is deleted and cannot be updated");
+    }
+
+    let admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .expect("contract not initialized");
+
+    if caller != confession.author && caller != admin {
+        panic!("unauthorized: only author or admin can update status");
+    }
+
+    let old_status = confession.status.clone();
+    confession.status = new_status;
+    confession.updated_at = timestamp;
+
+    env.storage()
+        .instance()
+        .set(&DataKey::Confession(id), &confession);
+
+    let event_topic = Symbol::new(&env, "confession_updated");
+    env.events()
+        .publish((event_topic, id), (old_status, confession.status, timestamp));
+}
 
     // ─── Delete ───
 
@@ -276,35 +302,50 @@ impl ConfessionRegistry {
     ///
     /// Emits: `("confession_deleted", id)` → `(caller, timestamp)`
     pub fn delete_confession(env: Env, caller: Address, id: u64, timestamp: u64) {
-        caller.require_auth();
+    caller.require_auth();
 
-        let mut confession: Confession = env
-            .storage()
-            .instance()
-            .get(&DataKey::Confession(id))
-            .expect("confession not found");
-
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("contract not initialized");
-
-        if caller != confession.author && caller != admin {
-            panic!("unauthorized: only author or admin can delete");
-        }
-
-        confession.status = ConfessionStatus::Deleted;
-        confession.updated_at = timestamp;
-
-        env.storage()
-            .instance()
-            .set(&DataKey::Confession(id), &confession);
-
-        let event_topic = Symbol::new(&env, "confession_deleted");
-        env.events()
-            .publish((event_topic, id), (caller, timestamp));
+    // Pause guard — mirrors create_confession
+    let paused: bool = env
+        .storage()
+        .instance()
+        .get(&symbol_short!("paused"))
+        .unwrap_or(false);
+    if paused {
+        panic!("contract paused");
     }
+
+    let mut confession: Confession = env
+        .storage()
+        .instance()
+        .get(&DataKey::Confession(id))
+        .expect("confession not found");
+
+    // Terminal-state guard — prevents double-delete and misleading updated_at stamps.
+    if confession.status == ConfessionStatus::Deleted {
+        panic!("confession is already deleted");
+    }
+
+    let admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .expect("contract not initialized");
+
+    if caller != confession.author && caller != admin {
+        panic!("unauthorized: only author or admin can delete");
+    }
+
+    confession.status = ConfessionStatus::Deleted;
+    confession.updated_at = timestamp;
+
+    env.storage()
+        .instance()
+        .set(&DataKey::Confession(id), &confession);
+
+    let event_topic = Symbol::new(&env, "confession_deleted");
+    env.events()
+        .publish((event_topic, id), (caller, timestamp));
+}
 }
 
 // ─── Tests ───
