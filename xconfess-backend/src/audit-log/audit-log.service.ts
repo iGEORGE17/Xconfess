@@ -8,6 +8,17 @@ export interface AuditLogContext {
   ipAddress?: string;
   userAgent?: string;
   requestId?: string;
+  actor?: AuditActor;
+}
+
+export type AuditActorType = 'admin' | 'user' | 'system' | 'webhook';
+
+export interface AuditActor {
+  type: AuditActorType;
+  id: string;
+  userId?: string | null;
+  label?: string;
+  source?: string | null;
 }
 
 export interface CreateAuditLogDto {
@@ -33,6 +44,7 @@ export interface TemplateRolloutDiffRecord {
     | 'kill_switch_toggle'
     | 'fallback_activation';
   actorId: string;
+  actorType?: AuditActorType;
   before: Record<string, any>;
   after: Record<string, any>;
   source?: TemplateRolloutSourceMetadata;
@@ -44,7 +56,7 @@ export type ExportLifecycleAction =
   | 'link_refreshed'
   | 'downloaded';
 
-export type ExportActorType = 'user' | 'system';
+export type ExportActorType = AuditActorType;
 
 export interface ExportLifecycleAuditRecord {
   action: ExportLifecycleAction;
@@ -74,11 +86,21 @@ export class AuditLogService {
    */
   async log(dto: CreateAuditLogDto): Promise<void> {
     try {
+      const actor = this.resolveActor(dto);
       const auditLog = this.auditLogRepository.create({
         userId: dto.context?.userId || null,
         actionType: dto.actionType,
         metadata: {
           ...(dto.metadata || {}),
+          ...(actor
+            ? {
+                actorType: actor.type,
+                actorId: actor.id,
+                actorUserId: actor.userId || null,
+                ...(actor.label ? { actorLabel: actor.label } : {}),
+                ...(actor.source ? { actorSource: actor.source } : {}),
+              }
+            : {}),
           ...(dto.context?.requestId
             ? { requestId: dto.context.requestId }
             : {}),
@@ -96,7 +118,7 @@ export class AuditLogService {
       await this.auditLogRepository.save(auditLog);
 
       this.logger.log(
-        `Audit log created: ${dto.actionType} by user ${dto.context?.userId || 'anonymous'}`,
+        `Audit log created: ${dto.actionType} by ${actor?.type || 'anonymous'} ${actor?.id || dto.context?.userId || 'anonymous'}`,
       );
     } catch (error) {
       // Log the error but don't throw to prevent disrupting the main operation
@@ -217,7 +239,11 @@ export class AuditLogService {
         ...metadata,
         resolvedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -244,7 +270,11 @@ export class AuditLogService {
         ...metadata,
         dismissedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -275,7 +305,11 @@ export class AuditLogService {
         ...metadata,
         replayedAt: metadata.replayedAt || new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -315,7 +349,16 @@ export class AuditLogService {
       },
       context: {
         ...record.context,
-        userId: this.toNullableUuid(record.context?.userId || null),
+        userId:
+          record.actorType === 'user' || record.actorType === 'admin'
+            ? record.actorId || record.context?.userId || null
+            : null,
+        actor: this.createActor(record.actorType, record.actorId || record.action, {
+          userId:
+            record.actorType === 'user' || record.actorType === 'admin'
+              ? record.actorId || record.context?.userId || null
+              : null,
+        }),
       },
     });
   }
@@ -378,7 +421,14 @@ export class AuditLogService {
         diff,
         changedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: this.toNullableUuid(record.actorId) },
+      context: {
+        ...context,
+        userId: context?.userId || this.toNullableUuid(record.actorId),
+        actor: this.createActor(record.actorType || 'admin', record.actorId, {
+          userId: context?.userId || this.toNullableUuid(record.actorId),
+          source: record.source?.sourceEndpoint || null,
+        }),
+      },
     });
   }
 
@@ -407,7 +457,11 @@ export class AuditLogService {
         entityId: `${templateKey}:${version}`,
         transitionedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
 
     await this.logTemplateRolloutDiff(
@@ -416,6 +470,7 @@ export class AuditLogService {
         templateVersion: version,
         changeType: 'state_transition',
         actorId: adminId,
+        actorType: 'admin',
         before: { lifecycleState: from },
         after: { lifecycleState: to },
         source: {
@@ -450,7 +505,11 @@ export class AuditLogService {
         entityId: templateKey || 'global',
         toggledAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
 
     await this.logTemplateRolloutDiff(
@@ -458,6 +517,7 @@ export class AuditLogService {
         templateKey: templateKey || 'global',
         changeType: 'kill_switch_toggle',
         actorId: adminId,
+        actorType: 'admin',
         before: { killSwitchEnabled: !enabled },
         after: { killSwitchEnabled: enabled },
         source: {
@@ -501,7 +561,8 @@ export class AuditLogService {
         templateKey,
         templateVersion: failedVersion,
         changeType: 'fallback_activation',
-        actorId: context?.userId || 'system',
+        actorId: context?.actor?.id || context?.userId || 'template-fallback',
+        actorType: context?.actor?.type || (context?.userId ? 'admin' : 'system'),
         before: { activeVersion: failedVersion },
         after: { activeVersion: fallbackVersion },
         source: {
@@ -910,5 +971,54 @@ export class AuditLogService {
         offset: options.offset || 0,
       };
     }
+  }
+
+  private createActor(
+    type: AuditActorType,
+    id: string,
+    overrides?: Partial<AuditActor>,
+  ): AuditActor {
+    return {
+      type,
+      id,
+      userId:
+        overrides?.userId !== undefined
+          ? overrides.userId
+          : type === 'user' || type === 'admin'
+            ? id
+            : null,
+      label: overrides?.label,
+      source: overrides?.source,
+    };
+  }
+
+  private resolveActor(dto: CreateAuditLogDto): AuditActor | null {
+    if (dto.context?.actor?.id) {
+      return dto.context.actor;
+    }
+
+    const metadataActorType = dto.metadata?.actorType as AuditActorType | undefined;
+    const metadataActorId = dto.metadata?.actorId
+      ? String(dto.metadata.actorId)
+      : undefined;
+
+    if (metadataActorType && metadataActorId) {
+      return this.createActor(metadataActorType, metadataActorId, {
+        userId:
+          metadataActorType === 'user' || metadataActorType === 'admin'
+            ? metadataActorId
+            : null,
+        label: dto.metadata?.actorLabel,
+        source: dto.metadata?.actorSource,
+      });
+    }
+
+    if (dto.context?.userId) {
+      return this.createActor('user', dto.context.userId, {
+        userId: dto.context.userId,
+      });
+    }
+
+    return null;
   }
 }

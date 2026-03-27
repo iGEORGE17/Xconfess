@@ -116,7 +116,7 @@ sudo pacman -S base-devel openssl pkg-config
 #### 3. Install Stellar CLI
 
 ```bash
-cargo install --locked stellar-cli 
+cargo install --locked stellar-cli
 
 # Verify
 stellar --version
@@ -240,16 +240,28 @@ cargo test verify
 ./scripts/test-contracts.sh --verbose
 ```
 
+The script is the canonical local validation flow for the contract workspace.
+It runs three phases in order:
+
+1. `cargo check -p <crate>` for every workspace crate.
+2. `cargo build --workspace --target wasm32-unknown-unknown` once for the full workspace.
+3. `cargo test -p <crate>` for every workspace crate.
+
+The current workspace crates are:
+
+- `confession-anchor`
+- `confession-registry`
+- `anonymous-tipping`
+- `reputation-badges`
+
 ### Expected Test Output
 
 ```
-running 4 tests
-test test::anchor_and_verify_confession ... ok
-test test::duplicate_hash_does_not_overwrite ... ok
-test test::verify_nonexistent_confession_returns_none ... ok
-test test::multiple_confessions_update_count_and_events ... ok
-
-test result: ok. 4 passed; 0 failed
+[INFO] Workspace contract crates: confession-anchor confession-registry anonymous-tipping reputation-badges
+[OK] CHECK passed for confession-anchor
+[OK] CHECK passed for confession-registry
+[OK] BUILD passed for workspace wasm32
+[OK] TEST passed for reputation-badges
 ```
 
 ---
@@ -351,6 +363,7 @@ NEXT_PUBLIC_CONFESSION_ANCHOR_CONTRACT=CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJ
 **Problem:** Stellar CLI not in PATH
 
 **Solution:**
+
 ```bash
 # Add Cargo bin to PATH
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
@@ -366,6 +379,7 @@ source ~/.bashrc
 **Problem:** Missing build tools
 
 **Solution:**
+
 ```bash
 # Ubuntu/Debian
 sudo apt install build-essential
@@ -382,6 +396,7 @@ sudo dnf install gcc
 **Problem:** WebAssembly target not installed
 
 **Solution:**
+
 ```bash
 rustup target add wasm32-unknown-unknown
 ```
@@ -391,6 +406,7 @@ rustup target add wasm32-unknown-unknown
 **Problem:** Account not funded on testnet
 
 **Solution:**
+
 ```bash
 # Fund your account
 curl "https://friendbot.stellar.org?addr=$(stellar keys address deployer)"
@@ -403,6 +419,7 @@ curl "https://friendbot.stellar.org?addr=$(stellar keys address deployer)"
 **Problem:** Contract parameters incorrect or network issue
 
 **Solution:**
+
 - Verify contract parameters match expected types
 - Check network connectivity
 - Ensure contract is deployed correctly
@@ -413,6 +430,7 @@ curl "https://friendbot.stellar.org?addr=$(stellar keys address deployer)"
 **Problem:** Insufficient memory
 
 **Solution:**
+
 ```bash
 # Build with less parallelism
 cargo build --target wasm32-unknown-unknown --release -j 1
@@ -433,57 +451,57 @@ npm install @stellar/stellar-sdk
 #### Anchor a Confession
 
 ```javascript
-import * as StellarSDK from '@stellar/stellar-sdk';
+import * as StellarSDK from "@stellar/stellar-sdk";
 
-const CONTRACT_ID = 'CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD7E7IGV74ZP5XFB';
-const RPC_URL = 'https://soroban-testnet.stellar.org:443';
-const NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
+const CONTRACT_ID = "CCHDY246UUPY6VUGIDVSK266KXA64CXM6RR2QLTKJD7E7IGV74ZP5XFB";
+const RPC_URL = "https://soroban-testnet.stellar.org:443";
+const NETWORK_PASSPHRASE = "Test SDF Network ; September 2015";
 
 const server = new StellarSDK.SorobanRpc.Server(RPC_URL);
 
 async function anchorConfession(confessionHash, userSecretKey) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(userSecretKey);
   const sourceAccount = await server.getAccount(sourceKeypair.publicKey());
-  
+
   const contract = new StellarSDK.Contract(CONTRACT_ID);
-  
+
   // Convert hash to BytesN<32>
-  const hashBuffer = Buffer.from(confessionHash, 'hex');
-  const hashScVal = StellarSDK.nativeToScVal(hashBuffer, { type: 'bytes' });
-  
+  const hashBuffer = Buffer.from(confessionHash, "hex");
+  const hashScVal = StellarSDK.nativeToScVal(hashBuffer, { type: "bytes" });
+
   // Current timestamp
   const timestamp = Date.now();
-  const timestampScVal = StellarSDK.nativeToScVal(timestamp, { type: 'u64' });
-  
+  const timestampScVal = StellarSDK.nativeToScVal(timestamp, { type: "u64" });
+
   // Build transaction
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE,
   })
-    .addOperation(contract.call('anchor_confession', hashScVal, timestampScVal))
+    .addOperation(contract.call("anchor_confession", hashScVal, timestampScVal))
     .setTimeout(30)
     .build();
-  
+
   // Simulate
   const simulateResponse = await server.simulateTransaction(transaction);
-  
+
   // Prepare and sign
   const preparedTx = StellarSDK.SorobanRpc.assembleTransaction(
     transaction,
-    simulateResponse
+    simulateResponse,
   );
   preparedTx.sign(sourceKeypair);
-  
+
   // Submit
   const sendResponse = await server.sendTransaction(preparedTx);
-  
+
   // Poll for result
   let getResponse = await server.getTransaction(sendResponse.hash);
-  while (getResponse.status === 'NOT_FOUND') {
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  while (getResponse.status === "NOT_FOUND") {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     getResponse = await server.getTransaction(sendResponse.hash);
   }
-  
+
   return sendResponse.hash;
 }
 ```
@@ -495,25 +513,25 @@ async function verifyConfession(confessionHash) {
   const contract = new StellarSDK.Contract(CONTRACT_ID);
   const keypair = StellarSDK.Keypair.random();
   const account = await server.getAccount(keypair.publicKey());
-  
-  const hashBuffer = Buffer.from(confessionHash, 'hex');
-  const hashScVal = StellarSDK.nativeToScVal(hashBuffer, { type: 'bytes' });
-  
+
+  const hashBuffer = Buffer.from(confessionHash, "hex");
+  const hashScVal = StellarSDK.nativeToScVal(hashBuffer, { type: "bytes" });
+
   const transaction = new StellarSDK.TransactionBuilder(account, {
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE,
   })
-    .addOperation(contract.call('verify_confession', hashScVal))
+    .addOperation(contract.call("verify_confession", hashScVal))
     .setTimeout(30)
     .build();
-  
+
   const simulateResponse = await server.simulateTransaction(transaction);
-  
+
   if (StellarSDK.SorobanRpc.Api.isSimulationSuccess(simulateResponse)) {
     const result = simulateResponse.result?.retval;
     return result ? Number(StellarSDK.scValToNative(result)) : null;
   }
-  
+
   return null;
 }
 ```
@@ -522,35 +540,31 @@ async function verifyConfession(confessionHash) {
 
 ```typescript
 // src/lib/stellar/contract.ts
-import * as StellarSDK from '@stellar/stellar-sdk';
-import crypto from 'crypto';
+import * as StellarSDK from "@stellar/stellar-sdk";
+import crypto from "crypto";
 
 export async function anchorConfessionFromFrontend(
   confessionText: string,
-  secretKey: string
+  secretKey: string,
 ): Promise<string> {
   // Create SHA-256 hash
-  const hash = crypto.createHash('sha256')
-    .update(confessionText)
-    .digest('hex');
-  
+  const hash = crypto.createHash("sha256").update(confessionText).digest("hex");
+
   // Call anchor function
   const txHash = await anchorConfession(hash, secretKey);
-  
+
   return txHash;
 }
 
 export async function verifyConfessionFromFrontend(
-  confessionText: string
+  confessionText: string,
 ): Promise<number | null> {
   // Create SHA-256 hash
-  const hash = crypto.createHash('sha256')
-    .update(confessionText)
-    .digest('hex');
-  
+  const hash = crypto.createHash("sha256").update(confessionText).digest("hex");
+
   // Call verify function
   const timestamp = await verifyConfession(hash);
-  
+
   return timestamp;
 }
 ```
@@ -560,19 +574,19 @@ export async function verifyConfessionFromFrontend(
 ```javascript
 async function getTransactionStatus(txHash) {
   const response = await server.getTransaction(txHash);
-  
+
   switch (response.status) {
-    case 'SUCCESS':
-      console.log('Transaction successful!');
+    case "SUCCESS":
+      console.log("Transaction successful!");
       return response;
-    case 'FAILED':
-      console.error('Transaction failed:', response.resultXdr);
+    case "FAILED":
+      console.error("Transaction failed:", response.resultXdr);
       return null;
-    case 'NOT_FOUND':
-      console.log('Transaction not found (still pending)');
+    case "NOT_FOUND":
+      console.log("Transaction not found (still pending)");
       return null;
     default:
-      console.log('Unknown status:', response.status);
+      console.log("Unknown status:", response.status);
       return null;
   }
 }
@@ -600,4 +614,4 @@ const result = await getTransactionStatus(txHash);
 
 ---
 
-*Last updated: January 24, 2026*
+_Last updated: January 24, 2026_

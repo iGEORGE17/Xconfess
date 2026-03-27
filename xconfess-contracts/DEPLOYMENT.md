@@ -154,6 +154,21 @@ stellar contract deploy \
 export ANONYMOUS_TIPPING_ID="contract-id-from-output"
 ```
 
+### 5. Deploy Confession Registry Contract
+
+```bash
+# Build contract
+cargo build --release --target wasm32-unknown-unknown -p confession-registry
+
+# Deploy contract
+stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/confession_registry.wasm \
+  --source-account $STELLAR_ACCOUNT \
+  --network testnet
+
+export CONFESSION_REGISTRY_ID="contract-id-from-output"
+```
+
 ## 🧪 Testing Contracts
 
 ### Unit Tests
@@ -164,6 +179,7 @@ cargo test
 
 # Run specific contract tests
 cargo test -p confession-anchor
+cargo test -p confession-registry
 cargo test -p reputation-badges
 cargo test -p anonymous-tipping
 

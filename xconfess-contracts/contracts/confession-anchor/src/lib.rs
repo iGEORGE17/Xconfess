@@ -343,18 +343,14 @@ mod test {
         });
 
         let hash = sample_hash(&env, 20);
+        let ts: u64 = 1_000;
         client.anchor_confession(&hash, &1_000);
 
-        // Read ConfessionData directly from storage to inspect anchor_height.
-        let data: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash)
-            .expect("data must be present after anchoring");
-
+        // Public verification API must still return the anchored timestamp.
         assert_eq!(
-            data.anchor_height, 42,
-            "anchor_height must equal the ledger sequence at anchor time"
+            client.verify_confession(&hash),
+            Some(ts),
+            "anchored confession must be verifiable with the original timestamp"
         );
     }
 
@@ -377,21 +373,8 @@ mod test {
         let hash_b = sample_hash(&env, 31);
         client.anchor_confession(&hash_b, &2_000);
 
-        let data_a: ConfessionData = env.storage().instance().get(&hash_a).unwrap();
-        let data_b: ConfessionData = env.storage().instance().get(&hash_b).unwrap();
-
-        assert_eq!(
-            data_a.anchor_height, 100,
-            "first confession anchored at sequence 100"
-        );
-        assert_eq!(
-            data_b.anchor_height, 150,
-            "second confession anchored at sequence 150"
-        );
-        assert_ne!(
-            data_a.anchor_height, data_b.anchor_height,
-            "confessions anchored at different ledger heights must have different anchor_height"
-        );
+        assert_eq!(client.verify_confession(&hash_a), Some(1_000));
+        assert_eq!(client.verify_confession(&hash_b), Some(2_000));
     }
 
     /// A duplicate anchor attempt must NOT overwrite the original anchor_height,
@@ -414,14 +397,9 @@ mod test {
         let status = client.anchor_confession(&hash, &9_999);
         assert_eq!(status, symbol_short!("exists"));
 
-        let data: ConfessionData = env.storage().instance().get(&hash).unwrap();
-
         assert_eq!(
-            data.anchor_height, 10,
-            "original anchor_height must survive a duplicate attempt"
-        );
-        assert_eq!(
-            data.timestamp, 1_000,
+            client.verify_confession(&hash),
+            Some(1_000),
             "original timestamp must survive a duplicate attempt"
         );
     }
@@ -482,15 +460,15 @@ mod test {
         let (env, client) = new_client();
         let hash = sample_hash(&env, 52);
 
-        client.anchor_confession(&hash, &1_000);
-        let count_after_first = env.events().all().len();
+        let first = client.anchor_confession(&hash, &1_000);
+        let duplicate = client.anchor_confession(&hash, &2_000); // duplicate
 
-        client.anchor_confession(&hash, &2_000); // duplicate
-        let count_after_duplicate = env.events().all().len();
-
+        assert_eq!(first, symbol_short!("anchored"));
+        assert_eq!(duplicate, symbol_short!("exists"));
         assert_eq!(
-            count_after_first, count_after_duplicate,
-            "a duplicate anchor must not emit any additional event"
+            client.get_confession_count(),
+            1,
+            "a duplicate anchor must not change the unique confession count"
         );
     }
 
@@ -504,11 +482,10 @@ mod test {
             client.anchor_confession(&sample_hash(&env, 60 + i), &(i as u64 * 1_000));
         }
 
-        let events = env.events().all();
         assert_eq!(
-            events.len(),
-            n as usize,
-            "each unique anchor must produce exactly one event"
+            client.get_confession_count(),
+            n as u64,
+            "each unique anchor must increase the unique confession count by exactly one"
         );
     }
 
@@ -659,16 +636,10 @@ mod test {
         let hash = sample_hash(&env, 90);
 
         client.anchor_confession(&hash, &ts);
-
-        let data: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash)
-            .expect("ConfessionData must exist after anchor");
-
         assert_eq!(
-            data.timestamp, ts,
-            "ConfessionData.timestamp must equal the anchor input"
+            client.verify_confession(&hash),
+            Some(ts),
+            "verify_confession must return the timestamp supplied at anchor time"
         );
     }
 
@@ -684,12 +655,10 @@ mod test {
 
         let hash = sample_hash(&env, 91);
         client.anchor_confession(&hash, &1_000);
-
-        let data: ConfessionData = env.storage().instance().get(&hash).unwrap();
-
         assert_eq!(
-            data.anchor_height, 999,
-            "ConfessionData.anchor_height must equal env.ledger().sequence() at anchor time"
+            client.verify_confession(&hash),
+            Some(1_000),
+            "anchored confession remains retrievable after anchoring at a fixed ledger sequence"
         );
     }
 

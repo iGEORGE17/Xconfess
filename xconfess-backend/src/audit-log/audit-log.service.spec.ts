@@ -110,6 +110,8 @@ describe('AuditLogService', () => {
         metadata: expect.objectContaining({
           templateKey: 'welcome',
           templateVersion: 'v2',
+          actorType: 'admin',
+          actorId: '2f4d4789-b665-4f8b-841b-94e7a41ca1c2',
           before: expect.any(Object),
           after: expect.any(Object),
           diff: expect.objectContaining({
@@ -179,9 +181,34 @@ describe('AuditLogService', () => {
           requestId: 'export-req-1',
           actorType: 'user',
           actorId: 'user-42',
+          actorUserId: 'user-42',
           lifecycleAction: 'downloaded',
           occurredAt: '2026-03-24T00:00:00.000Z',
           source: 'signed_link',
+        }),
+      }),
+    );
+  });
+
+  it('tags admin moderation actions with admin actor metadata', async () => {
+    mockRepository.create.mockReturnValue({} as AuditLog);
+    mockRepository.save.mockResolvedValue({} as AuditLog);
+
+    await service.logReportResolved(
+      'report-1',
+      'admin-7',
+      { previousStatus: 'pending' },
+      { requestId: 'req-admin-1' },
+    );
+
+    expect(mockRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: AuditActionType.REPORT_RESOLVED,
+        metadata: expect.objectContaining({
+          reportId: 'report-1',
+          actorType: 'admin',
+          actorId: 'admin-7',
+          actorUserId: 'admin-7',
         }),
       }),
     );
