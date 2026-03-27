@@ -25,11 +25,15 @@ export class NotificationService {
     private notificationQueue: Queue,
   ) {}
 
-  async enqueueNotification(type: string, payload: any): Promise<void> {
-    await this.notificationQueue.add('send-notification', {
-      ...payload,
-      type,
-    });
+  async enqueueNotification(type: string, payload: any, jobId?: string): Promise<void> {
+    await this.notificationQueue.add(
+      'send-notification',
+      {
+        ...payload,
+        type,
+      },
+      { jobId },
+    );
   }
 
   async createNotification(
@@ -55,10 +59,14 @@ export class NotificationService {
       preference.enableEmailNotifications &&
       this.shouldSendEmail(preference, dto.type)
     ) {
-      await this.notificationQueue.add('send-notification', {
-        notificationId: notification.id,
-        userId: dto.userId,
-      });
+      await this.notificationQueue.add(
+        'send-notification',
+        {
+          notificationId: notification.id,
+          userId: dto.userId,
+        },
+        { jobId: `email-${notification.id}` },
+      );
     }
 
     return notification;

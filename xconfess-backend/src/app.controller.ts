@@ -10,8 +10,7 @@ import {
 import { RedisHealthIndicator } from './health/redis.health';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { AdminGuard } from './auth/admin.guard';
-import { NotificationQueue } from './notification/notification.queue';
-// import { RedisHealthIndicator } from './health/redis.health';
+import { JobManagementService } from './notifications/services/job-management.service';
 
 @ApiTags('App')
 @Controller()
@@ -21,7 +20,7 @@ export class AppController {
     private health: HealthCheckService,
     private db: TypeOrmHealthIndicator,
     private redis: RedisHealthIndicator,
-    private readonly notificationQueue: NotificationQueue,
+    private readonly jobManagementService: JobManagementService,
   ) {}
 
   @Get()
@@ -36,7 +35,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  // ✅ NEW HEALTH ENDPOINT
+  // ✅ HEALTH ENDPOINT
   @Get('health')
   @HealthCheck()
   @ApiOperation({ summary: 'Application health check endpoint' })
@@ -48,7 +47,7 @@ export class AppController {
     return this.health.check([
       async () => ({ app: { status: 'up' } }),
       async () => this.db.pingCheck('database'),
-      // async () => this.redis.isHealthy('redis'),
+      async () => this.redis.isHealthy('redis'),
     ]);
   }
 
@@ -63,6 +62,6 @@ export class AppController {
       'Returns queue depth, DLQ depth, counters, and timer metrics for notification processing',
   })
   async getNotificationDiagnostics() {
-    return this.notificationQueue.getDiagnostics();
+    return this.jobManagementService.getDiagnostics();
   }
 }

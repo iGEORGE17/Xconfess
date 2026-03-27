@@ -4,7 +4,7 @@ import { getQueueToken } from '@nestjs/bull';
 import { NotificationService } from './notification.service';
 import { Notification, NotificationType } from '../entities/notification.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
-import { NOTIFICATION_QUEUE } from '../notification.queue';
+import { NOTIFICATION_QUEUE } from '../processors/notification.processor';
 
 describe('NotificationService', () => {
   let service: NotificationService;
@@ -72,10 +72,14 @@ describe('NotificationService', () => {
 
       // Assert
       expect(queueMock.add).toHaveBeenCalledTimes(1);
-      expect(queueMock.add).toHaveBeenCalledWith('send-email', {
-        notificationId: 'notif-1',
-        userId: 'user-1',
-      });
+      expect(queueMock.add).toHaveBeenCalledWith(
+        'send-notification',
+        {
+          notificationId: 'notif-1',
+          userId: 'user-1',
+        },
+        { jobId: 'email-notif-1' },
+      );
     });
 
     it('should not dispatch an email job if email notifications are disabled', async () => {
