@@ -41,9 +41,7 @@
 
 use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
 
-use confession_registry::{
-    ConfessionRegistry, ConfessionRegistryClient, ConfessionStatus,
-};
+use crate::{ConfessionRegistry, ConfessionRegistryClient, ConfessionStatus};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +51,7 @@ fn setup() -> (Env, ConfessionRegistryClient<'static>, Address, Address) {
     let contract_id = env.register_contract(None, ConfessionRegistry);
     let client = ConfessionRegistryClient::new(&env, &contract_id);
 
-    let admin  = Address::generate(&env);
+    let admin = Address::generate(&env);
     let author = Address::generate(&env);
     client.initialize(&admin);
 
@@ -74,14 +72,14 @@ fn create(client: &ConfessionRegistryClient, env: &Env, author: &Address, seed: 
 
 /// Pause the contract through the governance flow.
 fn pause_contract(client: &ConfessionRegistryClient, admin: &Address) {
-    let id = client.gov_propose(admin, &governance::model::CriticalAction::Pause);
+    let id = client.gov_propose(admin, &crate::governance::model::CriticalAction::Pause);
     client.gov_approve(admin, &id);
     client.gov_execute(admin, &id);
 }
 
 /// Unpause the contract through the governance flow.
 fn unpause_contract(client: &ConfessionRegistryClient, admin: &Address) {
-    let id = client.gov_propose(admin, &governance::model::CriticalAction::Unpause);
+    let id = client.gov_propose(admin, &crate::governance::model::CriticalAction::Unpause);
     client.gov_approve(admin, &id);
     client.gov_execute(admin, &id);
 }
@@ -138,7 +136,10 @@ fn a4_double_delete_is_rejected() {
 
     // Second delete must fail — confession is already in terminal state.
     let result = client.try_delete_confession(&author, &id, &3_000_000);
-    assert!(result.is_err(), "deleting an already-deleted confession must fail");
+    assert!(
+        result.is_err(),
+        "deleting an already-deleted confession must fail"
+    );
 }
 
 /// A5: deleting a nonexistent confession panics with "confession not found".
@@ -184,12 +185,7 @@ fn b3_unauthorized_update_is_rejected() {
     let outsider = Address::generate(&env);
     let id = create(&client, &env, &author, 12);
 
-    let result = client.try_update_status(
-        &outsider,
-        &id,
-        &ConfessionStatus::Flagged,
-        &5_000_000,
-    );
+    let result = client.try_update_status(&outsider, &id, &ConfessionStatus::Flagged, &5_000_000);
     assert!(result.is_err(), "unauthorized update must return an error");
 }
 
@@ -202,12 +198,7 @@ fn b4_cannot_update_deleted_confession() {
 
     client.delete_confession(&author, &id, &2_000_000);
 
-    let result = client.try_update_status(
-        &author,
-        &id,
-        &ConfessionStatus::Active,
-        &3_000_000,
-    );
+    let result = client.try_update_status(&author, &id, &ConfessionStatus::Active, &3_000_000);
     assert!(
         result.is_err(),
         "updating a deleted confession must fail — deleted is a terminal state"
@@ -260,7 +251,10 @@ fn c1_create_blocked_while_paused() {
     pause_contract(&client, &admin);
 
     let result = client.try_create_confession(&author, &h(&env, 50), &1_000_000);
-    assert!(result.is_err(), "create must be blocked when contract is paused");
+    assert!(
+        result.is_err(),
+        "create must be blocked when contract is paused"
+    );
 }
 
 /// C2: create_confession succeeds immediately after unpausing.
@@ -286,13 +280,11 @@ fn d1_update_status_blocked_while_paused() {
 
     pause_contract(&client, &admin);
 
-    let result = client.try_update_status(
-        &author,
-        &id,
-        &ConfessionStatus::Flagged,
-        &2_000_000,
+    let result = client.try_update_status(&author, &id, &ConfessionStatus::Flagged, &2_000_000);
+    assert!(
+        result.is_err(),
+        "update_status must be blocked when contract is paused"
     );
-    assert!(result.is_err(), "update_status must be blocked when contract is paused");
 }
 
 /// D2: update_status succeeds immediately after unpausing.
@@ -319,7 +311,10 @@ fn e1_delete_blocked_while_paused() {
     pause_contract(&client, &admin);
 
     let result = client.try_delete_confession(&author, &id, &2_000_000);
-    assert!(result.is_err(), "delete_confession must be blocked when contract is paused");
+    assert!(
+        result.is_err(),
+        "delete_confession must be blocked when contract is paused"
+    );
 }
 
 /// E2: delete_confession succeeds immediately after unpausing.
@@ -343,7 +338,7 @@ fn e2_delete_succeeds_after_unpause() {
 fn f1_reads_are_not_blocked_by_pause() {
     let (env, client, admin, author) = setup();
     let hash = h(&env, 80);
-    let id   = create(&client, &env, &author, 80);
+    let id = create(&client, &env, &author, 80);
 
     pause_contract(&client, &admin);
 
@@ -372,21 +367,28 @@ fn f2_author_isolation() {
     let id_b = create(&client, &env, &author_b, 91);
 
     // author_b cannot update author_a's confession
-    let upd = client.try_update_status(
-        &author_b,
-        &id_a,
-        &ConfessionStatus::Flagged,
-        &2_000_000,
+    let upd = client.try_update_status(&author_b, &id_a, &ConfessionStatus::Flagged, &2_000_000);
+    assert!(
+        upd.is_err(),
+        "author_b must not be able to update author_a's confession"
     );
-    assert!(upd.is_err(), "author_b must not be able to update author_a's confession");
 
     // author_a cannot delete author_b's confession
     let del = client.try_delete_confession(&author_a, &id_b, &2_000_000);
-    assert!(del.is_err(), "author_a must not be able to delete author_b's confession");
+    assert!(
+        del.is_err(),
+        "author_a must not be able to delete author_b's confession"
+    );
 
     // Each author's own confession remains untouched
-    assert_eq!(client.get_confession(&id_a).status, ConfessionStatus::Active);
-    assert_eq!(client.get_confession(&id_b).status, ConfessionStatus::Active);
+    assert_eq!(
+        client.get_confession(&id_a).status,
+        ConfessionStatus::Active
+    );
+    assert_eq!(
+        client.get_confession(&id_b).status,
+        ConfessionStatus::Active
+    );
 }
 
 /// F3: admin can update status and then delete in sequence.

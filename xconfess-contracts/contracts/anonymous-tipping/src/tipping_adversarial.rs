@@ -18,7 +18,7 @@ mod adversarial {
 
     fn setup() -> (Env, Address) {
         let env = Env::default();
-        let contract_id = env.register(None, AnonymousTipping);
+        let contract_id = env.register_contract(None, AnonymousTipping);
         AnonymousTippingClient::new(&env, &contract_id).init();
         (env, contract_id)
     }
@@ -286,7 +286,7 @@ mod adversarial {
     #[test]
     fn send_tip_and_proof_none_produce_equal_totals() {
         let env = Env::default();
-        let contract_id = env.register(None, AnonymousTipping);
+        let contract_id = env.register_contract(None, AnonymousTipping);
         let c = mk_client(&env, &contract_id);
         c.init();
 
@@ -304,7 +304,7 @@ mod adversarial {
     #[test]
     fn tip_without_explicit_init_still_succeeds() {
         let env = Env::default();
-        let contract_id = env.register(None, AnonymousTipping);
+        let contract_id = env.register_contract(None, AnonymousTipping);
         let c = mk_client(&env, &contract_id);
         // No c.init() call — storage defaults to 0 via `unwrap_or`
         let recipient = Address::generate(&env);
@@ -371,9 +371,11 @@ mod adversarial {
         let recipient = Address::generate(&env);
 
         // Simulate reaching near max nonce by setting it manually
-        env.storage()
-            .instance()
-            .set(&crate::DataKey::SettlementNonce, &u64::MAX);
+        env.as_contract(&id, || {
+            env.storage()
+                .instance()
+                .set(&crate::DataKey::SettlementNonce, &u64::MAX);
+        });
 
         // Next tip should overflow nonce
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
