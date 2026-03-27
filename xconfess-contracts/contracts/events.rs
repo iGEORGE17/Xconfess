@@ -21,6 +21,40 @@ pub const MAX_REASON_LENGTH: u32 = 64;
 pub const MAX_OPERATION_LENGTH: u32 = 32;
 
 /// ===========================================
+/// CUSTOM ERRORS
+/// ===========================================
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GovernanceError {
+    ReasonTooLong,
+    OperationTooLong,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EventDecodeError {
+    UnsupportedEventVersion(u32),
+    // Add other potential decoding errors if necessary, e.g., MalformedData
+}
+
+/// ===========================================
+/// VERSIONED EVENT DECODING TRAIT
+/// ===========================================
+// This trait provides a pattern for safely decoding events based on their version.
+// Implement this for each event type that needs versioning.
+pub trait VersionedEvent: Sized {
+    const CURRENT_VERSION: u32;
+
+    // This method will handle the actual decoding logic.
+    // It takes the raw bytes (or whatever format the event is stored in)
+    // and the event_version specified in the event data.
+    // For simplicity, we'll assume the `event_version` is part of the encoded data.
+    // In a real scenario, `raw_data` would likely be `soroban_sdk::Bytes` or similar
+    // which needs to be deserialized based on the version.
+    fn try_decode_versioned(event_version: u32, raw_data: soroban_sdk::Bytes) -> Result<Self, EventDecodeError>;
+}
+
+/// ===========================================
 /// GOVERNANCE ERROR
 /// ===========================================
 #[contracttype]
@@ -379,5 +413,82 @@ mod tests {
             validate_metadata(&env, &meta),
             Err(GovernanceError::OperationTooLong)
         );
+    }
+
+        // --- NEW COMPATIBILITY TESTS ---
+
+    #[test]
+    fn decode_governance_event_supported_version_ok() {
+        let env = Env::default();
+        let current_version = GovernanceEvent::CURRENT_VERSION;
+        let dummy_data = soroban_sdk::Bytes::new(&env); // In a real scenario, this would be actual serialized data
+
+        let result = GovernanceEvent::try_decode_versioned(current_version, dummy_data.clone());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().event_version, current_version);
+    }
+
+    #[test]
+    fn decode_governance_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 999; // A version that is not EVENT_VERSION_V1
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+
+        let result = GovernanceEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
+    }
+
+    #[test]
+    fn decode_confession_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 42;
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+
+        let result = ConfessionEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
+    }
+
+    // Add similar tests for ReactionEvent, ReportEvent, RoleEvent, and BadgeEvent
+    // to ensure all event types handle unsupported versions gracefully.
+    #[test]
+    fn decode_reaction_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 123;
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+        let result = ReactionEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
+    }
+
+    #[test]
+    fn decode_report_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 456;
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+        let result = ReportEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
+    }
+
+    #[test]
+    fn decode_role_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 789;
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+        let result = RoleEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
+    }
+
+    #[test]
+    fn decode_badge_event_unsupported_version_returns_error() {
+        let env = Env::default();
+        let unsupported_version = 1011;
+        let dummy_data = soroban_sdk::Bytes::new(&env);
+        let result = BadgeEvent::try_decode_versioned(unsupported_version, dummy_data.clone());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventDecodeError::UnsupportedEventVersion(unsupported_version));
     }
 }
