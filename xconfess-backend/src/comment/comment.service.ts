@@ -232,7 +232,7 @@ export class CommentService {
         };
 
       default:
-        throw new BadRequestException(`Unsupported sort field: ${sortField}`);
+        throw new BadRequestException('Unsupported sort field');
     }
   }
 
