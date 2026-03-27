@@ -28,9 +28,8 @@ import { TippingModule } from './tipping/tipping.module';
 import { LoggerModule } from './logger/logger.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EncryptionModule } from './encryption/encryption.module';
-import { NotificationModule } from './notification/notification.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { DatabaseModule } from './database/database.module';
-import { NotificationsQueueModule } from './notifications/notifications.module';
 import { BullModule } from '@nestjs/bull';
 
 @Module({
@@ -96,12 +95,11 @@ import { BullModule } from '@nestjs/bull';
     AdminModule,
     ReportModule,
     DataExportModule,
-    NotificationsQueueModule,
+    NotificationsModule,
     StellarModule,
     TippingModule,
     LoggerModule,
     EncryptionModule,
-    NotificationModule,
     CacheModule,
     DatabaseModule,
   ],

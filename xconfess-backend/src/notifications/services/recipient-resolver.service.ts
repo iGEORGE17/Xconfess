@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../user/entities/user.entity';
-import { CryptoUtil } from '../common/crypto.util';
+import { User } from '../../user/entities/user.entity';
+import { CryptoUtil } from '../../common/crypto.util';
 
 export interface RecipientResolutionResult {
   success: boolean;
