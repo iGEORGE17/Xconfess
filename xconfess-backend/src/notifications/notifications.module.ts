@@ -68,4 +68,4 @@ import { WebSocketLogger } from '../websocket/websocket.logger';
   ],
   exports: [NotificationService],
 })
-export class NotificationModule {}
+export class NotificationsQueueModule {}
