@@ -83,7 +83,7 @@ pub fn accepted(e: &Env, old: Address, new_admin: Address) {
 }
 
 pub fn cancelled(e: &Env, admin: Address) {
-    e.events().publish(
+    e.events().publish
         (symbol_short!("adm_can"),),
     let stream = symbol_short!("gov_prop");
     let payload = GovernanceProposedEvent {

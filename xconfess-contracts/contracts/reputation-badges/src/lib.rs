@@ -132,7 +132,10 @@ impl ReputationBadges {
             action: BadgeAction::Grant,
             timestamp: minted_at,
         };
-        env.events().publish((Symbol::new(&env, "badge_granted"), recipient.clone()), event_payload);
+        env.events().publish(
+            (Symbol::new(&env, "badge_granted"), recipient.clone()),
+            event_payload,
+        );
 
         Ok(badge_id)
     }
@@ -317,7 +320,8 @@ impl ReputationBadges {
             action: BadgeAction::Revoke,
             timestamp: env.ledger().timestamp(),
         };
-        env.events().publish((Symbol::new(&env, "badge_revoked"), owner), event_payload);
+        env.events()
+            .publish((Symbol::new(&env, "badge_revoked"), owner), event_payload);
 
         Ok(())
     }

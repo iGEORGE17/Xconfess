@@ -377,19 +377,17 @@ mod test {
         let hash_b = sample_hash(&env, 31);
         client.anchor_confession(&hash_b, &2_000);
 
-        let data_a: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash_a)
-            .unwrap();
-        let data_b: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash_b)
-            .unwrap();
+        let data_a: ConfessionData = env.storage().instance().get(&hash_a).unwrap();
+        let data_b: ConfessionData = env.storage().instance().get(&hash_b).unwrap();
 
-        assert_eq!(data_a.anchor_height, 100, "first confession anchored at sequence 100");
-        assert_eq!(data_b.anchor_height, 150, "second confession anchored at sequence 150");
+        assert_eq!(
+            data_a.anchor_height, 100,
+            "first confession anchored at sequence 100"
+        );
+        assert_eq!(
+            data_b.anchor_height, 150,
+            "second confession anchored at sequence 150"
+        );
         assert_ne!(
             data_a.anchor_height, data_b.anchor_height,
             "confessions anchored at different ledger heights must have different anchor_height"
@@ -416,11 +414,7 @@ mod test {
         let status = client.anchor_confession(&hash, &9_999);
         assert_eq!(status, symbol_short!("exists"));
 
-        let data: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash)
-            .unwrap();
+        let data: ConfessionData = env.storage().instance().get(&hash).unwrap();
 
         assert_eq!(
             data.anchor_height, 10,
@@ -537,10 +531,7 @@ mod test {
         let (env, client) = new_client();
 
         for expected in 1u64..=5 {
-            client.anchor_confession(
-                &sample_hash(&env, expected as u8 + 70),
-                &(expected * 1_000),
-            );
+            client.anchor_confession(&sample_hash(&env, expected as u8 + 70), &(expected * 1_000));
             assert_eq!(
                 client.get_confession_count(),
                 expected,
@@ -694,11 +685,7 @@ mod test {
         let hash = sample_hash(&env, 91);
         client.anchor_confession(&hash, &1_000);
 
-        let data: ConfessionData = env
-            .storage()
-            .instance()
-            .get(&hash)
-            .unwrap();
+        let data: ConfessionData = env.storage().instance().get(&hash).unwrap();
 
         assert_eq!(
             data.anchor_height, 999,
@@ -717,7 +704,10 @@ mod test {
         let ts: u64 = 5_555_555;
 
         // First anchor
-        assert_eq!(client.anchor_confession(&hash, &ts), symbol_short!("anchored"));
+        assert_eq!(
+            client.anchor_confession(&hash, &ts),
+            symbol_short!("anchored")
+        );
 
         // Verify succeeds
         assert_eq!(client.verify_confession(&hash), Some(ts));
