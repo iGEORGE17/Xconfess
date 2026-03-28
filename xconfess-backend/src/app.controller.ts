@@ -45,7 +45,7 @@ export class AppController {
   })
   check() {
     return this.health.check([
-      async () => ({ app: { status: 'up' } }),
+      () => ({ app: { status: 'up' } }),
       async () => this.db.pingCheck('database'),
       async () => this.redis.isHealthy('redis'),
     ]);

@@ -16,9 +16,26 @@ import { WsJwtGuard } from '../../auth/guards/ws-jwt.guard';
 import { WsRolesGuard } from '../../auth/guards/ws-roles.guard';
 import { WsRoles } from '../../auth/decorators/ws-roles.decorator';
 import { WebSocketLogger } from '../../websocket/websocket.logger';
+import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 
 /** Room name that all verified admin sockets join */
 const ADMIN_ROOM = 'admin:events';
+
+interface SocketAuthPayload {
+  token?: string;
+}
+
+interface AdminSocketJwtPayload extends Partial<JwtPayload> {
+  userId?: number | string;
+}
+
+interface AdminSocketData {
+  userId?: number;
+  user?: {
+    id: number;
+    role: UserRole;
+  };
+}
 
 @WebSocketGateway({
   namespace: 'admin',
@@ -36,13 +53,44 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly wsLogger: WebSocketLogger,
   ) {}
 
+  private extractSocketToken(client: Socket): string | null {
+    const auth = client.handshake.auth as SocketAuthPayload | undefined;
+    if (typeof auth?.token === 'string' && auth.token.length > 0) {
+      return auth.token;
+    }
+
+    const authorizationHeader = client.handshake.headers.authorization;
+    if (typeof authorizationHeader !== 'string') {
+      return null;
+    }
+
+    const token = authorizationHeader.replace(/^Bearer\s+/i, '');
+    return token.length > 0 ? token : null;
+  }
+
+  private resolveJwtUserId(payload: AdminSocketJwtPayload): number | null {
+    const candidate = payload.sub ?? payload.userId;
+    if (candidate === undefined || candidate === null || candidate === '') {
+      return null;
+    }
+
+    const userId =
+      typeof candidate === 'number'
+        ? candidate
+        : Number.parseInt(String(candidate), 10);
+
+    return Number.isFinite(userId) ? userId : null;
+  }
+
+  private getSocketData(client: Socket): AdminSocketData {
+    return client.data as unknown as AdminSocketData;
+  }
+
   // ─── Connection lifecycle ─────────────────────────────────────────────────
 
   async handleConnection(@ConnectedSocket() client: Socket) {
     try {
-      const token =
-        (client.handshake.auth as any)?.token ||
-        client.handshake.headers.authorization?.replace(/^Bearer\s+/i, '');
+      const token = this.extractSocketToken(client);
 
       if (!token) {
         this.wsLogger.logSubscriptionRejected({
@@ -54,9 +102,9 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      const payload: any = this.jwtService.verify(token);
-      const userId = Number(payload?.sub ?? payload?.userId);
-      if (!Number.isFinite(userId)) {
+      const payload = this.jwtService.verify<AdminSocketJwtPayload>(token);
+      const userId = this.resolveJwtUserId(payload);
+      if (userId === null) {
         this.wsLogger.logSubscriptionRejected({
           socketId: client.id,
           channel: ADMIN_ROOM,
@@ -79,8 +127,9 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       // Attach full user object so downstream guards can inspect it
-      client.data.userId = userId;
-      client.data.user = { id: userId, role: user.role };
+      const socketData = this.getSocketData(client);
+      socketData.userId = userId;
+      socketData.user = { id: userId, role: user.role };
 
       // Place admin into the scoped admin room for targeted fanout
       await client.join(ADMIN_ROOM);
@@ -105,8 +154,9 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(@ConnectedSocket() client: Socket) {
+    const socketData = this.getSocketData(client);
     this.logger.log(
-      `Admin disconnected: ${client.data?.userId ?? 'unknown'} (${client.id})`,
+      `Admin disconnected: ${socketData.userId ?? 'unknown'} (${client.id})`,
     );
   }
 
@@ -127,7 +177,7 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() _data: unknown,
   ) {
-    const userId = client.data?.userId;
+    const userId = this.getSocketData(client).userId;
 
     this.wsLogger.logSubscriptionGranted({
       socketId: client.id,
@@ -149,9 +199,10 @@ export class AdminGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WsRoles(UserRole.ADMIN)
   @SubscribeMessage('unsubscribe:admin-events')
   async handleAdminUnsubscribe(@ConnectedSocket() client: Socket) {
+    const socketData = this.getSocketData(client);
     await client.leave(ADMIN_ROOM);
     this.logger.log(
-      `Admin ${client.data?.userId} left ${ADMIN_ROOM} (${client.id})`,
+      `Admin ${socketData.userId} left ${ADMIN_ROOM} (${client.id})`,
     );
     client.emit('subscription:cancelled', {
       channel: ADMIN_ROOM,
