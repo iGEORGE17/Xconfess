@@ -10,7 +10,6 @@ import {
   Get,
   UseGuards,
   Put,
-  Request,
   Patch,
   Req,
   NotFoundException,
@@ -18,8 +17,8 @@ import {
 import { UserService } from './user.service';
 import { AuthService } from '../auth/auth.service';
 import { User, UserRole } from './entities/user.entity';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from '../auth/dto/register.dto';
+import { LoginDto } from '../auth/dto/login.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/get-user.decorator';
 import { UpdateUserProfileDto } from './dto/updateProfile.dto';
@@ -30,15 +29,17 @@ import {
   PrivacySettingsResponseDto,
 } from './dto/update-privacy-settings.dto';
 
-// Add decrypted email and privacy metadata to the response type for API output
+/**
+ * Public user response contract.
+ * Internal fields (resetPasswordToken, resetPasswordExpires, password hash,
+ * raw email ciphertext) are intentionally omitted.
+ */
 export interface UserResponse {
   id: number;
   username: string;
   role: UserRole;
   is_active: boolean;
   email: string;
-  resetPasswordToken: string | null;
-  resetPasswordExpires: Date | null;
   notificationPreferences: Record<string, boolean>;
   privacy: {
     isDiscoverable: boolean;
@@ -56,7 +57,7 @@ export class UserController {
     private readonly authService: AuthService,
   ) {}
 
-  // Helper method to keep DRY (Don't Repeat Yourself)
+  /** Maps a User entity to the public response shape — no internal fields. */
   private formatUserResponse(user: User): UserResponse {
     const email = CryptoUtil.decrypt(
       user.emailEncrypted,
@@ -69,8 +70,6 @@ export class UserController {
       role: user.role,
       is_active: user.is_active,
       email,
-      resetPasswordToken: user.resetPasswordToken,
-      resetPasswordExpires: user.resetPasswordExpires,
       notificationPreferences: user.notificationPreferences || {},
       privacy: {
         isDiscoverable: user.isDiscoverable(),
@@ -134,7 +133,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   async getProfile(@GetUser('id') userId: number): Promise<UserResponse> {
     try {
-      const user = await this.userService.findById(userId); // Use canonical ID
+      const user = await this.userService.findById(userId);
       if (!user) throw new UnauthorizedException();
       return this.formatUserResponse(user);
     } catch (error) {
@@ -162,17 +161,20 @@ export class UserController {
   }
 
   @Get('notification-preferences')
-  async getNotificationPreferences(@Req() req) {
-    return req.user.notificationPreferences || {};
+  @UseGuards(JwtAuthGuard)
+  async getNotificationPreferences(@GetUser('id') userId: number) {
+    const user = await this.userService.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    return user.notificationPreferences || {};
   }
 
   @Patch('notification-preferences')
+  @UseGuards(JwtAuthGuard)
   async updateNotificationPreferences(
-    @Req() req,
+    @GetUser('id') userId: number,
     @Body() dto: UpdateNotificationPreferencesDto,
   ) {
-    const user = await this.userService.findById(req.user.id);
-
+    const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -183,14 +185,13 @@ export class UserController {
     };
 
     const savedUser = await this.userService.saveUser(user);
-
     return savedUser.notificationPreferences;
   }
 
   @UseGuards(JwtAuthGuard)
   @Put('profile')
   async updateProfile(
-    @GetUser('id') userId: number, // Replaced @Request() req
+    @GetUser('id') userId: number,
     @Body() updateUserProfileDto: UpdateUserProfileDto,
   ): Promise<UserResponse> {
     const updatedUser = await this.userService.updateProfile(

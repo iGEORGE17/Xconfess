@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosResponse } from "axios";
-import { logError, getErrorMessage } from "@/app/lib/utils/errorHandler";
+import { logError } from "@/app/lib/utils/errorHandler";
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from "./constants";
 import { useAuthStore } from "@/app/lib/store/authStore";
 

@@ -8,7 +8,7 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterDto } from '../auth/dto/register.dto';
 import { CryptoUtil } from '../common/crypto.util';
 
 describe('UserController', () => {

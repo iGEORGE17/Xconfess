@@ -17,12 +17,6 @@ import { ActivityStatus } from "@/app/lib/types/activity";
 const MIN_TIP_AMOUNT = 0.1;
 const SIGN_TIMEOUT_MS = 45000;
 
-declare global {
-  interface Window {
-    freighterApi?: any;
-  }
-}
-
 // -------------------- Types --------------------
 
 export type NetworkKind = "testnet" | "mainnet" | "unknown";
@@ -93,12 +87,8 @@ export const checkTransactionStatus = async (
 
 // -------------------- Wallet Helpers --------------------
 
-/**
- * Check if Freighter wallet is available
- */
 export async function isFreighterAvailable(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  return !!window.freighterApi;
+  return isFreighterInstalled();
 }
 
 // -------------------- Send Tip --------------------
@@ -113,10 +103,17 @@ export async function sendTip(
       return { success: false, error: `Minimum tip amount is ${MIN_TIP_AMOUNT} XLM` };
     }
 
-    const freighter = window.freighterApi;
-    if (!freighter) return { success: false, error: "Freighter wallet not found" };
+    if (!isFreighterInstalled()) {
+      return { success: false, error: "Freighter wallet not found" };
+    }
 
-    const publicKey = await freighter.getPublicKey();
+    let publicKey: string;
+    try {
+      publicKey = await freighterGetPublicKey();
+    } catch {
+      return { success: false, error: "Freighter wallet not found" };
+    }
+
     const network = getStellarNetwork();
     const server = getStellarServer();
 
@@ -132,7 +129,7 @@ export async function sendTip(
       .setTimeout(30)
       .build();
 
-    const signedXDR = await freighter.signTransaction(transaction.toXDR(), { network });
+    const signedXDR = await freighterSignTransaction(transaction.toXDR(), network);
     const tx = TransactionBuilder.fromXDR(signedXDR, network);
     const result = await server.submitTransaction(tx);
 

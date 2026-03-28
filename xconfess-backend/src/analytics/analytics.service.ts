@@ -6,7 +6,10 @@ import { Reaction } from 'src/reaction/entities/reaction.entity';
 import { User } from 'src/user/entities/user.entity';
 import { AnonymousConfession } from 'src/confession/entities/confession.entity';
 import { CacheService } from 'src/cache/cache.service';
-import { AnalyticsCacheKeys, InvalidationPrefixes } from 'src/cache/cache-namespace';
+import {
+  AnalyticsCacheKeys,
+  InvalidationPrefixes,
+} from 'src/cache/cache-namespace';
 import { toWindowBoundaries } from 'src/types/analytics.types';
 
 type TrendDirection = 'increasing' | 'decreasing' | 'stable';
@@ -43,6 +46,11 @@ interface GrowthMetrics {
   trend: TrendDirection;
 }
 
+interface BucketCountRow extends Record<string, string | number> {
+  date: string;
+  count: string | number;
+}
+
 interface DailyActivityPoint {
   date: string;
   activeUsers: number;
@@ -62,6 +70,20 @@ interface ReactionDistributionMetrics {
     percentage: string;
   }>;
   period: string;
+}
+
+interface TrendingConfessionWithReactionCount extends AnonymousConfession {
+  reactionCount?: number;
+}
+
+interface CategoryStatsRow {
+  category: string | null;
+  count: string;
+}
+
+interface ReactionDistributionRow {
+  type: string;
+  count: string;
 }
 
 @Injectable()
@@ -107,13 +129,18 @@ export class AnalyticsService {
       .take(20)
       .getMany();
 
-    const result = trending.map((confession) => ({
-      id: confession.id,
-      content: confession.content.substring(0, 200), // Preview only
-      reactionCount: confession['reactionCount'] || 0,
-      createdAt: confession.created_at,
-      category: confession.comments,
-    }));
+    const result = trending.map((confession) => {
+      const confessionWithCounts =
+        confession as TrendingConfessionWithReactionCount;
+
+      return {
+        id: confession.id,
+        content: confession.content.substring(0, 200), // Preview only
+        reactionCount: confessionWithCounts.reactionCount || 0,
+        createdAt: confession.created_at,
+        category: confession.comments,
+      };
+    });
 
     // Cache the result
     await this.cacheService.set(cacheKey, result, this.CACHE_TTL);
@@ -178,7 +205,7 @@ export class AnalyticsService {
       ]);
 
     // Get most popular category
-    const categoryStats = await this.confessionRepository
+    const categoryStats = (await this.confessionRepository
       .createQueryBuilder('confession')
       .select('confession.category', 'category')
       .addSelect('COUNT(*)', 'count')
@@ -186,7 +213,7 @@ export class AnalyticsService {
       .groupBy('confession.category')
       .orderBy('count', 'DESC')
       .limit(1)
-      .getRawOne();
+      .getRawOne()) as CategoryStatsRow | null;
 
     const result = {
       totalUsers,
@@ -343,7 +370,8 @@ export class AnalyticsService {
     metadata: ComparisonWindowMetadata;
   } {
     const currentRange = this.getCurrentWindow(days);
-    const rangeSpan = currentRange.endAt.getTime() - currentRange.startAt.getTime();
+    const rangeSpan =
+      currentRange.endAt.getTime() - currentRange.startAt.getTime();
     const previousRange = {
       startAt: new Date(currentRange.startAt.getTime() - rangeSpan),
       endAt: new Date(currentRange.startAt.getTime()),
@@ -380,7 +408,7 @@ export class AnalyticsService {
       .andWhere('confession.created_at < :endAt', { endAt: range.endAt })
       .groupBy("DATE(confession.created_at AT TIME ZONE 'UTC')")
       .orderBy('date', 'ASC')
-      .getRawMany();
+      .getRawMany<BucketCountRow>();
 
     const dailyGrowth = this.getDateBuckets(range).map((date) => ({
       date,
@@ -404,7 +432,7 @@ export class AnalyticsService {
     range: AnalyticsWindowRange,
     days: number,
   ): Promise<UserActivityMetrics> {
-    const activityRows = await this.confessionRepository.manager.query(
+    const rawActivityRows: unknown = await this.confessionRepository.manager.query(
       `
         SELECT activity.date::text AS date,
                COUNT(DISTINCT activity.anonymous_user_id)::int AS "activeUsers"
@@ -424,6 +452,7 @@ export class AnalyticsService {
       `,
       [range.startAt, range.endAt],
     );
+    const activityRows = this.toBucketRows(rawActivityRows, 'activeUsers');
 
     const dailyActivity = this.getDateBuckets(range).map((date) => ({
       date,
@@ -455,7 +484,7 @@ export class AnalyticsService {
       .andWhere('reaction.createdAt < :endAt', { endAt: range.endAt })
       .groupBy('reaction.emoji')
       .orderBy('type', 'ASC')
-      .getRawMany();
+      .getRawMany<ReactionDistributionRow>();
 
     const total = distribution.reduce(
       (sum, item) => sum + parseInt(item.count, 10),
@@ -502,6 +531,34 @@ export class AnalyticsService {
     return parseInt(String(match[valueKey] || 0), 10);
   }
 
+  private toBucketRows(
+    rows: unknown,
+    valueKey: string,
+  ): Array<Record<string, string | number>> {
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows.flatMap((row) => {
+      if (!row || typeof row !== 'object') {
+        return [];
+      }
+
+      const record = row as Record<string, unknown>;
+      const dateValue = record.date;
+      const bucketValue = record[valueKey];
+
+      if (
+        typeof dateValue !== 'string' ||
+        (typeof bucketValue !== 'string' && typeof bucketValue !== 'number')
+      ) {
+        return [];
+      }
+
+      return [{ date: dateValue, [valueKey]: bucketValue }];
+    });
+  }
+
   private getDateBuckets(range: AnalyticsWindowRange): string[] {
     const dates: string[] = [];
     const cursor = new Date(range.startAt.getTime());
@@ -525,7 +582,10 @@ export class AnalyticsService {
     this.logger.log(
       `Invalidating trending analytics cache (reason: ${reason})`,
     );
-    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsTrending, reason);
+    await this.cacheService.invalidateSegment(
+      InvalidationPrefixes.analyticsTrending,
+      reason,
+    );
   }
 
   async invalidateReactionDistributionCache(
@@ -534,17 +594,26 @@ export class AnalyticsService {
     this.logger.log(
       `Invalidating reaction distribution cache (reason: ${reason})`,
     );
-    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsReactions, reason);
+    await this.cacheService.invalidateSegment(
+      InvalidationPrefixes.analyticsReactions,
+      reason,
+    );
   }
 
   async invalidateGrowthCache(reason = 'mutation'): Promise<void> {
     this.logger.log(`Invalidating growth metrics cache (reason: ${reason})`);
-    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsGrowth, reason);
+    await this.cacheService.invalidateSegment(
+      InvalidationPrefixes.analyticsGrowth,
+      reason,
+    );
   }
 
   async invalidateUserActivityCache(reason = 'mutation'): Promise<void> {
     this.logger.log(`Invalidating user activity cache (reason: ${reason})`);
-    await this.cacheService.invalidateSegment(InvalidationPrefixes.analyticsUsers, reason);
+    await this.cacheService.invalidateSegment(
+      InvalidationPrefixes.analyticsUsers,
+      reason,
+    );
   }
 
   async invalidateStatsCache(reason = 'mutation'): Promise<void> {
