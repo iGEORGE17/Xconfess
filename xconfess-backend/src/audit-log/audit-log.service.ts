@@ -80,6 +80,14 @@ export class AuditLogService {
     private readonly auditLogRepository: Repository<AuditLog>,
   ) {}
 
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  private getErrorStack(error: unknown): string | undefined {
+    return error instanceof Error ? error.stack : undefined;
+  }
+
   /**
    * Log a sensitive action to the audit log
    * Includes error handling to prevent logging failures from breaking the application
@@ -123,8 +131,8 @@ export class AuditLogService {
     } catch (error) {
       // Log the error but don't throw to prevent disrupting the main operation
       this.logger.error(
-        `Failed to create audit log for action ${dto.actionType}: ${error.message}`,
-        error.stack,
+        `Failed to create audit log for action ${dto.actionType}: ${this.getErrorMessage(error)}`,
+        this.getErrorStack(error),
       );
     }
   }
@@ -598,7 +606,7 @@ export class AuditLogService {
       return logs;
     } catch (error) {
       this.logger.error(
-        `Failed to find audit logs by entity: ${error.message}`,
+        `Failed to find audit logs by entity: ${this.getErrorMessage(error)}`,
       );
       return [];
     }
@@ -615,7 +623,9 @@ export class AuditLogService {
         relations: ['user'],
       });
     } catch (error) {
-      this.logger.error(`Failed to find audit logs by user: ${error.message}`);
+      this.logger.error(
+        `Failed to find audit logs by user: ${this.getErrorMessage(error)}`,
+      );
       return [];
     }
   }
@@ -738,7 +748,9 @@ export class AuditLogService {
         offset: options.offset || 0,
       };
     } catch (error) {
-      this.logger.error(`Failed to get audit logs: ${error.message}`);
+      this.logger.error(
+        `Failed to get audit logs: ${this.getErrorMessage(error)}`,
+      );
       return {
         logs: [],
         total: 0,
@@ -791,7 +803,9 @@ export class AuditLogService {
         actionTypeCounts,
       };
     } catch (error) {
-      this.logger.error(`Failed to get audit log statistics: ${error.message}`);
+      this.logger.error(
+        `Failed to get audit log statistics: ${this.getErrorMessage(error)}`,
+      );
       return {
         totalLogs: 0,
         actionTypeCounts: [],
@@ -871,7 +885,7 @@ export class AuditLogService {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to get template rollout history: ${error.message}`,
+        `Failed to get template rollout history: ${this.getErrorMessage(error)}`,
       );
       return {
         logs: [],
@@ -963,7 +977,9 @@ export class AuditLogService {
         offset: options.offset || 0,
       };
     } catch (error) {
-      this.logger.error(`Failed to get export access trail: ${error.message}`);
+      this.logger.error(
+        `Failed to get export access trail: ${this.getErrorMessage(error)}`,
+      );
       return {
         logs: [],
         total: 0,
