@@ -93,9 +93,7 @@ export class AuditLogService {
     return normalized;
   }
 
-  private extractEntityId(
-    metadata?: Record<string, any>,
-  ): string | null {
+  private extractEntityId(metadata?: Record<string, any>): string | null {
     if (!metadata) {
       return null;
     }
@@ -398,9 +396,13 @@ export class AuditLogService {
       context: {
         ...record.context,
         userId: this.toNullableUserId(record.context?.userId ?? actorUserId),
-        actor: this.createActor(record.actorType, record.actorId || record.action, {
-          userId: actorUserId,
-        }),
+        actor: this.createActor(
+          record.actorType,
+          record.actorId || record.action,
+          {
+            userId: actorUserId,
+          },
+        ),
       },
     });
   }
@@ -598,7 +600,8 @@ export class AuditLogService {
         templateVersion: failedVersion,
         changeType: 'fallback_activation',
         actorId: context?.actor?.id || context?.userId || 'template-fallback',
-        actorType: context?.actor?.type || (context?.userId ? 'admin' : 'system'),
+        actorType:
+          context?.actor?.type || (context?.userId ? 'admin' : 'system'),
         before: { activeVersion: failedVersion },
         after: { activeVersion: fallbackVersion },
         source: {
@@ -1066,7 +1069,9 @@ export class AuditLogService {
       return dto.context.actor;
     }
 
-    const metadataActorType = dto.metadata?.actorType as AuditActorType | undefined;
+    const metadataActorType = dto.metadata?.actorType as
+      | AuditActorType
+      | undefined;
     const metadataActorId = dto.metadata?.actorId
       ? String(dto.metadata.actorId)
       : undefined;
