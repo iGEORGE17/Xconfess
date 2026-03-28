@@ -13,6 +13,7 @@ import {
   Request,
   Patch,
   Req,
+  Param,
   NotFoundException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
@@ -47,6 +48,12 @@ export interface UserResponse {
   };
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface UserProfileResponse {
+  id: number;
+  username: string;
+  isAnonymous: boolean;
 }
 
 @Controller('users')
@@ -215,5 +222,27 @@ export class UserController {
     @Body() dto: UpdatePrivacySettingsDto,
   ): Promise<PrivacySettingsResponseDto> {
     return this.userService.updatePrivacySettings(userId, dto);
+  }
+
+  @Get(':id/public-profile')
+  async getPublicProfile(@Param('id') id: string): Promise<UserProfileResponse> {
+    // Mock implementation
+    return {
+      id: parseInt(id),
+      username: 'Anonymous',
+      isAnonymous: true,
+    };
+  }
+
+  @Get(':id/confessions')
+  async getUserConfessions(@Param('id') id: string): Promise<any[]> {
+    // Mock implementation
+    return [];
+  }
+
+  @Get(':id/activities')
+  async getUserActivities(@Param('id') id: string): Promise<any[]> {
+    // Mock implementation
+    return [];
   }
 }
