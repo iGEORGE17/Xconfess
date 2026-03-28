@@ -23,7 +23,7 @@ export interface AuditActor {
 
 export interface CreateAuditLogDto {
   actionType: AuditActionType;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   context?: AuditLogContext;
 }
 
@@ -45,8 +45,8 @@ export interface TemplateRolloutDiffRecord {
     | 'fallback_activation';
   actorId: string;
   actorType?: AuditActorType;
-  before: Record<string, any>;
-  after: Record<string, any>;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
   source?: TemplateRolloutSourceMetadata;
 }
 
@@ -65,7 +65,7 @@ export interface ExportLifecycleAuditRecord {
   actorType: ExportActorType;
   actorId?: string | null;
   occurredAt?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   context?: AuditLogContext;
 }
 
@@ -116,6 +116,14 @@ export class AuditLogService {
     return null;
   }
 
+  private extractMetadataString(
+    metadata: Record<string, unknown> | undefined,
+    key: string,
+  ): string | null {
+    const value = metadata?.[key];
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
   /**
    * Log a sensitive action to the audit log
    * Includes error handling to prevent logging failures from breaking the application
@@ -123,6 +131,11 @@ export class AuditLogService {
   async log(dto: CreateAuditLogDto): Promise<void> {
     try {
       const actor = this.resolveActor(dto);
+      const templateKey = this.extractMetadataString(dto.metadata, 'templateKey');
+      const templateVersion = this.extractMetadataString(
+        dto.metadata,
+        'templateVersion',
+      );
       const auditLog = this.auditLogRepository.create({
         adminId: this.toNullableUserId(dto.context?.userId || null),
         action: dto.actionType,
@@ -145,10 +158,10 @@ export class AuditLogService {
           ...(dto.context?.requestId
             ? { requestId: dto.context.requestId }
             : {}),
-          ...(dto.metadata?.templateKey && dto.metadata?.templateVersion
+          ...(templateKey && templateVersion
             ? {
-                templateKey: dto.metadata.templateKey,
-                templateVersion: dto.metadata.templateVersion,
+                templateKey,
+                templateVersion,
               }
             : {}),
         },
@@ -162,11 +175,11 @@ export class AuditLogService {
       this.logger.log(
         `Audit log created: ${dto.actionType} by ${actor?.type || 'anonymous'} ${actor?.id || dto.context?.userId || 'anonymous'}`,
       );
-    } catch (error) {
+    } catch (error: unknown) {
       // Log the error but don't throw to prevent disrupting the main operation
       this.logger.error(
-        `Failed to create audit log for action ${dto.actionType}: ${error.message}`,
-        error.stack,
+        `Failed to create audit log for action ${dto.actionType}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        error instanceof Error ? error.stack : undefined,
       );
     }
   }
@@ -408,14 +421,14 @@ export class AuditLogService {
   }
 
   private buildRolloutDiff(
-    before: Record<string, any>,
-    after: Record<string, any>,
-  ): Record<string, { before: any; after: any }> {
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+  ): Record<string, { before: unknown; after: unknown }> {
     const keys = new Set([
       ...Object.keys(before || {}),
       ...Object.keys(after || {}),
     ]);
-    const diff: Record<string, { before: any; after: any }> = {};
+    const diff: Record<string, { before: unknown; after: unknown }> = {};
 
     for (const key of keys) {
       const beforeValue = before?.[key];

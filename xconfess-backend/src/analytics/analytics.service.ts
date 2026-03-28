@@ -62,11 +62,6 @@ interface UserActivityMetrics {
   averageDAU: number;
 }
 
-interface UserActivityRow extends Record<string, string | number> {
-  date: string;
-  activeUsers: string | number;
-}
-
 interface ReactionDistributionMetrics {
   total: number;
   distribution: Array<{
@@ -437,7 +432,7 @@ export class AnalyticsService {
     range: AnalyticsWindowRange,
     days: number,
   ): Promise<UserActivityMetrics> {
-    const activityRows = (await this.confessionRepository.manager.query(
+    const rawActivityRows: unknown = await this.confessionRepository.manager.query(
       `
         SELECT activity.date::text AS date,
                COUNT(DISTINCT activity.anonymous_user_id)::int AS "activeUsers"
@@ -456,7 +451,8 @@ export class AnalyticsService {
         ORDER BY activity.date ASC
       `,
       [range.startAt, range.endAt],
-    )) as UserActivityRow[];
+    );
+    const activityRows = this.toBucketRows(rawActivityRows, 'activeUsers');
 
     const dailyActivity = this.getDateBuckets(range).map((date) => ({
       date,
@@ -533,6 +529,34 @@ export class AnalyticsService {
     }
 
     return parseInt(String(match[valueKey] || 0), 10);
+  }
+
+  private toBucketRows(
+    rows: unknown,
+    valueKey: string,
+  ): Array<Record<string, string | number>> {
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows.flatMap((row) => {
+      if (!row || typeof row !== 'object') {
+        return [];
+      }
+
+      const record = row as Record<string, unknown>;
+      const dateValue = record.date;
+      const bucketValue = record[valueKey];
+
+      if (
+        typeof dateValue !== 'string' ||
+        (typeof bucketValue !== 'string' && typeof bucketValue !== 'number')
+      ) {
+        return [];
+      }
+
+      return [{ date: dateValue, [valueKey]: bucketValue }];
+    });
   }
 
   private getDateBuckets(range: AnalyticsWindowRange): string[] {
