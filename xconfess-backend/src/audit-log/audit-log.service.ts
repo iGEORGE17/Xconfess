@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { AuditLog, AuditActionType } from './audit-log.entity';
 
 export interface AuditLogContext {
-  userId?: string | null;
+  userId?: string | number | null;
   ipAddress?: string;
   userAgent?: string;
   requestId?: string;
@@ -60,13 +60,51 @@ export interface ExportLifecycleAuditRecord {
 @Injectable()
 export class AuditLogService {
   private readonly logger = new Logger(AuditLogService.name);
-  private readonly uuidPattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
   ) {}
+
+  private toNullableUserId(value?: string | number | null): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const normalized =
+      typeof value === 'number' ? value : Number.parseInt(value, 10);
+
+    if (!Number.isInteger(normalized)) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private extractEntityId(
+    metadata?: Record<string, any>,
+  ): string | null {
+    if (!metadata) {
+      return null;
+    }
+
+    const candidates = [
+      metadata.entityId,
+      metadata.reportId,
+      metadata.commentId,
+      metadata.confessionId,
+      metadata.exportId,
+      metadata.requestId,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.length > 0) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
 
   /**
    * Log a sensitive action to the audit log
@@ -75,8 +113,13 @@ export class AuditLogService {
   async log(dto: CreateAuditLogDto): Promise<void> {
     try {
       const auditLog = this.auditLogRepository.create({
-        userId: dto.context?.userId || null,
-        actionType: dto.actionType,
+        adminId: this.toNullableUserId(dto.context?.userId || null),
+        action: dto.actionType,
+        entityType:
+          typeof dto.metadata?.entityType === 'string'
+            ? dto.metadata.entityType
+            : null,
+        entityId: this.extractEntityId(dto.metadata),
         metadata: {
           ...(dto.metadata || {}),
           ...(dto.context?.requestId
@@ -89,6 +132,7 @@ export class AuditLogService {
               }
             : {}),
         },
+        notes: null,
         ipAddress: dto.context?.ipAddress || null,
         userAgent: dto.context?.userAgent || null,
       });
@@ -315,7 +359,7 @@ export class AuditLogService {
       },
       context: {
         ...record.context,
-        userId: this.toNullableUuid(record.context?.userId || null),
+        userId: this.toNullableUserId(record.context?.userId || null),
       },
     });
   }
@@ -342,13 +386,6 @@ export class AuditLogService {
     }
 
     return diff;
-  }
-
-  private toNullableUuid(value?: string | null): string | null {
-    if (!value || !this.uuidPattern.test(value)) {
-      return null;
-    }
-    return value;
   }
 
   async logTemplateRolloutDiff(
@@ -378,7 +415,7 @@ export class AuditLogService {
         diff,
         changedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: this.toNullableUuid(record.actorId) },
+      context: { ...context, userId: this.toNullableUserId(record.actorId) },
     });
   }
 
@@ -526,12 +563,10 @@ export class AuditLogService {
       // Since we store entity info in metadata, we need to query the JSONB field
       const logs = await this.auditLogRepository
         .createQueryBuilder('audit_log')
-        .leftJoinAndSelect('audit_log.user', 'user')
-        .where("audit_log.metadata->>'entityType' = :entityType", {
-          entityType,
-        })
-        .andWhere("audit_log.metadata->>'entityId' = :entityId", { entityId })
-        .orderBy('audit_log.timestamp', 'DESC')
+        .leftJoinAndSelect('audit_log.admin', 'admin')
+        .where('audit_log.entityType = :entityType', { entityType })
+        .andWhere('audit_log.entityId = :entityId', { entityId })
+        .orderBy('audit_log.createdAt', 'DESC')
         .getMany();
 
       return logs;
@@ -546,12 +581,17 @@ export class AuditLogService {
   /**
    * Find audit logs by user
    */
-  async findByUser(userId: string): Promise<AuditLog[]> {
+  async findByUser(userId: string | number): Promise<AuditLog[]> {
+    const normalizedUserId = this.toNullableUserId(userId);
+    if (normalizedUserId === null) {
+      return [];
+    }
+
     try {
       return this.auditLogRepository.find({
-        where: { userId },
-        order: { timestamp: 'DESC' },
-        relations: ['user'],
+        where: { adminId: normalizedUserId },
+        order: { createdAt: 'DESC' },
+        relations: ['admin'],
       });
     } catch (error) {
       this.logger.error(`Failed to find audit logs by user: ${error.message}`);
@@ -563,7 +603,7 @@ export class AuditLogService {
    * Get audit logs with filtering and pagination
    */
   async findAll(options: {
-    userId?: string;
+    userId?: string | number;
     actorId?: string;
     actorType?: string;
     actionType?: AuditActionType;
@@ -581,19 +621,32 @@ export class AuditLogService {
     try {
       const query = this.auditLogRepository
         .createQueryBuilder('audit_log')
-        .leftJoinAndSelect('audit_log.user', 'user');
+        .leftJoinAndSelect('audit_log.admin', 'admin');
 
       if (options.userId) {
-        query.andWhere('audit_log.user_id = :userId', {
-          userId: options.userId,
+        const normalizedUserId = this.toNullableUserId(options.userId);
+        if (normalizedUserId === null) {
+          return {
+            logs: [],
+            total: 0,
+            limit: options.limit || 100,
+            offset: options.offset || 0,
+          };
+        }
+        query.andWhere('audit_log.admin_id = :userId', {
+          userId: normalizedUserId,
         });
       }
 
       if (options.actorId) {
+        const normalizedActorId = this.toNullableUserId(options.actorId);
         query.andWhere(
-          "(audit_log.user_id = :actorId OR audit_log.metadata->>'actorId' = :actorId)",
+          normalizedActorId === null
+            ? "audit_log.metadata->>'actorId' = :actorIdRaw"
+            : "(audit_log.admin_id = :actorId OR audit_log.metadata->>'actorId' = :actorIdRaw)",
           {
-            actorId: options.actorId,
+            actorId: normalizedActorId,
+            actorIdRaw: options.actorId,
           },
         );
       }
@@ -605,19 +658,19 @@ export class AuditLogService {
       }
 
       if (options.actionType) {
-        query.andWhere('audit_log.action_type = :actionType', {
+        query.andWhere('audit_log.action = :actionType', {
           actionType: options.actionType,
         });
       }
 
       if (options.entityType) {
-        query.andWhere("audit_log.metadata->>'entityType' = :entityType", {
+        query.andWhere('audit_log.entity_type = :entityType', {
           entityType: options.entityType,
         });
       }
 
       if (options.entityId) {
-        query.andWhere("audit_log.metadata->>'entityId' = :entityId", {
+        query.andWhere('audit_log.entity_id = :entityId', {
           entityId: options.entityId,
         });
       }
@@ -653,18 +706,18 @@ export class AuditLogService {
       }
 
       if (options.startDate) {
-        query.andWhere('audit_log.timestamp >= :startDate', {
+        query.andWhere('audit_log.createdAt >= :startDate', {
           startDate: options.startDate,
         });
       }
 
       if (options.endDate) {
-        query.andWhere('audit_log.timestamp <= :endDate', {
+        query.andWhere('audit_log.createdAt <= :endDate', {
           endDate: options.endDate,
         });
       }
 
-      query.orderBy('audit_log.timestamp', 'DESC');
+      query.orderBy('audit_log.createdAt', 'DESC');
       query.limit(options.limit || 100);
       query.offset(options.offset || 0);
 
@@ -697,11 +750,11 @@ export class AuditLogService {
         this.auditLogRepository.createQueryBuilder('audit_log');
 
       if (startDate) {
-        countQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
+        countQuery.andWhere('audit_log.createdAt >= :startDate', { startDate });
       }
 
       if (endDate) {
-        countQuery.andWhere('audit_log.timestamp <= :endDate', { endDate });
+        countQuery.andWhere('audit_log.createdAt <= :endDate', { endDate });
       }
 
       // Get total count before modifying the query for group by
@@ -712,17 +765,17 @@ export class AuditLogService {
         this.auditLogRepository.createQueryBuilder('audit_log');
 
       if (startDate) {
-        statsQuery.andWhere('audit_log.timestamp >= :startDate', { startDate });
+        statsQuery.andWhere('audit_log.createdAt >= :startDate', { startDate });
       }
 
       if (endDate) {
-        statsQuery.andWhere('audit_log.timestamp <= :endDate', { endDate });
+        statsQuery.andWhere('audit_log.createdAt <= :endDate', { endDate });
       }
 
       const actionTypeCounts = await statsQuery
-        .select('audit_log.action_type', 'actionType')
+        .select('audit_log.action', 'actionType')
         .addSelect('COUNT(*)', 'count')
-        .groupBy('audit_log.action_type')
+        .groupBy('audit_log.action')
         .getRawMany();
 
       return {
@@ -757,8 +810,8 @@ export class AuditLogService {
 
       const query = this.auditLogRepository
         .createQueryBuilder('audit_log')
-        .leftJoinAndSelect('audit_log.user', 'user')
-        .where('audit_log.action_type IN (:...actionTypes)', {
+        .leftJoinAndSelect('audit_log.admin', 'admin')
+        .where('audit_log.action IN (:...actionTypes)', {
           actionTypes: rolloutActionTypes,
         });
 
@@ -778,25 +831,28 @@ export class AuditLogService {
       }
 
       if (options.actorId) {
+        const normalizedActorId = this.toNullableUserId(options.actorId);
         query.andWhere(
-          "(audit_log.user_id = :actorId OR audit_log.metadata->>'actorId' = :actorId)",
-          { actorId: options.actorId },
+          normalizedActorId === null
+            ? "audit_log.metadata->>'actorId' = :actorIdRaw"
+            : "(audit_log.admin_id = :actorId OR audit_log.metadata->>'actorId' = :actorIdRaw)",
+          { actorId: normalizedActorId, actorIdRaw: options.actorId },
         );
       }
 
       if (options.startDate) {
-        query.andWhere('audit_log.timestamp >= :startDate', {
+        query.andWhere('audit_log.createdAt >= :startDate', {
           startDate: options.startDate,
         });
       }
 
       if (options.endDate) {
-        query.andWhere('audit_log.timestamp <= :endDate', {
+        query.andWhere('audit_log.createdAt <= :endDate', {
           endDate: options.endDate,
         });
       }
 
-      query.orderBy('audit_log.timestamp', 'DESC');
+      query.orderBy('audit_log.createdAt', 'DESC');
       query.limit(options.limit || 100);
       query.offset(options.offset || 0);
 
@@ -841,11 +897,11 @@ export class AuditLogService {
 
       const query = this.auditLogRepository
         .createQueryBuilder('audit_log')
-        .leftJoinAndSelect('audit_log.user', 'user')
-        .where('audit_log.action_type IN (:...actionTypes)', {
+        .leftJoinAndSelect('audit_log.admin', 'admin')
+        .where('audit_log.action IN (:...actionTypes)', {
           actionTypes: exportActionTypes,
         })
-        .andWhere("audit_log.metadata->>'entityType' = :entityType", {
+        .andWhere('audit_log.entity_type = :entityType', {
           entityType: 'data_export',
         });
 
@@ -865,9 +921,12 @@ export class AuditLogService {
       }
 
       if (options.actorId) {
+        const normalizedActorId = this.toNullableUserId(options.actorId);
         query.andWhere(
-          "(audit_log.user_id = :actorId OR audit_log.metadata->>'actorId' = :actorId)",
-          { actorId: options.actorId },
+          normalizedActorId === null
+            ? "audit_log.metadata->>'actorId' = :actorIdRaw"
+            : "(audit_log.admin_id = :actorId OR audit_log.metadata->>'actorId' = :actorIdRaw)",
+          { actorId: normalizedActorId, actorIdRaw: options.actorId },
         );
       }
 
@@ -878,18 +937,18 @@ export class AuditLogService {
       }
 
       if (options.startDate) {
-        query.andWhere('audit_log.timestamp >= :startDate', {
+        query.andWhere('audit_log.createdAt >= :startDate', {
           startDate: options.startDate,
         });
       }
 
       if (options.endDate) {
-        query.andWhere('audit_log.timestamp <= :endDate', {
+        query.andWhere('audit_log.createdAt <= :endDate', {
           endDate: options.endDate,
         });
       }
 
-      query.orderBy('audit_log.timestamp', 'DESC');
+      query.orderBy('audit_log.createdAt', 'DESC');
       query.limit(options.limit || 100);
       query.offset(options.offset || 0);
 

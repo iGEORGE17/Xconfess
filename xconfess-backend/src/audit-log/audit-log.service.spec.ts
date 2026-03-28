@@ -68,7 +68,7 @@ describe('AuditLogService', () => {
 
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: AuditActionType.FAILED_LOGIN,
+        action: AuditActionType.FAILED_LOGIN,
         metadata: expect.objectContaining({
           identifier: 'user@example.com',
           requestId: 'req-123',
@@ -106,7 +106,7 @@ describe('AuditLogService', () => {
 
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: AuditActionType.TEMPLATE_ROLLOUT_DIFF_RECORDED,
+        action: AuditActionType.TEMPLATE_ROLLOUT_DIFF_RECORDED,
         metadata: expect.objectContaining({
           templateKey: 'welcome',
           templateVersion: 'v2',
@@ -148,8 +148,8 @@ describe('AuditLogService', () => {
       { templateVersion: 'v2' },
     );
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-      "(audit_log.user_id = :actorId OR audit_log.metadata->>'actorId' = :actorId)",
-      { actorId: 'actor-123' },
+      "audit_log.metadata->>'actorId' = :actorIdRaw",
+      { actorId: null, actorIdRaw: 'actor-123' },
     );
   });
 
@@ -171,7 +171,7 @@ describe('AuditLogService', () => {
 
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: AuditActionType.EXPORT_DOWNLOADED,
+        action: AuditActionType.EXPORT_DOWNLOADED,
         metadata: expect.objectContaining({
           entityType: 'data_export',
           entityId: 'export-req-1',
@@ -200,7 +200,7 @@ describe('AuditLogService', () => {
 
     expect(result.total).toBe(1);
     expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-      'audit_log.action_type IN (:...actionTypes)',
+      'audit_log.action IN (:...actionTypes)',
       expect.objectContaining({
         actionTypes: expect.arrayContaining([
           AuditActionType.TEMPLATE_STATE_TRANSITION,
@@ -222,7 +222,7 @@ describe('AuditLogService', () => {
 
     expect(result.total).toBe(1);
     expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-      'audit_log.action_type IN (:...actionTypes)',
+      'audit_log.action IN (:...actionTypes)',
       expect.objectContaining({
         actionTypes: expect.arrayContaining([
           AuditActionType.EXPORT_REQUEST_CREATED,
@@ -233,7 +233,7 @@ describe('AuditLogService', () => {
       }),
     );
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-      "audit_log.metadata->>'entityType' = :entityType",
+      'audit_log.entity_type = :entityType',
       { entityType: 'data_export' },
     );
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
