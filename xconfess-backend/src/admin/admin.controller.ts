@@ -58,14 +58,18 @@ class UpdateTemplateDto {
 
 type AuthedRequest = Request & { user?: RequestUser };
 
+const auditActionTypeValues = new Set<string>(
+  Object.values(AuditActionType) as string[],
+);
+
 function parseAuditAction(value?: string): AuditActionType | undefined {
   if (!value) {
     return undefined;
   }
 
-  return Object.values(AuditActionType).find(
-    (actionType) => actionType === value,
-  );
+  return auditActionTypeValues.has(value)
+    ? (value as AuditActionType)
+    : undefined;
 }
 
 @Controller('admin')
