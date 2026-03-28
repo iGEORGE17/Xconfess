@@ -46,6 +46,11 @@ interface GrowthMetrics {
   trend: TrendDirection;
 }
 
+interface BucketCountRow extends Record<string, string | number> {
+  date: string;
+  count: string | number;
+}
+
 interface DailyActivityPoint {
   date: string;
   activeUsers: number;
@@ -55,6 +60,11 @@ interface UserActivityMetrics {
   period: string;
   dailyActivity: DailyActivityPoint[];
   averageDAU: number;
+}
+
+interface UserActivityRow extends Record<string, string | number> {
+  date: string;
+  activeUsers: string | number;
 }
 
 interface ReactionDistributionMetrics {
@@ -73,6 +83,11 @@ interface TrendingConfessionWithReactionCount extends AnonymousConfession {
 
 interface CategoryStatsRow {
   category: string | null;
+  count: string;
+}
+
+interface ReactionDistributionRow {
+  type: string;
   count: string;
 }
 
@@ -398,7 +413,7 @@ export class AnalyticsService {
       .andWhere('confession.created_at < :endAt', { endAt: range.endAt })
       .groupBy("DATE(confession.created_at AT TIME ZONE 'UTC')")
       .orderBy('date', 'ASC')
-      .getRawMany();
+      .getRawMany<BucketCountRow>();
 
     const dailyGrowth = this.getDateBuckets(range).map((date) => ({
       date,
@@ -422,7 +437,7 @@ export class AnalyticsService {
     range: AnalyticsWindowRange,
     days: number,
   ): Promise<UserActivityMetrics> {
-    const activityRows = await this.confessionRepository.manager.query(
+    const activityRows = (await this.confessionRepository.manager.query(
       `
         SELECT activity.date::text AS date,
                COUNT(DISTINCT activity.anonymous_user_id)::int AS "activeUsers"
@@ -441,7 +456,7 @@ export class AnalyticsService {
         ORDER BY activity.date ASC
       `,
       [range.startAt, range.endAt],
-    );
+    )) as UserActivityRow[];
 
     const dailyActivity = this.getDateBuckets(range).map((date) => ({
       date,
@@ -473,7 +488,7 @@ export class AnalyticsService {
       .andWhere('reaction.createdAt < :endAt', { endAt: range.endAt })
       .groupBy('reaction.emoji')
       .orderBy('type', 'ASC')
-      .getRawMany();
+      .getRawMany<ReactionDistributionRow>();
 
     const total = distribution.reduce(
       (sum, item) => sum + parseInt(item.count, 10),
