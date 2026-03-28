@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { SearchInput } from "@/app/components/search/SearchInput";
 import { FilterSidebar } from "@/app/components/search/FilterSidebar";
@@ -16,6 +16,7 @@ import {
 import type { FilterChipKey } from "@/app/components/search/FilterChips";
 import { Filter, X } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
+import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
 
 const DEBOUNCE_MS = 300;
 
@@ -93,6 +94,9 @@ export default function SearchPage() {
   const [filters, setFilters] = useState<SearchFilters>({ ...DEFAULT_FILTERS });
   const [isInitialized, setIsInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const q = searchParams.get("q") || "";
@@ -223,6 +227,15 @@ export default function SearchPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  useFocusTrap({
+    active: sidebarOpen,
+    containerRef: sidebarRef,
+    initialFocusRef: closeButtonRef,
+    restoreFocusRef: filterButtonRef,
+    onEscape: () => setSidebarOpen(false),
+    trapFocus: true,
+  });
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <div className="container mx-auto py-6 px-4 lg:py-8 lg:px-6">
@@ -254,6 +267,7 @@ export default function SearchPage() {
             )}
             aria-expanded={sidebarOpen}
             aria-controls="search-filters-sidebar"
+            ref={filterButtonRef}
           >
             <Filter className="h-4 w-4" />
             <span>Filters</span>
@@ -285,6 +299,7 @@ export default function SearchPage() {
             )}
             role="complementary"
             aria-label="Search filters"
+            ref={sidebarRef}
           >
             <div className="lg:hidden relative mb-4">
               <button
@@ -292,6 +307,7 @@ export default function SearchPage() {
                 onClick={() => setSidebarOpen(false)}
                 className="absolute top-2 right-2 p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                 aria-label="Close filters"
+                ref={closeButtonRef}
               >
                 <X className="h-4 w-4" />
               </button>

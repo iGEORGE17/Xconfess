@@ -9,8 +9,9 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { WebSocketLogger } from '../websocket/websocket.logger';
 
 // Rate limiting map: socket.id -> { count, resetTime }
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -36,7 +37,7 @@ export class ReactionsGateway
   // Track connections per IP for basic DDoS prevention
   private connectionsPerIP = new Map<string, number>();
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService, private readonly wsLogger: WebSocketLogger) {}
 
   afterInit(server: Server) {
     // Configure CORS dynamically from ConfigService
@@ -116,7 +117,13 @@ export class ReactionsGateway
 
     const { confessionId } = data;
 
-    if (!confessionId) {
+    if (!confessionId || typeof confessionId !== 'string' || !confessionId.trim()) {
+      this.wsLogger.logSubscriptionRejected({
+        socketId: client.id,
+        userId: client.data?.userId,
+        channel: 'confession:<missing>',
+        reason: 'Confession ID is required and must be a non-empty string',
+      });
       client.emit('error', { message: 'Confession ID is required' });
       return;
     }
@@ -124,6 +131,11 @@ export class ReactionsGateway
     const room = `confession:${confessionId}`;
     client.join(room);
 
+    this.wsLogger.logSubscriptionGranted({
+      socketId: client.id,
+      userId: client.data?.userId,
+      channel: room,
+    });
     this.logger.log(`Client ${client.id} subscribed to ${room}`);
 
     client.emit('subscribed', {
@@ -143,7 +155,13 @@ export class ReactionsGateway
 
     const { confessionId } = data;
 
-    if (!confessionId) {
+    if (!confessionId || typeof confessionId !== 'string' || !confessionId.trim()) {
+      this.wsLogger.logSubscriptionRejected({
+        socketId: client.id,
+        userId: client.data?.userId,
+        channel: 'confession:<missing>',
+        reason: 'Confession ID is required for unsubscription',
+      });
       client.emit('error', { message: 'Confession ID is required' });
       return;
     }

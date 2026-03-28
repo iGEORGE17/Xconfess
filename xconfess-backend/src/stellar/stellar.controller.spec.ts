@@ -139,4 +139,3 @@ describe('StellarController authz', () => {
     expect(res.body).toHaveProperty('hash', 'tx-hash');
   });
 });
-

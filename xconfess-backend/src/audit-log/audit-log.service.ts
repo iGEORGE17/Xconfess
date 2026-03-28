@@ -8,6 +8,17 @@ export interface AuditLogContext {
   ipAddress?: string;
   userAgent?: string;
   requestId?: string;
+  actor?: AuditActor;
+}
+
+export type AuditActorType = 'admin' | 'user' | 'system' | 'webhook';
+
+export interface AuditActor {
+  type: AuditActorType;
+  id: string;
+  userId?: string | null;
+  label?: string;
+  source?: string | null;
 }
 
 export interface CreateAuditLogDto {
@@ -33,6 +44,7 @@ export interface TemplateRolloutDiffRecord {
     | 'kill_switch_toggle'
     | 'fallback_activation';
   actorId: string;
+  actorType?: AuditActorType;
   before: Record<string, any>;
   after: Record<string, any>;
   source?: TemplateRolloutSourceMetadata;
@@ -44,7 +56,7 @@ export type ExportLifecycleAction =
   | 'link_refreshed'
   | 'downloaded';
 
-export type ExportActorType = 'user' | 'system';
+export type ExportActorType = AuditActorType;
 
 export interface ExportLifecycleAuditRecord {
   action: ExportLifecycleAction;
@@ -112,6 +124,7 @@ export class AuditLogService {
    */
   async log(dto: CreateAuditLogDto): Promise<void> {
     try {
+      const actor = this.resolveActor(dto);
       const auditLog = this.auditLogRepository.create({
         adminId: this.toNullableUserId(dto.context?.userId || null),
         action: dto.actionType,
@@ -122,6 +135,15 @@ export class AuditLogService {
         entityId: this.extractEntityId(dto.metadata),
         metadata: {
           ...(dto.metadata || {}),
+          ...(actor
+            ? {
+                actorType: actor.type,
+                actorId: actor.id,
+                actorUserId: actor.userId || null,
+                ...(actor.label ? { actorLabel: actor.label } : {}),
+                ...(actor.source ? { actorSource: actor.source } : {}),
+              }
+            : {}),
           ...(dto.context?.requestId
             ? { requestId: dto.context.requestId }
             : {}),
@@ -140,7 +162,7 @@ export class AuditLogService {
       await this.auditLogRepository.save(auditLog);
 
       this.logger.log(
-        `Audit log created: ${dto.actionType} by user ${dto.context?.userId || 'anonymous'}`,
+        `Audit log created: ${dto.actionType} by ${actor?.type || 'anonymous'} ${actor?.id || dto.context?.userId || 'anonymous'}`,
       );
     } catch (error) {
       // Log the error but don't throw to prevent disrupting the main operation
@@ -261,7 +283,11 @@ export class AuditLogService {
         ...metadata,
         resolvedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -288,7 +314,11 @@ export class AuditLogService {
         ...metadata,
         dismissedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -319,7 +349,11 @@ export class AuditLogService {
         ...metadata,
         replayedAt: metadata.replayedAt || new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
   }
 
@@ -343,6 +377,10 @@ export class AuditLogService {
   ): Promise<void> {
     const occurredAt = record.occurredAt || new Date().toISOString();
     const exportId = record.exportId || record.requestId;
+    const actorUserId =
+      record.actorType === 'user' || record.actorType === 'admin'
+        ? record.actorId || record.context?.userId || null
+        : null;
 
     await this.log({
       actionType: this.mapExportActionType(record.action),
@@ -359,7 +397,10 @@ export class AuditLogService {
       },
       context: {
         ...record.context,
-        userId: this.toNullableUserId(record.context?.userId || null),
+        userId: this.toNullableUserId(record.context?.userId ?? actorUserId),
+        actor: this.createActor(record.actorType, record.actorId || record.action, {
+          userId: actorUserId,
+        }),
       },
     });
   }
@@ -394,6 +435,7 @@ export class AuditLogService {
   ): Promise<void> {
     const correlationId = record.source?.correlationId || context?.requestId;
     const diff = this.buildRolloutDiff(record.before, record.after);
+    const actorUserId = context?.userId ?? record.actorId;
 
     await this.log({
       actionType: AuditActionType.TEMPLATE_ROLLOUT_DIFF_RECORDED,
@@ -415,7 +457,14 @@ export class AuditLogService {
         diff,
         changedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: this.toNullableUserId(record.actorId) },
+      context: {
+        ...context,
+        userId: this.toNullableUserId(actorUserId),
+        actor: this.createActor(record.actorType || 'admin', record.actorId, {
+          userId: actorUserId,
+          source: record.source?.sourceEndpoint || null,
+        }),
+      },
     });
   }
 
@@ -444,7 +493,11 @@ export class AuditLogService {
         entityId: `${templateKey}:${version}`,
         transitionedAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
 
     await this.logTemplateRolloutDiff(
@@ -453,6 +506,7 @@ export class AuditLogService {
         templateVersion: version,
         changeType: 'state_transition',
         actorId: adminId,
+        actorType: 'admin',
         before: { lifecycleState: from },
         after: { lifecycleState: to },
         source: {
@@ -487,7 +541,11 @@ export class AuditLogService {
         entityId: templateKey || 'global',
         toggledAt: new Date().toISOString(),
       },
-      context: { ...context, userId: adminId },
+      context: {
+        ...context,
+        userId: adminId,
+        actor: this.createActor('admin', adminId),
+      },
     });
 
     await this.logTemplateRolloutDiff(
@@ -495,6 +553,7 @@ export class AuditLogService {
         templateKey: templateKey || 'global',
         changeType: 'kill_switch_toggle',
         actorId: adminId,
+        actorType: 'admin',
         before: { killSwitchEnabled: !enabled },
         after: { killSwitchEnabled: enabled },
         source: {
@@ -538,7 +597,8 @@ export class AuditLogService {
         templateKey,
         templateVersion: failedVersion,
         changeType: 'fallback_activation',
-        actorId: context?.userId || 'system',
+        actorId: context?.actor?.id || context?.userId || 'template-fallback',
+        actorType: context?.actor?.type || (context?.userId ? 'admin' : 'system'),
         before: { activeVersion: failedVersion },
         after: { activeVersion: fallbackVersion },
         source: {
@@ -969,5 +1029,65 @@ export class AuditLogService {
         offset: options.offset || 0,
       };
     }
+  }
+
+  private createActor(
+    type: AuditActorType,
+    id: string | number,
+    overrides?: {
+      userId?: string | number | null;
+      label?: string;
+      source?: string | null;
+    },
+  ): AuditActor {
+    const actorId = String(id);
+    const actorUserId =
+      overrides?.userId !== undefined
+        ? overrides.userId === null ||
+          overrides.userId === undefined ||
+          overrides.userId === ''
+          ? null
+          : String(overrides.userId)
+        : type === 'user' || type === 'admin'
+          ? actorId
+          : null;
+
+    return {
+      type,
+      id: actorId,
+      userId: actorUserId,
+      label: overrides?.label,
+      source: overrides?.source,
+    };
+  }
+
+  private resolveActor(dto: CreateAuditLogDto): AuditActor | null {
+    if (dto.context?.actor?.id) {
+      return dto.context.actor;
+    }
+
+    const metadataActorType = dto.metadata?.actorType as AuditActorType | undefined;
+    const metadataActorId = dto.metadata?.actorId
+      ? String(dto.metadata.actorId)
+      : undefined;
+
+    if (metadataActorType && metadataActorId) {
+      return this.createActor(metadataActorType, metadataActorId, {
+        userId:
+          metadataActorType === 'user' || metadataActorType === 'admin'
+            ? metadataActorId
+            : null,
+        label: dto.metadata?.actorLabel,
+        source: dto.metadata?.actorSource,
+      });
+    }
+
+    if (dto.context?.userId) {
+      return this.createActor('user', String(dto.context.userId), {
+        userId: dto.context.userId,
+      });
+    }
+
+    return null;
   }
 }

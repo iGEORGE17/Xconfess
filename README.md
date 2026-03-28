@@ -186,6 +186,9 @@ Key supporting references:
    STELLAR_NETWORK=testnet
    STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
    CONFESSION_ANCHOR_CONTRACT=<contract-id>
+
+   # Encryption Configuration (64-char hex)
+   CONFESSION_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
    ```
 
 5. **Set up the database**
@@ -232,15 +235,15 @@ cargo install --locked stellar-cli --features opt
 # 2. Add WebAssembly target
 rustup target add wasm32-unknown-unknown
 
-# 3. Navigate to contracts
-cd xconfess-contracts
+# 3. Build all contract crates reproducibly (from repo root)
+./scripts/contracts-release.sh build
 
-# 4. Build contracts
-cargo build --release --target wasm32-unknown-unknown
-
-# 5. Run tests
-cargo test
+# 4. Run tests
+./scripts/test-contracts.sh
 ```
+
+Versioning policy for contract crates is documented in
+`xconfess-contracts/VERSIONING.md`.
 
 ### Contract Architecture
 

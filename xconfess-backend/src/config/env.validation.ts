@@ -45,9 +45,13 @@ export const envValidationSchema = Joi.object({
   FRONTEND_URL: Joi.string().default('http://localhost:3000'),
 
   // ── Encryption ────────────────────────────────────────────────────────
-  CONFESSION_AES_KEY: Joi.string().length(32).optional().messages({
+  CONFESSION_ENCRYPTION_KEY: Joi.string().hex().length(64).required().messages({
     'string.length':
-      'CONFESSION_AES_KEY must be exactly 32 characters (AES-256).',
+      'CONFESSION_ENCRYPTION_KEY must be exactly 64 characters (32-byte hex).',
+    'string.hex':
+      'CONFESSION_ENCRYPTION_KEY must be a valid hexadecimal string.',
+    'any.required':
+      'CONFESSION_ENCRYPTION_KEY is required for confession security.',
   }),
 
   // ── Stellar ───────────────────────────────────────────────────────────
@@ -116,9 +120,7 @@ export const envValidationSchema = Joi.object({
   DLQ_CLEANUP_DRY_RUN: Joi.string().valid('true', 'false').default('false'),
 
   // ── DLQ automatic replay (optional) ────────────────────────────────
-  DLQ_AUTO_REPLAY_ENABLED: Joi.string()
-    .valid('true', 'false')
-    .default('false'),
+  DLQ_AUTO_REPLAY_ENABLED: Joi.string().valid('true', 'false').default('false'),
   DLQ_AUTO_REPLAY_INTERVAL_MS: Joi.number().default(1800000), // 30 min
   DLQ_AUTO_REPLAY_LOOKBACK_MINUTES: Joi.number().default(15),
   DLQ_AUTO_REPLAY_MAX_JOBS_PER_RUN: Joi.number().default(50),

@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { io, Socket } from 'socket.io-client';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { WebSocketAdapter } from '../src/websocket.adapter';
+import { WebSocketAdapter } from '../src/websocket/websocket.adapter';
 import { ConfigService } from '@nestjs/config';
 import { ReactionsGateway } from '../src/reaction/reactions.gateway';
 import { buildWebSocketServerOptions } from '../src/websocket/websocket.adapter';
@@ -390,7 +390,12 @@ describe('ReactionsGateway fanout and reconnect unit coverage', () => {
     const configService: any = {
       get: jest.fn().mockReturnValue('http://localhost:3000'),
     };
-    return new ReactionsGateway(configService);
+    const wsLogger: any = {
+      logSubscriptionRejected: jest.fn(),
+      logSubscriptionGranted: jest.fn(),
+      logEvent: jest.fn(),
+    };
+    return new ReactionsGateway(configService, wsLogger);
   };
 
   const createSocketClient = (id: string, ip = '127.0.0.1') =>

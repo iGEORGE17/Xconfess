@@ -28,10 +28,9 @@ import { TippingModule } from './tipping/tipping.module';
 import { LoggerModule } from './logger/logger.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EncryptionModule } from './encryption/encryption.module';
-import { NotificationModule } from './notification/notification.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { DatabaseModule } from './database/database.module';
-// TODO: NotificationModule requires Bull/Redis configuration - temporarily disabled
-// import { NotificationModule } from './notifications/notifications.module';
+import { BullModule } from '@nestjs/bull';
 
 @Module({
   imports: [
@@ -56,6 +55,29 @@ import { DatabaseModule } from './database/database.module';
         ],
       }),
     }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const redisHost = config.get<string>('REDIS_HOST');
+        const redisPort = config.get<number>('REDIS_PORT');
+        
+        if (config.get<string>('ENABLE_BACKGROUND_JOBS') === 'true') {
+          if (!redisHost || !redisPort) {
+            throw new Error(
+              'Misconfiguration: ENABLE_BACKGROUND_JOBS is true but REDIS_HOST or REDIS_PORT is missing from environment. Add them to enable background jobs.',
+            );
+          }
+        }
+        
+        return {
+          redis: {
+            host: redisHost || 'localhost',
+            port: redisPort || 6379,
+          },
+        };
+      },
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -73,12 +95,11 @@ import { DatabaseModule } from './database/database.module';
     AdminModule,
     ReportModule,
     DataExportModule,
-    // NotificationModule, // Requires Bull/Redis - temporarily disabled
+    NotificationsModule,
     StellarModule,
     TippingModule,
     LoggerModule,
     EncryptionModule,
-    NotificationModule,
     CacheModule,
     DatabaseModule,
   ],

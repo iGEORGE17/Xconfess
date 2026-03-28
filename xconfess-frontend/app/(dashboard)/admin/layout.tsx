@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { AUTH_TOKEN_KEY, USER_DATA_KEY } from "@/app/lib/api/constants";
+import { useFocusTrap } from "@/app/lib/hooks/useFocusTrap";
 
 function isMockAdminEnabled(): boolean {
   if (process.env.NEXT_PUBLIC_ADMIN_MOCK === "true") return true;
@@ -23,6 +24,9 @@ export default function AdminLayout({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [newReportsCount, setNewReportsCount] = useState(0);
   const queryClient = useQueryClient();
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileDrawerRef = useRef<HTMLDivElement>(null);
+  const mobileCloseButtonRef = useRef<HTMLButtonElement>(null);
 
   const navItems = useMemo(
     () => [
@@ -143,6 +147,15 @@ export default function AdminLayout({
     };
   }, [queryClient]);
 
+  useFocusTrap({
+    active: mobileOpen,
+    containerRef: mobileDrawerRef,
+    initialFocusRef: mobileCloseButtonRef,
+    restoreFocusRef: mobileMenuButtonRef,
+    onEscape: () => setMobileOpen(false),
+    trapFocus: true,
+  });
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile header */}
@@ -153,6 +166,7 @@ export default function AdminLayout({
             onClick={() => setMobileOpen(true)}
             className="inline-flex items-center justify-center rounded-md p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
             aria-label="Open sidebar"
+            ref={mobileMenuButtonRef}
           >
             <span className="text-xl leading-none">☰</span>
           </button>
@@ -188,7 +202,13 @@ export default function AdminLayout({
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <aside className="absolute left-0 top-0 h-full w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-4">
+          <aside
+            className="absolute left-0 top-0 h-full w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Admin navigation"
+            ref={mobileDrawerRef}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-gray-900 dark:text-white">
@@ -205,6 +225,7 @@ export default function AdminLayout({
                 onClick={() => setMobileOpen(false)}
                 className="rounded-md p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
                 aria-label="Close sidebar"
+                ref={mobileCloseButtonRef}
               >
                 ✕
               </button>

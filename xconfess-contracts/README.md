@@ -7,7 +7,7 @@ on-chain anchoring of anonymous confession hashes on the Stellar network.
 
 ## Table of contents
 
-- [What the contract does](#what-the-contract-does)
+- [What's contract does](#what-the-contract-does)
 - [Prerequisites](#prerequisites)
 - [Toolchain setup](#toolchain-setup)
 - [Project structure](#project-structure)
@@ -15,7 +15,9 @@ on-chain anchoring of anonymous confession hashes on the Stellar network.
 - [Testing](#testing)
 - [Linting and formatting](#linting-and-formatting)
 - [Deployment](#deployment)
+- [Versioning policy](#versioning-policy)
 - [Contract API](#contract-api)
+- [Administration](#administration)
 - [Architecture notes](#architecture-notes)
 - [Threat model](#threat-model)
 - [Troubleshooting](#troubleshooting)
@@ -100,6 +102,21 @@ xconfess-contract/
 ---
 
 ## Building
+
+### Canonical reproducible flow (recommended)
+
+From the monorepo root, use one script for all contract crates:
+
+```bash
+./scripts/contracts-release.sh build
+```
+
+This command:
+
+- builds every workspace contract crate in release mode with `--locked`
+- targets `wasm32-unknown-unknown` consistently
+- verifies all expected `.wasm` outputs exist
+- writes `deployments/contract-wasm-manifest.json` with SHA-256 hashes
 
 ### Development build (fast, unoptimised)
 
@@ -217,6 +234,25 @@ attributes are used in contract code; all lints must be resolved.
 
 ## Deployment
 
+### Canonical deployment flow (recommended)
+
+Use the same script used for reproducible builds:
+
+```bash
+# 1) Build and generate deterministic artifact manifest
+./scripts/contracts-release.sh build
+
+# 2) Deploy all contract crates to a network with one command
+./scripts/contracts-release.sh deploy --network testnet --source my-deployer-key
+```
+
+The deploy step writes network metadata to `deployments/<network>.json`, including:
+
+- deployed contract IDs
+- source key alias used for deployment
+- crate versions
+- wasm SHA-256 hashes
+
 ### Prerequisites for deployment
 
 1. Generate or import a Stellar keypair:
@@ -235,11 +271,9 @@ stellar network fund my-deployer-key --network testnet
 ### Deploy to testnet
 
 ```bash
-# Build a release WASM first
-npm run contract:build:release
-
-# Deploy
-STELLAR_SOURCE_ACCOUNT=my-deployer-key npm run contract:deploy:testnet
+# Build + deploy all crates
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network testnet --source my-deployer-key
 ```
 
 Or directly:
@@ -262,13 +296,22 @@ STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 ### Deploy to mainnet
 
 ```bash
-STELLAR_SOURCE_ACCOUNT=my-mainnet-key npm run contract:deploy:mainnet
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network mainnet --source my-mainnet-key
 ```
 
 > **Warning:** Mainnet deployments are permanent and incur real XLM fees.
 > Always test on testnet first.
 
 ---
+
+## Versioning policy
+
+Contract versioning rules are documented in [`VERSIONING.md`](./VERSIONING.md).
+
+Release and deployment automation rely on that policy by recording each crate
+version alongside the built artifact hash in `deployments/contract-wasm-manifest.json`
+and in `deployments/<network>.json`.
 
 ## Contract API
 
@@ -322,6 +365,36 @@ Utility read method so off-chain consumers can branch behavior safely.
 ### `get_error_registry_version() → u32`
 
 Compatibility markers for event payload schema and error-code registry versions.
+
+---
+
+## Administration
+
+For comprehensive contract administration guidance, see:
+
+- **[Contract Lifecycle Guide](./CONTRACT_LIFECYCLE.md)** - Complete lifecycle management, initialization procedures, and security considerations
+- **[Administration Guide](./ADMIN_GUIDE.md)** - Practical operational procedures, monitoring, and troubleshooting
+
+### Quick Admin Reference
+
+```bash
+# Check contract status
+stellar contract info --id $CONTRACT_ID --network $NETWORK
+
+# Get current administrator
+stellar contract invoke --id $CONTRACT_ID --source-account $ADMIN_KEY -- get_admin
+
+# Transfer administrator rights
+stellar contract invoke --id $CONTRACT_ID --source-account $ADMIN_KEY -- transfer_admin --new_admin $NEW_ADMIN_ADDRESS
+```
+
+### Contract-Specific Admin
+
+| Contract | Admin Functions | Documentation |
+|----------|----------------|---------------|
+| ConfessionAnchor | transfer_admin, get_admin, get_version | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#confessionanchor-contract) |
+| ReputationBadges | create_badge, award_badge, adjust_reputation | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#reputationbadges-contract) |
+| AnonymousTipping | None (decentralized) | [Lifecycle Guide](./CONTRACT_LIFECYCLE.md#anonymoustipping-contract) |
 
 ---
 

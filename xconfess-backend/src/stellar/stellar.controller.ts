@@ -57,7 +57,9 @@ export class StellarController {
   @ApiOperation({ summary: 'Invoke Soroban contract (admin only)' })
   @UseGuards(JwtAuthGuard, StellarInvokeContractGuard)
   async invokeContract(@Body() dto: InvokeContractDto) {
-    const signerSecret = this.configService.get<string>('STELLAR_SERVER_SECRET');
+    const signerSecret = this.configService.get<string>(
+      'STELLAR_SERVER_SECRET',
+    );
     if (!signerSecret) {
       throw new BadRequestException(
         'Stellar server signer secret is not configured',

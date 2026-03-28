@@ -2,6 +2,23 @@
 
 Complete guide for deploying xConfess smart contracts to Stellar networks.
 
+## Canonical Reproducible Flow
+
+Use the single root script for both build and deploy operations:
+
+```bash
+# From repository root
+./scripts/contracts-release.sh build
+./scripts/contracts-release.sh deploy --network testnet --source deployer
+```
+
+This flow builds all workspace contract crates with locked dependencies, verifies
+the expected WASM artifacts, and writes deployment metadata including crate
+versions and SHA-256 hashes.
+
+Versioning expectations for crate releases are defined in
+[`VERSIONING.md`](./VERSIONING.md).
+
 ## 📋 Prerequisites
 
 Before deploying contracts, ensure you have:
@@ -137,6 +154,21 @@ stellar contract deploy \
 export ANONYMOUS_TIPPING_ID="contract-id-from-output"
 ```
 
+### 5. Deploy Confession Registry Contract
+
+```bash
+# Build contract
+cargo build --release --target wasm32-unknown-unknown -p confession-registry
+
+# Deploy contract
+stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/confession_registry.wasm \
+  --source-account $STELLAR_ACCOUNT \
+  --network testnet
+
+export CONFESSION_REGISTRY_ID="contract-id-from-output"
+```
+
 ## 🧪 Testing Contracts
 
 ### Unit Tests
@@ -147,6 +179,7 @@ cargo test
 
 # Run specific contract tests
 cargo test -p confession-anchor
+cargo test -p confession-registry
 cargo test -p reputation-badges
 cargo test -p anonymous-tipping
 
