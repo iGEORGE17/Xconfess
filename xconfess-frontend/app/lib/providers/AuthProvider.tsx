@@ -10,6 +10,7 @@ import {
   RegisterData,
 } from '../types/auth';
 import { useAuthStore } from '../store/authStore';
+import { getErrorMessage } from '../utils/errorHandler';
 
 /**
  * Auth Context
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Login failed',
+        error: getErrorMessage(error),
       });
       throw error;
     }
@@ -123,7 +124,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Registration failed',
+        error: getErrorMessage(error),
       });
       throw error;
     }

@@ -7,7 +7,15 @@ const SESSION_COOKIE_NAME = "xconfess_session";
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { email, password } = body;
+        const email = typeof body?.email === "string" ? body.email : undefined;
+        const password = typeof body?.password === "string" ? body.password : undefined;
+
+        if (!email || !password) {
+            return NextResponse.json(
+                { message: "Email and password are required" },
+                { status: 400 },
+            );
+        }
 
         const response = await fetch(`${API_URL}/auth/login`, {
             method: "POST",
