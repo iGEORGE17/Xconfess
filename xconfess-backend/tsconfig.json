@@ -20,6 +20,7 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
+    "noEmitOnError": false,
     "moduleResolution": "node",
     "types": [
       "jest",

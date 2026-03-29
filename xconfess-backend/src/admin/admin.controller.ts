@@ -13,7 +13,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from './guards/admin.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { AdminService } from './services/admin.service';
 import { ModerationService } from './services/moderation.service';
 import { ModerationTemplateService } from '../comment/moderation-template.service';
