@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Header from "@/app/components/layout/Header";
 import { AuthGuard } from "@/app/components/AuthGuard";
+import { FloatingComparisonBar } from "@/app/components/comparison/FloatingComparisonBar";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 
 export default function DashboardLayout({
@@ -30,6 +31,7 @@ export default function DashboardLayout({
       <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
         <Header />
         <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">{children}</main>
+        <FloatingComparisonBar />
       </div>
     </AuthGuard>
   );

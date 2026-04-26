@@ -16,4 +16,8 @@ export const queryKeys = {
     byConfession: (confessionId: string) =>
       ["comments", "byConfession", confessionId] as const,
   },
+  comparison: {
+    all: ["comparison"] as const,
+    list: (itemIds: string[]) => ["comparison", "list", itemIds] as const,
+  },
 } as const;
