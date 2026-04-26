@@ -53,7 +53,6 @@ Default local ports:
 - Backend: `http://localhost:5000`
 
 ## Useful Scripts
-
 - `npm run backend:build`
 - `npm run backend:test`
 - `npm run frontend:build`
@@ -66,7 +65,6 @@ Default local ports:
 xConfess participates in Stellar Wave. Check the open issues for work tagged `Stellar Wave`, then coordinate before opening a PR.
 
 ## Package Docs
-
 - `xconfess-backend/README.md`
 - `xconfess-frontend/README.md`
 - `xconfess-contracts/README.md`
