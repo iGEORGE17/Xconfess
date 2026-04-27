@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
-import { Report, ReportStatus } from './entities/report.entity';
+import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity'
 import { CreateReportDto } from './entities/dto/create-report.dto';
 import { UpdateReportDto } from './entities/dto/update-report.dto';
 

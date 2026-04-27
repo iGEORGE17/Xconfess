@@ -1,4 +1,3 @@
-// xconfess-backend/src/report/reports.service.ts
 import {
   Injectable,
   BadRequestException,
@@ -8,11 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  Report,
-  ReportStatus,
-  ReportType,
-} from '../admin/entities/report.entity';
+import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity'
 import { CreateReportDto } from './dto/create-report.dto';
 import { ResolveReportDto } from './dto/resolve-report.dto';
 import { AnonymousConfession } from '../confession/entities/confession.entity';
