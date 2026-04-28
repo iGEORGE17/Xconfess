@@ -17,17 +17,18 @@ import {
 
 export const ConfessionFeed = () => {
   const { page, setPage, limit } = usePaginationState();
-  
-  const {
-    data,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-  } = useConfessionsQuery({ page, limit });
+
+  const { data, isLoading, isFetching, error, refetch } = useConfessionsQuery({
+    page,
+    limit,
+  });
 
   const confessions = data?.confessions ?? [];
-  const totalPages = data?.total ? Math.ceil(data.total / limit) : (data?.hasMore ? page + 1 : page);
+  const totalPages = data?.total
+    ? Math.ceil(data.total / limit)
+    : data?.hasMore
+      ? page + 1
+      : page;
   const isEmpty = !isLoading && confessions.length === 0;
 
   // Retry handler
@@ -39,10 +40,10 @@ export const ConfessionFeed = () => {
   const renderPaginationItems = () => {
     const items = [];
     const maxVisible = 5;
-    
+
     let startPage = Math.max(1, page - 2);
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-    
+    const endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
     if (endPage - startPage < maxVisible - 1) {
       startPage = Math.max(1, endPage - maxVisible + 1);
     }
@@ -51,7 +52,7 @@ export const ConfessionFeed = () => {
       items.push(
         <PaginationItem key="1">
           <PaginationLink onClick={() => setPage(1)}>1</PaginationLink>
-        </PaginationItem>
+        </PaginationItem>,
       );
       if (startPage > 2) {
         items.push(<PaginationEllipsis key="ellipsis-start" />);
@@ -61,13 +62,10 @@ export const ConfessionFeed = () => {
     for (let i = startPage; i <= endPage; i++) {
       items.push(
         <PaginationItem key={i}>
-          <PaginationLink 
-            isActive={i === page}
-            onClick={() => setPage(i)}
-          >
+          <PaginationLink isActive={i === page} onClick={() => setPage(i)}>
             {i}
           </PaginationLink>
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
@@ -77,8 +75,10 @@ export const ConfessionFeed = () => {
       }
       items.push(
         <PaginationItem key={totalPages}>
-          <PaginationLink onClick={() => setPage(totalPages)}>{totalPages}</PaginationLink>
-        </PaginationItem>
+          <PaginationLink onClick={() => setPage(totalPages)}>
+            {totalPages}
+          </PaginationLink>
+        </PaginationItem>,
       );
     }
 
@@ -120,7 +120,9 @@ export const ConfessionFeed = () => {
 
       {/* Confessions Grid */}
       {!isEmpty && confessions.length > 0 && (
-        <div className={`space-y-5 transition-opacity duration-200 ${isFetching && !isLoading ? 'opacity-50' : 'opacity-100'}`}>
+        <div
+          className={`space-y-5 transition-opacity duration-200 ${isFetching && !isLoading ? "opacity-50" : "opacity-100"}`}
+        >
           {confessions.map((confession) => (
             <ConfessionCard key={confession.id} confession={confession} />
           ))}
@@ -133,20 +135,28 @@ export const ConfessionFeed = () => {
           <Pagination>
             <PaginationContent>
               <PaginationItem>
-                <PaginationPrevious 
+                <PaginationPrevious
                   onClick={() => page > 1 && setPage(page - 1)}
                   aria-disabled={page <= 1}
-                  className={page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  className={
+                    page <= 1
+                      ? "pointer-events-none opacity-50"
+                      : "cursor-pointer"
+                  }
                 />
               </PaginationItem>
-              
+
               {renderPaginationItems()}
 
               <PaginationItem>
-                <PaginationNext 
+                <PaginationNext
                   onClick={() => page < totalPages && setPage(page + 1)}
                   aria-disabled={page >= totalPages}
-                  className={page >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  className={
+                    page >= totalPages
+                      ? "pointer-events-none opacity-50"
+                      : "cursor-pointer"
+                  }
                 />
               </PaginationItem>
             </PaginationContent>
@@ -159,4 +169,3 @@ export const ConfessionFeed = () => {
     </div>
   );
 };
-
