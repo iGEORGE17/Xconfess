@@ -1,8 +1,12 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
-import { Report, ReportStatus } from './entities/report.entity';
+import { Report, ReportStatus, ReportType } from '../admin/entities/report.entity'
 import { CreateReportDto } from './entities/dto/create-report.dto';
 import { UpdateReportDto } from './entities/dto/update-report.dto';
 
@@ -13,12 +17,17 @@ export class ReportService {
     private readonly reportRepository: Repository<Report>,
   ) {}
 
-  async create(dto: CreateReportDto, reporterId: number | null): Promise<Report> {
+  async create(
+    dto: CreateReportDto,
+    reporterId: number | null,
+  ): Promise<Report> {
     const idempotencyKey = createHash('sha256')
       .update(`${reporterId}-${dto.confessionId}-${dto.type}`)
       .digest('hex');
 
-    const existing = await this.reportRepository.findOne({ where: { idempotencyKey } });
+    const existing = await this.reportRepository.findOne({
+      where: { idempotencyKey },
+    });
     if (existing) {
       return existing;
     }

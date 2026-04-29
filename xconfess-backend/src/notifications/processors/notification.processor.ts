@@ -1,13 +1,9 @@
-import {
-  Processor,
-  Process,
-  OnWorkerEvent,
-  InjectQueue,
-} from '@nestjs/bullmq';
+import { Processor, OnWorkerEvent, InjectQueue, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
 import { EmailNotificationService } from '../services/email-notification.service';
 import { NotificationType } from '../entities/notification.entity';
+import { AppLogger } from '../../logger/logger.service';
 
 export const NOTIFICATION_QUEUE = 'notifications';
 export const NOTIFICATION_DLQ = 'notifications-dlq';
@@ -23,28 +19,49 @@ export interface NotificationJobData {
     failedAt: string;
     attemptsMade: number;
     lastError: string;
+    replayJobId?: string;
+    replayedAt?: string;
+    replayOutcome?: 'replayed' | 'deduplicated';
   };
 }
 
 @Processor(NOTIFICATION_QUEUE)
-export class NotificationProcessor {
+export class NotificationProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationProcessor.name);
 
   constructor(
     private readonly emailNotificationService: EmailNotificationService,
     @InjectQueue(NOTIFICATION_DLQ)
     private readonly dlq: Queue<NotificationJobData>,
-  ) {}
+    private readonly appLogger: AppLogger,
+  ) {
+    super();
+  }
 
   // ------------------------------------------------------------------ process
-  @Process('send-notification')
-  async handleSendNotification(job: Job<NotificationJobData>): Promise<void> {
-    this.logger.log(
-      `Processing notification job ${job.id} (attempt ${job.attemptsMade + 1})` +
-        ` → userId: ${job.data.userId}`,
-    );
+  async process(job: Job<NotificationJobData>): Promise<void> {
+    if (job.name === 'send-notification') {
+      this.logger.log(
+        `Processing notification job ${job.id} (attempt ${job.attemptsMade + 1})` +
+          ` → userId: ${job.data.userId}`,
+      );
 
-    await this.emailNotificationService.sendEmail(job.data);
+      this.appLogger.incrementCounter('notification_queue_processing_total', 1, {
+        queue: NOTIFICATION_QUEUE,
+        jobName: job.name,
+      });
+
+      const startedAt = Date.now();
+      await this.emailNotificationService.sendEmail(job.data);
+      this.appLogger.observeTimer(
+        'notification_queue_processing_duration_ms',
+        Date.now() - startedAt,
+        {
+          queue: NOTIFICATION_QUEUE,
+          jobName: job.name,
+        },
+      );
+    }
   }
 
   // --------------------------------------------------------------- on:failed
@@ -54,7 +71,10 @@ export class NotificationProcessor {
    * copy the full payload + error context into the dead-letter queue.
    */
   @OnWorkerEvent('failed')
-  async onFailed(job: Job<NotificationJobData> | undefined, error: Error): Promise<void> {
+  async onFailed(
+    job: Job<NotificationJobData> | undefined,
+    error: Error,
+  ): Promise<void> {
     if (!job) return;
 
     const maxAttempts = (job.opts as any)?.attempts ?? 1;
@@ -65,7 +85,22 @@ export class NotificationProcessor {
 
     const isExhausted = job.attemptsMade >= maxAttempts;
 
-    if (isExhausted) {
+    if (!isExhausted) {
+      this.appLogger.incrementCounter('notification_queue_retry_total', 1, {
+        queue: NOTIFICATION_QUEUE,
+        jobName: job.name,
+        attempt: job.attemptsMade,
+      });
+    } else {
+      this.appLogger.incrementCounter('notification_queue_failure_total', 1, {
+        queue: NOTIFICATION_QUEUE,
+        jobName: job.name,
+      });
+      this.appLogger.incrementCounter('notification_queue_dlq_total', 1, {
+        queue: NOTIFICATION_QUEUE,
+        jobName: job.name,
+      });
+
       this.logger.error(
         `Job ${job.id} exhausted all retries — moving to DLQ`,
         error.stack,

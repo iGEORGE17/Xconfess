@@ -31,6 +31,10 @@ const CAPABILITY_META_V1: Symbol = symbol_short!("meta_v1");
 const CAPABILITY_ADMIN_V1: Symbol = symbol_short!("adminv1");
 const CAPABILITY_PAUSE_V1: Symbol = symbol_short!("pausev1");
 
+/// Schema version constants for upgrade-safe migration.
+pub const ANCHOR_SCHEMA_VERSION_INITIAL: u32 = 1;
+pub const ANCHOR_SCHEMA_VERSION_CURRENT: u32 = 2;
+
 /// Storage keys for confession-anchor state
 #[contracttype]
 #[derive(Clone)]
@@ -39,6 +43,13 @@ pub enum DataKey {
     Owner,
     /// Admin set: Map<Address, ()>
     Admins,
+    /// Tracks which schema version has been applied to this contract's storage.
+    /// Absent → ANCHOR_SCHEMA_VERSION_INITIAL (pre-versioning deployment).
+    SchemaVersion,
+    /// v2: timestamp of the most recently successfully anchored confession.
+    /// Absent before `migrate()` is called; 0 means no anchor has occurred
+    /// since migration (i.e. pre-migration anchors are not back-filled).
+    LastAnchorTimestamp,
 }
 
 #[contracttype]
@@ -82,13 +93,19 @@ pub struct UpgradeCompatibilityPolicy {
 pub struct ConfessionAnchoredEvent {
     #[topic]
     pub hash: BytesN<32>,
+    /// Explicit schema discriminator for backend decoders.
+    /// Bump `events::EVENT_SCHEMA_VERSION` when the payload shape changes.
+    pub event_version: u32,
     pub timestamp: u64,
     pub anchor_height: u32,
 }
 
-#[contractevent(topics = ["ver_check"], data_format = "vec")]
+#[contractevent(topics = ["version_compatibility_checked"], data_format = "vec")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VersionCompatibilityCheckedEvent {
+    pub event_version: u32,
+    pub nonce: u64,
+    pub timestamp: u64,
     pub from_major: u32,
     pub from_minor: u32,
     pub from_patch: u32,
@@ -211,11 +228,25 @@ impl ConfessionAnchor {
         let current_count = get_count(&env);
         set_count(&env, current_count + 1);
 
+        // Track last anchor timestamp when v2 schema is active.
+        // We only write when the key already exists so we don't spuriously
+        // create it before the owner has run `migrate()`.
+        if env
+            .storage()
+            .instance()
+            .has(&DataKey::LastAnchorTimestamp)
+        {
+            env.storage()
+                .instance()
+                .set(&DataKey::LastAnchorTimestamp, &timestamp);
+        }
+
         // Emit ConfessionAnchored event:
         // topics: ("confession_anchor", hash)
-        // data: (timestamp, anchor_height)
+        // data: (event_version, timestamp, anchor_height)
         ConfessionAnchoredEvent {
             hash: hash.clone(),
+            event_version: events::CONFESSION_ANCHORED_EVENT_VERSION,
             timestamp,
             anchor_height,
         }
@@ -328,6 +359,14 @@ impl ConfessionAnchor {
         let compatible = Self::can_upgrade_from(env.clone(), from_major, from_minor, from_patch);
 
         VersionCompatibilityCheckedEvent {
+            event_version: events::VERSION_COMPATIBILITY_CHECKED_EVENT_VERSION,
+            nonce: events::bump_nonce(
+                &env,
+                events::EventNonceKey::VersionCompatibilityCheck(
+                    from_major, from_minor, from_patch,
+                ),
+            ),
+            timestamp: env.ledger().timestamp(),
             from_major,
             from_minor,
             from_patch,
@@ -404,6 +443,77 @@ impl ConfessionAnchor {
     /// Revoke operator role from an address (owner or admin).
     pub fn revoke_operator(env: Env, caller: Address, target: Address) -> Result<(), Error> {
         access_control::revoke_operator(&env, &caller, &target).map_err(Into::into)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Schema migration
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Apply all pending schema migrations and return the new schema version.
+    ///
+    /// **Idempotent** — calling this multiple times is safe; it is a no-op
+    /// when storage is already at `ANCHOR_SCHEMA_VERSION_CURRENT`.
+    ///
+    /// Caller must be the contract owner.
+    ///
+    /// ## v1 → v2
+    /// Introduces `LastAnchorTimestamp` (u64): the timestamp of the most
+    /// recent successful anchor.  Pre-migration anchors are not back-filled —
+    /// the value starts at 0 and is updated from the first post-migration
+    /// `anchor_confession` call.
+    ///
+    /// ## Rollback
+    /// Schema bumps are purely additive.  The v1 WASM simply ignores any
+    /// `SchemaVersion` or `LastAnchorTimestamp` keys left by the migration.
+    pub fn migrate(env: Env, caller: Address) -> Result<u32, Error> {
+        access_control::require_owner(&env, &caller).map_err(Error::from)?;
+
+        let current_version = env
+            .storage()
+            .instance()
+            .get::<_, u32>(&DataKey::SchemaVersion)
+            .unwrap_or(ANCHOR_SCHEMA_VERSION_INITIAL);
+
+        if current_version >= ANCHOR_SCHEMA_VERSION_CURRENT {
+            return Ok(current_version);
+        }
+
+        // v1 → v2: initialise LastAnchorTimestamp to 0 if not already present.
+        if current_version < 2 {
+            if !env
+                .storage()
+                .instance()
+                .has(&DataKey::LastAnchorTimestamp)
+            {
+                env.storage()
+                    .instance()
+                    .set(&DataKey::LastAnchorTimestamp, &0_u64);
+            }
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::SchemaVersion, &ANCHOR_SCHEMA_VERSION_CURRENT);
+
+        Ok(ANCHOR_SCHEMA_VERSION_CURRENT)
+    }
+
+    /// Return the current schema version stored on-chain.
+    /// Returns `ANCHOR_SCHEMA_VERSION_INITIAL` for pre-versioning deployments.
+    pub fn schema_version(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<_, u32>(&DataKey::SchemaVersion)
+            .unwrap_or(ANCHOR_SCHEMA_VERSION_INITIAL)
+    }
+
+    /// Return the timestamp of the last successfully anchored confession since
+    /// schema v2 migration was applied.  Returns 0 on pre-v2 contracts.
+    pub fn last_anchor_timestamp(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get::<_, u64>(&DataKey::LastAnchorTimestamp)
+            .unwrap_or(0_u64)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -713,14 +823,19 @@ mod test {
         assert_eq!(events.len(), 1);
 
         // events().all() returns Vec<(ContractId, Topics, Data)>
-        // Data is (timestamp: u64, anchor_height: u32) as encoded Val.
+        // Data is (event_version: u32, timestamp: u64, anchor_height: u32) as encoded Val.
         let (_contract_id, _topics, data) = events.first().unwrap();
 
-        // Decode the data tuple — Soroban encodes as a two-element Vec<Val>.
-        let decoded: (u64, u32) = data.into_val(&env);
-        assert_eq!(decoded.0, ts, "event data must carry the input timestamp");
+        // Decode the data tuple — Soroban encodes as a Vec<Val>.
+        let decoded: (u32, u64, u32) = data.into_val(&env);
         assert_eq!(
-            decoded.1, 77,
+            decoded.0,
+            events::EVENT_SCHEMA_VERSION,
+            "event data must carry an explicit schema discriminator"
+        );
+        assert_eq!(decoded.1, ts, "event data must carry the input timestamp");
+        assert_eq!(
+            decoded.2, 77,
             "event data must carry the ledger sequence as anchor_height"
         );
     }
@@ -1178,5 +1293,34 @@ mod test {
             client.try_assert_upgrade_from(&(CONTRACT_SEMVER_MAJOR + 1), &0, &0),
             Err(Ok(Error::IncompatibleUpgrade))
         );
+    }
+
+    #[test]
+    fn pause_reason_exact_limit_succeeds() {
+        let (env, client) = new_client();
+        let owner = Address::generate(&env);
+        let reason = SorobanString::from_str(
+            &env,
+            &"r".repeat(emergency_pause::events::MAX_PAUSE_REASON_LEN as usize),
+        );
+
+        client.initialize(&owner);
+
+        client.pause(&owner, &reason);
+    }
+
+    #[test]
+    #[should_panic(expected = "pause reason too long")]
+    fn pause_reason_limit_plus_one_rejected() {
+        let (env, client) = new_client();
+        let owner = Address::generate(&env);
+        let reason = SorobanString::from_str(
+            &env,
+            &"r".repeat((emergency_pause::events::MAX_PAUSE_REASON_LEN + 1) as usize),
+        );
+
+        client.initialize(&owner);
+
+        let _ = client.pause(&owner, &reason);
     }
 }
