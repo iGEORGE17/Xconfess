@@ -32,6 +32,9 @@ export const envValidationSchema = Joi.object({
   TYPEORM_SYNCHRONIZE: Joi.string()
     .valid('true', 'false', '1', '0', 'yes', 'no', 'on', 'off')
     .optional(),
+  TYPEORM_MIGRATIONS_RUN: Joi.string()
+    .valid('true', 'false', '1', '0', 'yes', 'no', 'on', 'off')
+    .optional(),
 
   // ── Auth ──────────────────────────────────────────────────────────────
   JWT_SECRET: Joi.string().min(8).required().messages({

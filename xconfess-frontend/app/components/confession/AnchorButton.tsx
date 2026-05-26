@@ -1,53 +1,13 @@
-
-'use client';
-
-import { useState } from 'react';
-import apiclient from '@/app/lib/api/client';
-
-export default function AnchorButton() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleAnchor = async () => {
-    if (isSubmitting) return; // prevent duplicate clicks
-
-    try {
-      setIsSubmitting(true);
-
-      await apiclient.post('/confessions/anchor', {});
-
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <button
-      onClick={handleAnchor}
-      disabled={isSubmitting}
-      className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-    >
-      {isSubmitting ? 'Anchoring...' : 'Anchor'}
-    </button>
-  );
-}
-=======
 "use client";
 
-import { useState } from "react";
-import { useStellarWallet } from "@/lib/hooks/useStellarWallet";
-import { getWalletCTAState } from "@/lib/hooks/useWalletCTAState";
+import { useState, type FC } from "react";
+import { Anchor, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/app/components/ui/button";
-import {
-  Loader2,
-  CheckCircle2,
-  ExternalLink,
-  Anchor,
-} from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
 import { useActivityStore } from "@/app/lib/store/activity.store";
-import { v4 as uuidv4 } from "uuid";
+import { useStellarWallet } from "@/lib/hooks/useStellarWallet";
+import { getWalletCTAState } from "@/lib/hooks/useWalletCTAState";
 
 interface AnchorButtonProps {
   confessionId: string;
@@ -58,7 +18,7 @@ interface AnchorButtonProps {
   className?: string;
 }
 
-export const AnchorButton: React.FC<AnchorButtonProps> = ({
+export const AnchorButton: FC<AnchorButtonProps> = ({
   confessionId,
   confessionContent,
   isAnchored = false,
@@ -115,7 +75,6 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
 
     setIsAnchoring(true);
 
-    //  Create activity FIRST
     const activityId = uuidv4();
     addActivity({
       id: activityId,
@@ -129,30 +88,24 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
       const result = await anchor(confessionContent);
 
       if (result.success && result.txHash) {
-        // update activity with txHash
         updateActivity(activityId, {
           txHash: result.txHash,
         });
 
-        // save to backend
-        const response = await fetch(
-          `/api/confessions/${confessionId}/anchor`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              stellarTxHash: result.txHash,
-            }),
-          }
-        );
+        const response = await fetch(`/api/confessions/${confessionId}/anchor`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            stellarTxHash: result.txHash,
+          }),
+        });
 
         if (!response.ok) {
           throw new Error("Failed to save anchor");
         }
 
-        // mark as confirmed
         updateActivity(activityId, {
           status: "confirmed",
           updatedAt: Date.now(),
@@ -183,7 +136,6 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
     }
   };
 
-  //  Already anchored UI
   if (anchored && txHash) {
     return (
       <div className={cn("flex items-center gap-2", className)}>
@@ -193,7 +145,7 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
           href={getExplorerUrl(txHash)}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
         >
           <ExternalLink className="h-3 w-3" />
         </a>
@@ -220,30 +172,26 @@ export const AnchorButton: React.FC<AnchorButtonProps> = ({
       >
         {isAnchoring || isLoading ? (
           <>
-            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
             Anchoring...
           </>
         ) : walletCTA.status === "not-connected" ? (
           <>
-            <Anchor className="h-3 w-3 mr-1" />
+            <Anchor className="mr-1 h-3 w-3" />
             Connect Wallet to Anchor
           </>
         ) : (
           <>
-            <Anchor className="h-3 w-3 mr-1" />
+            <Anchor className="mr-1 h-3 w-3" />
             Anchor
           </>
         )}
       </Button>
 
-      {error && (
-        <div className="text-xs text-red-400">{error}</div>
-      )}
+      {error && <div className="text-xs text-red-400">{error}</div>}
 
       {walletCTA.status === "not-ready" && !error && (
-        <div className="text-xs text-orange-400">
-          {walletCTA.guidance}
-        </div>
+        <div className="text-xs text-orange-400">{walletCTA.guidance}</div>
       )}
     </div>
   );

@@ -79,7 +79,7 @@ fn terminal_page_no_next() {
 /// Empty store: first call returns an empty terminal page.
 #[test]
 fn empty_store_is_terminal() {
-    let (env, client, _admin, _author) = setup();
+    let (_env, client, _admin, _author) = setup();
 
     let page = client.list_confessions(&None, &10);
 
