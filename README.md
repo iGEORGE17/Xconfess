@@ -28,39 +28,131 @@ xConfess is a monorepo for an anonymous confession platform built with NestJS, N
 
 ## Local Development
 
-1. Install dependencies from the repo root:
+Follow these steps from a fresh clone to get the full stack running.
 
-   ```bash
-   npm install
-   ```
+### Prerequisites
 
-2. Start PostgreSQL and Redis, for example:
+- Node.js ≥ 18 and npm ≥ 9
+- Docker (for Postgres and Redis)
+- Rust + `cargo` (only needed if working on contracts — see `docs/SOROBAN_SETUP.md`)
 
-   ```bash
-   docker compose -f compose.yaml up -d
-   ```
+### 1. Install dependencies
 
-3. Configure `xconfess-backend/.env` and `xconfess-frontend/.env.local`.
-4. Run the app:
+```bash
+npm install
+```
 
-   ```bash
-   npm run dev
-   ```
+### 2. Start infrastructure
 
-Default local ports:
+`compose.yaml` provides a Postgres 16 instance on **localhost:55432** and a Redis 7 instance on **localhost:6379**.
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:5000`
-- PostgreSQL: `localhost:55432`
-- Redis: `localhost:6379`
+```bash
+docker compose -f compose.yaml up -d
+```
 
-## Useful Scripts
-- `npm run backend:build`
-- `npm run backend:test`
-- `npm run frontend:build`
-- `npm run frontend:test`
-- `npm run contract:test`
-- `npm run ci`
+Verify both containers are healthy before continuing:
+
+```bash
+docker compose -f compose.yaml ps
+```
+
+### 3. Configure environment files
+
+**Backend** — copy the sample and fill in the values marked `change-me`:
+
+```bash
+cp xconfess-backend/.env.example xconfess-backend/.env
+```
+
+Required keys to set before first boot (everything else has safe defaults):
+
+| Key | Purpose |
+|-----|---------|
+| `JWT_SECRET` | Signs auth tokens — use any long random string locally |
+| `APP_SECRET` | App-level HMAC secret — use any long random string locally |
+| `CONFESSION_ENCRYPTION_KEY` | 64-character hex string used to encrypt confession content |
+| `STELLAR_SERVER_SECRET` | Stellar keypair secret for on-chain operations (testnet only) |
+
+Mail (`MAIL_HOST`, `MAIL_USER`, `MAIL_PASSWORD`) and Stellar contract IDs are pre-filled with testnet values in the example file and can be left as-is for local development.
+
+**Frontend** — copy the sample (no secrets required for basic local use):
+
+```bash
+cp xconfess-frontend/.env.example xconfess-frontend/.env.local
+```
+
+The example file points all URLs at `localhost:5000` (backend) and `localhost:3000` (frontend) and is ready to use without changes. If you want to skip the auth flow during UI development, add:
+
+```
+NEXT_PUBLIC_DEV_BYPASS_AUTH=true
+```
+
+### 4. Boot the full stack
+
+```bash
+npm run dev
+```
+
+This starts the backend and frontend concurrently. Once both are ready:
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:5000 |
+| Postgres | localhost:55432 |
+| Redis | localhost:6379 |
+
+### Running individual services
+
+```bash
+# Backend only
+npm run dev:backend
+
+# Frontend only
+npm run dev:frontend
+```
+
+## Scripts Reference
+
+### Tests
+
+```bash
+# Backend unit tests
+npm run backend:test
+
+# Backend e2e tests (requires running stack)
+npm run backend:test:e2e
+
+# Frontend tests
+npm run frontend:test
+
+# Contract tests (requires Rust toolchain)
+npm run contract:test
+```
+
+### Builds
+
+```bash
+npm run backend:build
+npm run frontend:build
+npm run contract:build
+```
+
+### Lint
+
+```bash
+npm run backend:lint
+npm run frontend:lint
+npm run contract:lint
+```
+
+### Full CI check (mirrors the CI pipeline)
+
+```bash
+npm run ci
+```
+
+This runs `ci:backend`, `ci:frontend`, and `ci:contract` in sequence — build, lint, and test for each package.
 
 ## Contributing
 
