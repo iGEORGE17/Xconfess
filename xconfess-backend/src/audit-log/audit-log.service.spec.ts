@@ -251,7 +251,7 @@ describe('AuditLogService', () => {
 
     expect(mockRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionType: AuditActionType.REPORT_RESOLVED,
+        action: AuditActionType.REPORT_RESOLVED,
         metadata: expect.objectContaining({
           reportId: 'report-1',
           actorType: 'admin',
@@ -312,7 +312,7 @@ describe('AuditLogService', () => {
       { entityType: 'data_export' },
     );
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-      "audit_log.metadata->>'requestId' = :requestId",
+      "(audit_log.request_id = :requestId OR audit_log.metadata->>'requestId' = :requestId)",
       { requestId: 'export-req-1' },
     );
     expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(

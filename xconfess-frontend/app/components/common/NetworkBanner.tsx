@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
 import { useNetwork } from "@/app/lib/providers/NetworkStatusProvider";
 import { WifiOff, AlertTriangle, RefreshCcw, X } from "lucide-react";

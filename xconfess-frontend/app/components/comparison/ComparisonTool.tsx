@@ -7,7 +7,7 @@ import { useComparisonStore } from '@/app/lib/store/comparisonStore';
 import { ComparisonTable } from './ComparisonTable';
 import { Button } from '@/app/components/ui/button';
 import { Share2 } from 'lucide-react';
-import { useGlobalToast } from '@/app/lib/hooks/use-toast';
+import { useGlobalToast } from '@/app/components/common/Toast';
 
 export function ComparisonTool() {
   const searchParams = useSearchParams();
@@ -15,7 +15,7 @@ export function ComparisonTool() {
   const itemIds = idsParam ? idsParam.split(',').filter(Boolean) : [];
   const { data, isLoading, error } = useComparison(itemIds);
   const { clearItems } = useComparisonStore();
-  const { toast } = useGlobalToast();
+  const toast = useGlobalToast();
 
   useEffect(() => {
     // Clear selection when component mounts (after navigation)
@@ -25,10 +25,7 @@ export function ComparisonTool() {
   const handleShare = () => {
     const url = window.location.href;
     navigator.clipboard.writeText(url);
-    toast({
-      title: 'Link copied!',
-      description: 'Comparison link has been copied to clipboard.',
-    });
+    toast.success('Comparison link copied to clipboard.');
   };
 
   if (isLoading) {

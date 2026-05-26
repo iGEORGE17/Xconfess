@@ -32,6 +32,7 @@ export const queryKeys = {
   comparison: {
     all: ["comparison"] as const,
     list: (itemIds: string[]) => ["comparison", "list", itemIds] as const,
+  },
 
   // ── Admin ────────────────────────────────────────────────────────────────
   // Top-level "admin" prefix lets you wipe all admin cache in one call:

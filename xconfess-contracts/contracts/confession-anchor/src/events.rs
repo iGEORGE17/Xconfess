@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use soroban_sdk::{contracttype, Env, BytesN};
+use soroban_sdk::{contracttype, BytesN, Env};
 
 /// Bump when event payload shape/topic compatibility changes in a breaking way.
 pub const EVENT_SCHEMA_VERSION: u32 = 1;

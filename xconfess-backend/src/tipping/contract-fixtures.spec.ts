@@ -10,8 +10,12 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { TippingService } from './tipping.service';
 import { TipVerificationSlaService } from './tip-verification-sla.service';
+import { Tip } from './entities/tip.entity';
+import { AnonymousConfession } from '../confession/entities/confession.entity';
+import { StellarService } from '../stellar/stellar.service';
 import {
   TIPPING_ERROR_CODES,
   classifyContractError,
@@ -30,11 +34,23 @@ describe('Tipping Contract Fixtures', () => {
         TippingService,
         TipVerificationSlaService,
         {
+          provide: getRepositoryToken(Tip),
+          useValue: {},
+        },
+        {
+          provide: getRepositoryToken(AnonymousConfession),
+          useValue: {},
+        },
+        {
+          provide: StellarService,
+          useValue: {},
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
               const config = {
-                TIP_VERIFICATION_STALE_THRESHOLD_MINUTES: 30,
+                'tipping.tipVerificationStaleThresholdMinutes': 30,
                 STELLAR_NETWORK: 'testnet',
               };
               return config[key];

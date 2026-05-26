@@ -51,6 +51,8 @@ Default local ports:
 
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:5000`
+- PostgreSQL: `localhost:55432`
+- Redis: `localhost:6379`
 
 ## Useful Scripts
 - `npm run backend:build`
