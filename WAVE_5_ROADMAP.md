@@ -70,6 +70,7 @@ Wave 5 should move XConfess from a completed Wave 1-4 implementation into a stro
 - List completed Wave 5 work, remaining risks, and next milestones.
 - Link key verification commands and results.
 - Keep the external contributor issue queue aligned with `maintainer/WAVE_TRIAGE.md`.
+- Use `maintainer/WAVE_5_CONTRIBUTOR_ASSIGNMENT.md` for contributor assignment process.
 
 ## Immediate Next Actions
 

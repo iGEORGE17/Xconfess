@@ -280,6 +280,7 @@ issue that is already in flight. It creates confusion about who owns the work.
 | Document | Purpose |
 |---|---|
 | `maintainer/BACKLOG_INDEX.md` | Routing index for all tracked follow-up work |
+| `maintainer/WAVE_5_CONTRIBUTOR_ASSIGNMENT.md` | Process for assigning and managing Wave 5 contributors |
 | `maintainer/issues/*.md` | Authoritative scope and acceptance criteria per issue |
 | `docs/` (all files) | Operational runbooks for running and releasing the system |
 
