@@ -79,13 +79,9 @@ describe('ReportsService — idempotency & replay safety (#780)', () => {
         findOne: jest.fn().mockResolvedValue(null),
       };
       // Confession not found — should throw NotFoundException inside tx
-      try {
-        await cb({
-          getRepository: () => confessionRepo,
-        });
-      } catch (e) {
-        throw e;
-      }
+      await cb({
+        getRepository: () => confessionRepo,
+      });
     });
     reportRepository.manager.transaction.mockImplementation(txFn);
     reportRepository.findOne.mockResolvedValue(null);
