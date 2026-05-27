@@ -28,7 +28,7 @@ function createClient() {
 }
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  const client = React.useMemo(createClient, []);
+  const client = React.useMemo(() => createClient(), []);
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
