@@ -66,7 +66,7 @@ Wave 5 should move XConfess from a completed Wave 1-4 implementation into a stro
 ### 6. Wave 5 Reporting Package
 
 - Prepare a short Wave 5 progress summary.
-- Capture screenshots or a demo script for the main flows.
+- Capture screenshots or a demo script for the main flows — see `docs/DEMO_SCRIPT.md`.
 - List completed Wave 5 work, remaining risks, and next milestones.
 - Link key verification commands and results.
 - Keep the external contributor issue queue aligned with `maintainer/WAVE_TRIAGE.md`.
@@ -74,7 +74,8 @@ Wave 5 should move XConfess from a completed Wave 1-4 implementation into a stro
 
 ## Immediate Next Actions
 
-- [ ] Create or switch to a Wave 5 branch when ready.
+- [x] Create or switch to a Wave 5 branch when ready.
+- [x] Demo script prepared at `docs/DEMO_SCRIPT.md`.
 - [ ] Commit the current baseline fixes once reviewed.
 - [ ] Start local PostgreSQL and Redis.
 - [ ] Confirm the backend `.env` uses `DB_PORT=55432` for the Docker Postgres service.
