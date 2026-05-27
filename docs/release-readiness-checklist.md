@@ -92,8 +92,8 @@ Use this checklist before any staging or production release that affects the bac
 
 - [ ] Define the exact rollback trigger for this release before starting deployment.
 - [ ] Keep the last known-good backend artifact, frontend artifact, and contract metadata available.
-- [ ] Confirm which changes are reversible immediately and which require operator intervention.
-- [ ] If a contract change is not directly reversible, document the mitigation path before release.
+- [ ] Confirm which changes (including database migrations, queue configuration, and contract updates) are reversible immediately and which require operator intervention.
+- [ ] If a change (such as a contract update or database migration) is not directly reversible, document the mitigation path before release.
 - [ ] Prepare the communication message to send if rollback or release pause is required.
 
 ## Post-Release Follow-Up
