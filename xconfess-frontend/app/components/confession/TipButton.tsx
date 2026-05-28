@@ -11,6 +11,8 @@ import { useWallet } from "@/lib/hooks/useWallet";
 import { getWalletCTAState } from "@/lib/hooks/useWalletCTAState";
 import { useActivityStore } from "@/app/lib/store/activity.store";
 import { v4 as uuidv4 } from "uuid";
+import { Wallet, AlertCircle } from "lucide-react";
+import { cn } from "@/app/lib/utils/cn";
 
 const STELLAR_EXPLORER_URL =
   process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
@@ -85,7 +87,7 @@ export const TipButton = ({
       try {
         await connect();
       } catch {
-        setError("Connect your wallet");
+        setError("Connect your Freighter wallet to send tips");
         return;
       }
     }
@@ -189,15 +191,26 @@ export const TipButton = ({
       ? `${STELLAR_EXPLORER_URL}/${confirmedTx.hash}`
       : null;
 
+  const needsWallet = !isConnected || walletCTA.status === "not-installed";
+
   return (
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={!recipientAddress}
         aria-label="Tip confession"
-        className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 transition-opacity"
+        className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-full transition-opacity",
+          needsWallet
+            ? "bg-purple-600/40 hover:bg-purple-600/50"
+            : "bg-purple-600 hover:bg-purple-700",
+          "disabled:opacity-50",
+        )}
       >
         <span className="text-lg">💰</span>
+        {needsWallet && (
+          <Wallet className="h-3.5 w-3.5 text-purple-300/70" />
+        )}
         {tipCount > 0 && (
           <span className="text-sm font-medium text-white">{tipCount}</span>
         )}
@@ -206,6 +219,43 @@ export const TipButton = ({
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-zinc-800 p-4 rounded-xl shadow-xl z-50">
           <h3 className="text-white font-semibold mb-3">Send Tip</h3>
+
+          {/* Wallet not installed warning */}
+          {walletCTA.status === "not-installed" && (
+            <div className="mb-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-yellow-500" />
+                <p className="text-xs text-yellow-400">{walletCTA.guidance}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Wallet not connected prompt */}
+          {walletCTA.status === "not-connected" && (
+            <div className="mb-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <div className="flex items-start gap-2">
+                <Wallet className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-400" />
+                <div>
+                  <p className="text-xs text-blue-400 font-medium">
+                    Wallet not connected
+                  </p>
+                  <p className="text-xs text-blue-300/70 mt-0.5">
+                    Connect your Freighter wallet to send tips on Stellar.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Wallet not ready warning */}
+          {walletCTA.status === "not-ready" && (
+            <div className="mb-3 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-orange-400" />
+                <p className="text-xs text-orange-400">{walletCTA.guidance}</p>
+              </div>
+            </div>
+          )}
 
           {/* Confirmed state */}
           {confirmedTx && (
@@ -294,22 +344,28 @@ export const TipButton = ({
                 </span>
               </div>
 
-              {walletCTA.status === "not-installed" && (
-                <div className="text-xs text-yellow-400 mt-2">
-                  {walletCTA.guidance}
-                </div>
-              )}
-
               <button
                 onClick={handleTip}
-                disabled={walletCTA.disabled || isSending}
-                className="w-full mt-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed py-2.5 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2"
+                disabled={
+                  walletCTA.disabled ||
+                  isSending ||
+                  walletCTA.status === "not-installed"
+                }
+                className={cn(
+                  "w-full mt-3 py-2.5 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2",
+                  walletCTA.status === "not-connected"
+                    ? "bg-blue-600 hover:bg-blue-500"
+                    : "bg-purple-600 hover:bg-purple-500",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                )}
                 aria-label={
                   isSending
                     ? "Sending tip"
                     : walletCTA.status === "not-connected"
                       ? "Connect Wallet to Tip"
-                      : `Send ${tipAmount} XLM tip`
+                      : walletCTA.status === "not-installed"
+                        ? "Wallet required — install Freighter"
+                        : `Send ${tipAmount} XLM tip`
                 }
               >
                 {isSending ? (
@@ -318,17 +374,14 @@ export const TipButton = ({
                     <span>Sending...</span>
                   </>
                 ) : walletCTA.status === "not-connected" ? (
-                  "Connect Wallet to Tip"
+                  <>
+                    <Wallet className="h-4 w-4" />
+                    Connect Wallet to Tip
+                  </>
                 ) : (
                   `Tip ${tipAmount} XLM`
                 )}
               </button>
-
-              {walletCTA.status === "not-ready" && (
-                <div className="text-xs text-orange-400 mt-2">
-                  {walletCTA.guidance}
-                </div>
-              )}
             </>
           )}
 
