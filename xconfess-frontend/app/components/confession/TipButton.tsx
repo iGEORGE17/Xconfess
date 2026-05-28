@@ -13,11 +13,7 @@ import { useActivityStore } from "@/app/lib/store/activity.store";
 import { v4 as uuidv4 } from "uuid";
 import { Wallet, AlertCircle } from "lucide-react";
 import { cn } from "@/app/lib/utils/cn";
-
-const STELLAR_EXPLORER_URL =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
-    ? "https://stellar.expert/explorer/public/tx"
-    : "https://stellar.expert/explorer/testnet/tx";
+import { getStellarExplorerUrl } from "@/app/lib/utils/stellar";
 
 const MIN_TIP_AMOUNT = 0.1;
 
@@ -186,9 +182,9 @@ export const TipButton = ({
   const tipCount = stats?.totalCount || 0;
 
   const explorerUrl = pendingTxHash
-    ? `${STELLAR_EXPLORER_URL}/${pendingTxHash}`
+    ? getStellarExplorerUrl(pendingTxHash)
     : confirmedTx
-      ? `${STELLAR_EXPLORER_URL}/${confirmedTx.hash}`
+      ? getStellarExplorerUrl(confirmedTx.hash)
       : null;
 
   const needsWallet = !isConnected || walletCTA.status === "not-installed";
@@ -269,7 +265,7 @@ export const TipButton = ({
               </p>
               {confirmedTx.hash && (
                 <a
-                  href={`${STELLAR_EXPLORER_URL}/${confirmedTx.hash}`}
+                  href={getStellarExplorerUrl(confirmedTx.hash) ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block mt-1 text-xs text-green-400 underline hover:text-green-300 truncate"

@@ -8,6 +8,7 @@ import { cn } from "@/app/lib/utils/cn";
 import { useActivityStore } from "@/app/lib/store/activity.store";
 import { useStellarWallet } from "@/lib/hooks/useStellarWallet";
 import { getWalletCTAState } from "@/lib/hooks/useWalletCTAState";
+import { getStellarExplorerUrl } from "@/app/lib/utils/stellar";
 
 interface AnchorButtonProps {
   confessionId: string;
@@ -50,15 +51,6 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
   const [txHash, setTxHash] = useState<string | null>(stellarTxHash);
   const [error, setError] = useState<string | null>(null);
   const [anchored, setAnchored] = useState(isAnchored);
-
-  const getExplorerUrl = (hash: string) => {
-    const network = process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet";
-    const baseUrl =
-      network === "mainnet"
-        ? "https://stellar.expert/explorer/public/tx"
-        : "https://stellar.expert/explorer/testnet/tx";
-    return `${baseUrl}/${hash}`;
-  };
 
   const handleAnchor = async () => {
     if (isAnchoring || isLoading) return;
@@ -142,7 +134,7 @@ export const AnchorButton: FC<AnchorButtonProps> = ({
         <CheckCircle2 className="h-4 w-4 text-green-400" />
         <span className="text-xs text-zinc-400">Anchored</span>
         <a
-          href={getExplorerUrl(txHash)}
+          href={getStellarExplorerUrl(txHash) ?? "#"}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
