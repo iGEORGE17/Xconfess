@@ -74,12 +74,12 @@ HTTP/1.1 200 OK
 
 Runs four health indicators in sequence via NestJS Terminus:
 
-1. **`database`** — TypeORM `pingCheck` against Postgres
-2. **`redis`** — custom `RedisHealthIndicator.isHealthy()`
-3. **`queues`** — custom `QueueHealthIndicator.isHealthy()` (BullMQ workers)
-4. **`schema`** — custom `SchemaReadinessHealthIndicator.isHealthy()` — validates the `anonymous_confessions` table has all required columns and indexes via `MigrationVerificationService.checkConfessionSchema()`
+ 1. **`database`** — TypeORM `pingCheck` against Postgres
+ 2. **`redis`** — custom `RedisHealthIndicator.isHealthy()`
+ 3. **`queues`** — custom `QueueHealthIndicator.isHealthy()` (BullMQ workers). Returns `mode: 'disabled'` when `ENABLE_BACKGROUND_JOBS !== 'true'` — see Queue health troubleshooting below.
+ 4. **`schema`** — custom `SchemaReadinessHealthIndicator.isHealthy()` — validates the `anonymous_confessions` table has all required columns and indexes via `MigrationVerificationService.checkConfessionSchema()`
 
-All four must pass for the endpoint to return `200 OK`. A single failure causes the whole probe to return `503 Service Unavailable` with per-check detail in the body.
+ All four must pass for the endpoint to return `200 OK` (the queues check "passes" either by having healthy workers or by being explicitly disabled). A single non-disabled failure causes the whole probe to return `503 Service Unavailable` with per-check detail in the body.
 
 **Response — all healthy**
 
@@ -282,6 +282,67 @@ redis-cli ping
 | Stalled jobs blocking the queue | Inspect via Bull Board or drain manually |
 
 > **Note:** The key in the response body is `queues` (plural), matching the `key` argument passed in the controller. Use this when grepping logs or writing alerting rules.
+
+---
+
+### Queue health — disabled mode (local development)
+
+When `ENABLE_BACKGROUND_JOBS` is **not** set to the exact string `"true"`, the queue health indicator returns a `disabled` mode instead of checking individual queues. This prevents the readiness probe from failing in environments where BullMQ workers are intentionally absent (e.g. local development without Redis, or CI pipelines that only need the HTTP layer).
+
+**Response — disabled (intentional, `"false"`)**
+
+```json
+"queues": {
+  "status": "up",
+  "mode": "disabled",
+  "reason": "ENABLE_BACKGROUND_JOBS is set to \"false\" (background jobs intentionally disabled)",
+  "severity": "info"
+}
+```
+
+**Response — disabled (not configured)**
+
+```json
+"queues": {
+  "status": "up",
+  "mode": "disabled",
+  "reason": "ENABLE_BACKGROUND_JOBS is not set (defaults to disabled)",
+  "severity": "info"
+}
+```
+
+**Response — disabled (misconfigured)**
+
+```json
+"queues": {
+  "status": "up",
+  "mode": "disabled",
+  "reason": "ENABLE_BACKGROUND_JOBS is set to \"yes\" (expected \"true\" to enable)",
+  "severity": "info"
+}
+```
+
+**How to interpret the reason field**
+
+| `ENABLE_BACKGROUND_JOBS` value | Reason message includes | Meaning |
+|---|---|---|
+| `"false"` | `"intentionally disabled"` | Dev/CI — expected and fine |
+| `undefined` / not set | `"not set (defaults to disabled)"` | Might be accidental in production |
+| `"true"` | *(no disabled mode — queues are checked)* | Production — workers expected |
+| Any other value | `expected "true" to enable` | Likely a typo — fix to `"true"` |
+
+> **Important for production:** Always set `ENABLE_BACKGROUND_JOBS=true` in production environments. Omitting this variable (or setting it to anything other than `"true"`) causes the readiness probe to skip queue checks entirely — the probe will pass even if all workers are down.
+
+**Local vs production expectations**
+
+| Environment | `ENABLE_BACKGROUND_JOBS` | Queue health behavior |
+|---|---|---|
+| **Production** | `"true"` | Checks all 4 queues; fails probe if any worker-required queue has 0 workers |
+| **Staging** | `"true"` | Same as production — verifies workers are healthy before deployment |
+| **Local dev** | `"false"` (or unset) | Skips queue checks; readiness probe passes without Redis/BullMQ |
+| **CI pipeline** | `"false"` (or unset) | Avoids false failures when Redis is unavailable in CI |
+
+**Startup guard:** When `ENABLE_BACKGROUND_JOBS` is `"true"` but `REDIS_HOST` or `REDIS_PORT` is missing, the application **refuses to start** with a clear error message. This prevents a misconfigured production deployment from silently losing background job functionality.
 
 ---
 
