@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, Report } from "@/app/lib/api/admin";
 import { queryKeys } from "@/app/lib/api/queryKeys";
 import ReportDetail from "./ReportDetail";
+import { Button } from "@/app/components/ui/button";
 import { useExportCSV } from "@/app/lib/hooks/useExportCSV";
 import { ExportCsvButton } from "@/app/components/admin/ExportCsvButton";
 import { useAdminConfirmation } from "@/app/components/admin/useAdminConfirmation";
@@ -223,12 +224,15 @@ export default function ReportList() {
               label="Export Reports CSV"
             />
             {selectedIds.size > 0 && (
-              <button
+              <Button
+                variant="default"
+                size="sm"
                 onClick={handleBulkResolve}
+                aria-label={`Resolve ${selectedIds.size} selected reports`}
                 className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm"
               >
                 Resolve Selected ({selectedIds.size})
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -243,6 +247,7 @@ export default function ReportList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   <input
                     type="checkbox"
+                    aria-label="Select all reports"
                     onChange={(e) => {
                       if (e.target.checked) {
                         setSelectedIds(new Set(reports.map((r: Report) => r.id)));
@@ -279,6 +284,7 @@ export default function ReportList() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="checkbox"
+                      aria-label={`Select report ${report.id}`}
                       checked={selectedIds.has(report.id)}
                       onChange={() => toggleSelect(report.id)}
                       className="rounded border-gray-300"
@@ -307,12 +313,15 @@ export default function ReportList() {
                     {new Date(report.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium sticky right-0 bg-white dark:bg-gray-800 after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-gray-200 dark:after:bg-gray-700">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setSelectedReport(report.id)}
-                      className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                      aria-label={`View report ${report.id}`}
+                      className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 p-0"
                     >
                       View
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -329,20 +338,24 @@ export default function ReportList() {
             of {total} results
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
+              type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
+              aria-label="Previous page"
               className="px-4 py-2 border rounded-md disabled:opacity-50"
             >
               Previous
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
+              aria-label="Next page"
               className="px-4 py-2 border rounded-md disabled:opacity-50"
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
       )}
