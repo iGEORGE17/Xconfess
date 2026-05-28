@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, User } from '@/app/lib/api/admin';
 import { queryKeys } from '@/app/lib/api/queryKeys';
 import { useAdminConfirmation } from '@/app/components/admin/useAdminConfirmation';
+import { Button } from '@/app/components/ui/button';
 
 export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,26 +154,35 @@ export default function UserManagement() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium sticky right-0 bg-white dark:bg-gray-800 after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-gray-200 dark:after:bg-gray-700">
                           <div className="flex gap-2">
                             {user.is_active ? (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handleBan(user)}
-                                className="text-red-600 hover:text-red-900 dark:text-red-400"
+                                aria-label={`Ban ${user.username}`}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 p-0"
                               >
                                 Ban
-                              </button>
+                              </Button>
                             ) : (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handleUnban(user)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400"
+                                aria-label={`Unban ${user.username}`}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 p-0"
                               >
                                 Unban
-                              </button>
+                              </Button>
                             )}
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => setSelectedUser(user)}
-                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
+                              aria-label={`View history for ${user.username}`}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 p-0"
                             >
                               History
-                            </button>
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -189,20 +199,24 @@ export default function UserManagement() {
                     results
                   </div>
                   <div className="flex gap-2">
-                    <button
+                    <Button
+                      type="button"
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={page === 1}
+                      aria-label="Previous page"
                       className="px-4 py-2 border rounded-md disabled:opacity-50"
                     >
                       Previous
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
+                      aria-label="Next page"
                       className="px-4 py-2 border rounded-md disabled:opacity-50"
                     >
                       Next
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -219,12 +233,15 @@ export default function UserManagement() {
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                 User History: {selectedUser.username}
               </h3>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setSelectedUser(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                aria-label="Close user history"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0"
               >
                 ✕
-              </button>
+              </Button>
             </div>
             <UserHistory userId={selectedUser.id.toString()} />
           </div>
