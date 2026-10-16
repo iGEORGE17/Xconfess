@@ -39,6 +39,10 @@ The example files are intentionally safe for local development. Do not commit
 .env` or `.env.local`, and do not paste private keys, tokens, passwords, or
 production credentials into issues, pull requests, screenshots, or logs.
 
+For the purpose, expected local format, and secret-vs-config classification of
+every backend and frontend variable, see the
+[Local Environment Variables guide](environment-variables.md).
+
 For a faster local UI workflow, you may add this value to
 .xconfess-frontend/.env.local`:
 
