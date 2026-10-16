@@ -11,6 +11,11 @@ import {
   decodeCursor,
   encodeCursor,
   CursorPaginatedResponseDto,
+  PAGINATION,
+  applyFeedTieBreakers,
+  applyNewestFeedOrder,
+  encodeFeedCursor,
+  feedKeysetPredicate,
 } from '../common/pagination';
 import { Brackets } from 'typeorm';
 import { AnonymousConfessionRepository } from './repository/confession.repository';
@@ -53,6 +58,7 @@ import { GetUserConfessionsDto } from './dto/get-user-confessions.dto';
 import { mapToSlimConfession } from './utils/confession-mapper';
 import { AnomalyDetectionService } from '../anomaly/anomaly-detection.service';
 import { ConfessionIdempotencyService } from './confession-idempotency.service';
+import { IdempotencyScope } from './idempotency-scope';
 import { AnalyticsEventService } from '../analytics/analytics-event.service';
 import { OperationalMetricsService } from '../observability/operational-metrics.service';
 import { FeedTypeLabel } from '../observability/metric-labels';
@@ -111,6 +117,7 @@ export class ConfessionService {
     dto: CreateConfessionDto,
     manager?: EntityManager,
     walletAddress?: string,
+    scope?: IdempotencyScope,
   ) {
     // Only use 'message' as canonical field
     const msg = this.sanitizeMessage(dto.message);
@@ -136,6 +143,7 @@ export class ConfessionService {
       const idempotencyResult = await this.idempotencyService.check(
         dto.idempotencyKey,
         payloadHash,
+        scope,
       );
 
       if (idempotencyResult.isReplay) {
@@ -147,6 +155,14 @@ export class ConfessionService {
         return cached;
       }
 
+      // Persist the scoped key (not the raw client key) on the confession so
+      // the row-level unique constraint enforces the same scope (Issue #2116).
+      // `check()` always returns a record carrying the scoped key; the raw-key
+      // fallback only covers test doubles that return a bare record.
+      const scopedIdempotencyKey =
+        idempotencyResult.record?.idempotencyKey ??
+        this.idempotencyService.computeScopedKey?.(dto.idempotencyKey, scope) ??
+        dto.idempotencyKey;
       // First occurrence: run creation, then commit idempotency record.
       let savedConfession: AnonymousConfession;
       try {
@@ -155,6 +171,7 @@ export class ConfessionService {
           msg,
           manager,
           walletAddress,
+          scopedIdempotencyKey,
         );
       } catch (err) {
         await this.idempotencyService.commitFailure(idempotencyResult.record);
@@ -184,6 +201,7 @@ export class ConfessionService {
     msg: string,
     manager?: EntityManager,
     walletAddress?: string,
+    idempotencyKey?: string,
   ): Promise<AnonymousConfession> {
     // Step 0: Validate tags if provided (external call - keep outside transaction)
     let validatedTags: any[] = [];
@@ -235,7 +253,7 @@ export class ConfessionService {
       isHidden: moderationResult.status === ModerationStatus.REJECTED,
       moderationDetails: moderationResult.details,
       ...stellarData,
-      ...(dto.idempotencyKey ? { idempotencyKey: dto.idempotencyKey } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     };
 
     // Keep every database side effect in one transaction. Events and cache
@@ -465,10 +483,10 @@ export class ConfessionService {
             .from('reaction', 'r')
             .where('r.confession_id = confession.id'),
         'reaction_count',
-      )
-        .orderBy('reaction_count', 'DESC')
-        .addOrderBy('confession.created_at', 'DESC')
-        .addOrderBy('confession.id', 'DESC');
+      ).orderBy('reaction_count', 'DESC');
+      // Deterministic ordering: aggregate counts tie often, so the shared
+      // created_at/id tie-breakers are mandatory (Issue #2118).
+      applyFeedTieBreakers(qb);
     } else if (sort === SortOrder.MOST_DISCUSSED) {
       qb.addSelect(
         (sub) =>
@@ -478,15 +496,10 @@ export class ConfessionService {
             .where('comment_count."confessionId" = confession.id')
             .andWhere('comment_count."isDeleted" = false'),
         'comment_count',
-      )
-        .orderBy('comment_count', 'DESC')
-        .addOrderBy('confession.created_at', 'DESC')
-        .addOrderBy('confession.id', 'DESC');
+      ).orderBy('comment_count', 'DESC');
+      applyFeedTieBreakers(qb);
     } else {
-      qb.orderBy('confession.created_at', 'DESC').addOrderBy(
-        'confession.id',
-        'DESC',
-      );
+      applyNewestFeedOrder(qb);
     }
 
     // Fetch one extra to determine if there's more
@@ -595,7 +608,9 @@ export class ConfessionService {
     const skip = (page - 1) * limit;
     const [data, total] = await this.confessionRepo.findAndCount({
       where: { isDeleted: true },
-      order: { created_at: 'DESC' },
+      // created_at is not unique; id keeps the deleted-confessions feed stable
+      // across pages when timestamps tie (Issue #2118).
+      order: { created_at: 'DESC', id: 'DESC' },
       skip,
       take: limit,
     });
@@ -1043,9 +1058,8 @@ export class ConfessionService {
               .where('r.confession_id = confession.id'),
           'reaction_count',
         )
-        .orderBy('reaction_count', 'DESC')
-        .addOrderBy('confession.created_at', 'DESC')
-        .addOrderBy('confession.id', 'DESC');
+        .orderBy('reaction_count', 'DESC');
+      applyFeedTieBreakers(queryBuilder);
     } else if (sort === SortOrder.MOST_DISCUSSED) {
       queryBuilder
         .addSelect(
@@ -1057,13 +1071,10 @@ export class ConfessionService {
               .andWhere('comment_count."isDeleted" = false'),
           'comment_count',
         )
-        .orderBy('comment_count', 'DESC')
-        .addOrderBy('confession.created_at', 'DESC')
-        .addOrderBy('confession.id', 'DESC');
+        .orderBy('comment_count', 'DESC');
+      applyFeedTieBreakers(queryBuilder);
     } else {
-      queryBuilder
-        .orderBy('confession.created_at', 'DESC')
-        .addOrderBy('confession.id', 'DESC');
+      applyNewestFeedOrder(queryBuilder);
     }
 
     const items = await queryBuilder.take(limit + 1).getMany();
@@ -1104,10 +1115,13 @@ export class ConfessionService {
 
     if (sort === SortOrder.NEWEST && parsed?.created_at) {
       // Row comparison lets Postgres seek idx_confessions_feed_keyset directly.
-      qb.andWhere(
-        '(confession.created_at, confession.id) < (:createdAt, :id)',
-        { createdAt: parsed.created_at, id: parsed.id },
-      );
+      // The predicate is derived from the same ordering constants the query
+      // uses, so page and cursor pagination can never diverge (Issue #2118).
+      const keyset = feedKeysetPredicate({
+        id: String(parsed.id),
+        created_at: parsed.created_at,
+      });
+      qb.andWhere(keyset.sql, keyset.params);
       return 0;
     }
 
@@ -1133,9 +1147,9 @@ export class ConfessionService {
     if (items.length <= limit) return null;
     const lastItem = items[limit - 1];
     return sort === SortOrder.NEWEST
-      ? encodeCursor({
+      ? encodeFeedCursor({
           id: lastItem.id,
-          created_at: lastItem.created_at.toISOString(),
+          created_at: lastItem.created_at,
         })
       : encodeCursor({ id: lastItem.id, offset: offset + limit });
   }
@@ -1157,7 +1171,7 @@ export class ConfessionService {
     try {
       const confessions = await this.confessionRepo.find({
         where: { isDeleted: false },
-        order: { created_at: 'DESC' },
+        order: { created_at: 'DESC', id: 'DESC' },
       });
 
       // Decrypt all confessions and convert to DTO
@@ -1399,8 +1413,14 @@ export class ConfessionService {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 10;
 
-    if (limit < 1 || limit > 100) {
-      throw new BadRequestException('limit must be 1–100');
+    if (
+      limit < PAGINATION.MIN_LIMIT ||
+      limit > PAGINATION.MAX_LIMIT ||
+      !Number.isInteger(limit)
+    ) {
+      throw new BadRequestException(
+        `limit must be between ${PAGINATION.MIN_LIMIT} and ${PAGINATION.MAX_LIMIT}`,
+      );
     }
 
     // Validate that the tag exists
