@@ -227,6 +227,15 @@ source_key = sys.argv[6]
 ids_file = pathlib.Path(sys.argv[7])
 crates = sys.argv[8:]
 
+CONTRACT_ID_RE = re.compile(r"C[A-Z2-7]{55}")
+NETWORK_ALIAS_RE = re.compile(r"[a-z][a-z0-9-]*")
+SEMVER_RE = re.compile(r"\d+\.\d+\.\d+")
+
+# Refuse to write metadata that the env verifier would later reject. Failing
+# here leaves any previous <network>.json untouched.
+if not NETWORK_ALIAS_RE.fullmatch(network):
+    raise SystemExit(f"Refusing to write deployment metadata: invalid network alias {network!r}")
+
 ids = {}
 for line in ids_file.read_text(encoding="utf-8").splitlines():
     crate, contract_id = line.split("=", 1)
@@ -238,10 +247,16 @@ def crate_version(crate: str) -> str:
     match = re.search(r'(?m)^version\s*=\s*"([^"]+)"\s*$', text)
     if not match:
         raise RuntimeError(f"No version found in {cargo_toml}")
+    if not SEMVER_RE.fullmatch(match.group(1)):
+        raise RuntimeError(f"Version in {cargo_toml} must be MAJOR.MINOR.PATCH, got {match.group(1)!r}")
     return match.group(1)
 
 contracts = {}
 for crate in crates:
+    if crate not in ids:
+        raise SystemExit(f"Refusing to write deployment metadata: no contract ID returned for {crate}")
+    if not CONTRACT_ID_RE.fullmatch(ids[crate]):
+        raise SystemExit(f"Refusing to write deployment metadata: invalid contract ID for {crate}: {ids[crate]!r}")
     wasm_name = crate.replace("-", "_") + ".wasm"
     wasm_path = target_dir / wasm_name
     content = wasm_path.read_bytes()

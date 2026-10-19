@@ -200,6 +200,16 @@ impl ConfessionAnchor {
     /// Anchor a new confession hash on-chain.
     /// - `hash`: 32-byte hash of the confession content.
     /// - `timestamp`: client-provided timestamp (e.g., ms since epoch).
+    ///
+    /// ## Timestamp trust model
+    /// `timestamp` is an untrusted claim supplied by the caller. The contract
+    /// stores it verbatim and does not check it against the ledger clock,
+    /// require ordering between anchors, or validate its units. `0` and
+    /// `u64::MAX` are accepted.
+    /// The ledger sequence is the authoritative metadata: `anchor_height` is
+    /// always the ledger sequence at anchor time and cannot be influenced by
+    /// `timestamp`. See `tests/timestamp_policy.rs` for the enforced behaviour.
+    ///
     /// Returns a `Symbol` status:
     /// - "anchored" when stored successfully.
     /// - "exists" if the hash was already anchored (no-op).
