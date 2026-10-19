@@ -215,6 +215,21 @@ git commit -m "build: contract release manifest for version X.Y.Z"
 
 ## Artifact Checksum Review
 
+### CI manifest gate
+
+CI runs `./scripts/contracts-release.sh check`. It rebuilds all contracts with
+the pinned `xconfess-contracts/rust-toolchain.toml` toolchain, then compares
+each rebuilt WASM SHA-256 with `deployments/contract-wasm-manifest.json`.
+The command never rewrites the manifest. A failure names every mismatched
+contract and prints the exact refresh command:
+
+```bash
+./scripts/contracts-release.sh build
+git add deployments/contract-wasm-manifest.json
+```
+
+Only commit the regenerated manifest after reviewing why each hash changed.
+
 `./scripts/contracts-release.sh build` and `./scripts/contracts-release.sh deploy`
 both generate SHA-256 metadata from the release WASM files. The hash is written
 to:
