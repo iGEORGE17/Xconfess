@@ -31,6 +31,32 @@ forward cookies or authorization headers when present, and normalize failures th
 | `/api/health/ready` | `/api/health/ready` | Local readiness proxy; useful for frontend diagnostics. |
 | `/api/og` | Frontend-only Open Graph image route | Not a backend proxy. |
 
+## Compatibility policy (#2232)
+
+To keep the proxy layer and the backend from drifting apart:
+
+- **Non-breaking** (safe to ship without coordinating both sides): adding a new
+  optional request field, adding a new response field, adding a new route,
+  loosening a validation rule.
+- **Breaking** (requires updating the matching proxy route in the same PR, or a
+  deprecation period below): removing/renaming a response field a proxy reads,
+  changing a field's type or meaning, removing a route, narrowing validation
+  that a proxy already relies on passing through.
+- **Deprecation handling**: when a breaking change can't land atomically with
+  its proxy update, the backend route keeps serving the old shape, adds the new
+  shape under a new path or version, and the old shape is removed only after
+  every proxy route consuming it has migrated. Note the deprecation and its
+  removal target in this file's route family table.
+
+### Checklist for route changes
+
+- [ ] Does this change add, remove, or reshape a field a proxy route reads?
+- [ ] If breaking, is the matching proxy route (table above) updated in this PR?
+- [ ] If the proxy can't update yet, is the old response shape still served
+      and the deprecation noted in the table above?
+- [ ] Does `normalizeApiError`/`createApiErrorResponse` still cover the
+      route's error shape unchanged?
+
 ## Error normalization
 
 Client-side API modules should normalize failed `fetch` responses with
