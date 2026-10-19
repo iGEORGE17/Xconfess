@@ -64,3 +64,26 @@ Client-side API modules should normalize failed `fetch` responses with
 proxy handlers should return JSON via `createApiErrorResponse` or the named
 helpers in `xconfess-frontend/app/lib/utils/proxyError.ts`; avoid new ad-hoc
 `new Response(JSON.stringify({ error }))` blocks.
+
+## Deployment smoke test
+
+The deployed smoke suite exercises the frontend readiness and public traction
+proxies, anonymous session handling, and the register route's method guard. It
+accepts the intentional readiness mapping (`200` when ready, `503` when a
+dependency is degraded) while requiring the public proxy to return JSON without
+sensitive fields.
+
+Run its deterministic local regression tests (no services or secrets required):
+
+```bash
+npm run deploy:smoke:test
+```
+
+To exercise a deployment, pass only public base URLs. The script does not print
+headers or credentials and skips mutations unless explicitly enabled:
+
+```bash
+SMOKE_FRONTEND_URL=https://frontend.example \
+SMOKE_BACKEND_URL=https://backend.example \
+npm run deploy:smoke
+```

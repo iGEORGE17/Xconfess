@@ -370,7 +370,7 @@ When adding a new API endpoint, follow the [API endpoint contributor checklist](
 - `xconfess-backend/README.md`
 - `xconfess-frontend/README.md`
 - `xconfess-contracts/README.md`
-- `docs/message-e2e-encryption.md` — E2E private messaging protocol
+- [E2E Messaging Protocol and Local Test Guide](docs/message-e2e-encryption.md) — protocol, safe generated fixtures, expected failures, and focused test commands
 ## Native XConfess Wallet
 
 The app includes an optional embedded Stellar wallet at `/wallet`. Keypairs are generated or imported in the browser; the secret key is encrypted locally with a PIN-derived AES-GCM key. The backend stores only the public key and, when requested, ciphertext-only backups. Freighter remains an optional advanced provider and is not required for normal wallet, send, receive, or tipping flows.

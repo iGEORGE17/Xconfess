@@ -4,6 +4,9 @@
 
 This document describes the three operational modes controlled by the `STELLAR_FEATURES_ENABLED` environment variable, the required configuration for each mode, and the behavior differences. It also serves as the contributor guide for running Stellar/Soroban functionality locally against testnet.
 
+For failure symptoms and copy-paste-safe diagnostic commands, see the
+[Stellar Testnet troubleshooting guide](STELLAR_TESTNET_GUIDE.md).
+
 ## Operational Modes
 
 | Mode | `STELLAR_FEATURES_ENABLED` | Description |
