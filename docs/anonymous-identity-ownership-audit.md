@@ -59,3 +59,7 @@ The default rule is:
 npm run test --workspace=xconfess-backend -- src/common/security/anonymous-identity-ownership.spec.ts src/reaction/reaction.service.spec.ts src/report/reports.service.spec.ts
 npm run build --workspace=xconfess-backend
 ```
+
+## See Also
+
+- [Privacy Data-Flow Map for Anonymous Interactions](privacy-data-flow-map.md) — Comprehensive boundary map for identity, content, and metadata.
