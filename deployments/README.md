@@ -17,7 +17,14 @@ and network deployments.
   Use the Stellar CLI network alias as the filename, for example
   `deployments/testnet.json` or `deployments/public.json`.
 - `sample.redacted.json` is an example only. It documents the expected shape
-  without real contract IDs or deployer information.
+  without real contract IDs or deployer information. It contains placeholder
+  values on purpose and fails validation, so do not copy it into a real
+  `<network>.json`.
+
+Metadata is checked by `npm run contracts:verify-env`. The required contracts,
+ID, hash, version, and placeholder rules are listed in
+`docs/contract-release-and-upgrade-runbook.md` under "Deployment metadata
+validation rules".
 
 ## Naming Convention
 
