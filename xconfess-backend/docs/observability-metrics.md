@@ -13,7 +13,12 @@ label must follow.
 | `xconfess_http_request_duration_seconds` | histogram | `method`, `route_category`, `status_class` | General API latency |
 | `xconfess_feed_queries_total` | counter | `feed_type`, `outcome` | Feed/search throughput and failures (`outcome="error"` means the query threw, including validation errors) |
 | `xconfess_feed_query_duration_seconds` | histogram | `feed_type`, `outcome` | Feed query latency, **kept separate** from general API latency |
+| `xconfess_db_pool_connections` | gauge | `pool`, `state` | Database connections per pool. `state` is `total` (open), `idle`, `active` (total minus idle) or `max` (configured limit) |
+| `xconfess_db_pool_waiting_requests` | gauge | `pool` | Callers waiting for a free database connection right now. Non-zero for sustained periods means the pool is saturated |
 | `xconfess_metrics_dropped_series_total` | counter | none | Safety valve: label combinations dropped by the series cap |
+
+Database pool gauges are read from the driver each time `GET /api/metrics` is
+scraped, so they always show the current state rather than a running total.
 
 Feed latency is measured around the service-level query (including the cache
 lookup), so it isolates database/cache cost from the rest of the HTTP pipeline
@@ -30,6 +35,8 @@ Every label takes its value from a **closed list** defined in
   `confessions_trending`, `auth`, `admin`, `health`, `other`, ...
 - `feed_type`: `public`, `search`, `fulltext_search`, `trending`, `tag`, `other`
 - `outcome`: `success`, `error`
+- `pool`: `primary` (write pool), `replica` (all read replicas, summed), `other`
+- `state`: `total`, `idle`, `active`, `max`
 
 Anything not in the list is collapsed to `other` by the metrics service, so a
 coding mistake cannot leak an identifier into the output. Each metric is also

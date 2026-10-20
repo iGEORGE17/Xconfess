@@ -31,9 +31,9 @@ export enum SortBy {
 }
 
 const SEARCH_QUERY_MAX_LENGTH = 120;
-// Allow Unicode letters/numbers + common separators/punctuation used in search.
+// Allow Unicode letters, numbers and combining marks (vowel signs, accents) + common separators/punctuation used in search.
 const SEARCH_QUERY_ALLOWED_CHARS =
-  /^[\p{L}\p{N}\p{Zs}.,!?'"@#$%&*()_\-:+/[\]{}]+$/u;
+  /^[\p{L}\p{M}\p{N}\p{Zs}.,!?'"@#$%&*()_\-:+/[\]{}]+$/u;
 
 export class SearchConfessionDto {
   @ApiProperty({

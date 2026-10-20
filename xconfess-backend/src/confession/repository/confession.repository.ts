@@ -8,6 +8,7 @@ import {
 import { Injectable } from '@nestjs/common';
 import { AnonymousConfession } from '../entities/confession.entity';
 import { SearchConfessionDto } from '../dto/search-confession.dto';
+import { normalizeSearchQuery } from '../search-query-normalizer';
 import { decodeCursor } from '../../common/pagination';
 import {
   applyNewestFeedOrder,
@@ -96,10 +97,8 @@ export class AnonymousConfessionRepository extends Repository<AnonymousConfessio
     const safeLimit = typeof limit === 'number' ? limit : 10;
     const offset = (page - 1) * safeLimit;
 
-    const sanitizedTerm = searchTerm
-      .replace(/[^\w\s]/g, ' ')
-      .trim()
-      .split(/\s+/)
+    const sanitizedTerm = normalizeSearchQuery(searchTerm)
+      .split(' ')
       .filter((term) => term.length > 0)
       .join(' & ');
 
