@@ -215,6 +215,12 @@ impl ConfessionAnchor {
             return symbol_short!("exists");
         }
 
+        // Calculate before writing any state. This makes an exhausted counter a
+        // deterministic failure and avoids relying on transaction rollback to
+        // protect the new hash from a partially completed anchor.
+        let next_count = get_count(&env)
+            .checked_add(1)
+            .expect("confession anchor count overflow");
         let anchor_height = env.ledger().sequence();
 
         let data = ConfessionData {
@@ -225,8 +231,7 @@ impl ConfessionAnchor {
         storage.set(&hash, &data);
 
         // Increment confession count.
-        let current_count = get_count(&env);
-        set_count(&env, current_count + 1);
+        set_count(&env, next_count);
 
         // Track last anchor timestamp when v2 schema is active.
         // We only write when the key already exists so we don't spuriously
@@ -671,6 +676,17 @@ mod test {
 
         let count = client.get_confession_count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn count_overflow_rejects_anchor_without_storing_hash() {
+        let (env, client) = new_client();
+        let hash = sample_hash(&env, 253);
+        set_count(&env, u64::MAX);
+
+        assert!(client.try_anchor_confession(&hash, &1_000).is_err());
+        assert_eq!(get_count(&env), u64::MAX);
+        assert_eq!(client.verify_confession(&hash), None);
     }
 
     #[test]
