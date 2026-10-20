@@ -65,16 +65,31 @@ crate_to_wasm_name() {
 
 verify_wasm_outputs() {
   local missing=0
+  local missing_artifacts=()
+
   for crate in "${CONTRACT_CRATES[@]}"; do
     local wasm_file
     wasm_file="$(crate_to_wasm_name "$crate")"
-    if [[ ! -f "$TARGET_DIR/$wasm_file" ]]; then
-      echo "Missing artifact: $TARGET_DIR/$wasm_file" >&2
+    local wasm_path="$TARGET_DIR/$wasm_file"
+    if [[ ! -f "$wasm_path" ]]; then
+      echo "Missing artifact: $wasm_path" >&2
+      missing_artifacts+=("$crate")
       missing=1
     fi
   done
 
   if [[ "$missing" -ne 0 ]]; then
+    echo "Build failed: expected WASM artifacts not found." >&2
+    echo "" >&2
+    echo "Missing contracts: ${missing_artifacts[*]}" >&2
+    echo "" >&2
+    echo "To build artifacts, run:" >&2
+    echo "  $SCRIPT_DIR/contracts-release.sh build" >&2
+    echo "" >&2
+    echo "Or manually:" >&2
+    echo "  cd $CONTRACTS_DIR" >&2
+    echo "  cargo build --locked --workspace --release --target wasm32v1-none" >&2
+    echo "" >&2
     exit 1
   fi
 }
