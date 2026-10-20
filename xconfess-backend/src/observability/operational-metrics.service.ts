@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  DB_POOL_LABELS,
+  DB_POOL_STATE_LABELS,
   FEED_OUTCOME_LABELS,
   FEED_TYPE_LABELS,
   FeedOutcomeLabel,
@@ -18,6 +20,20 @@ export const LATENCY_BUCKETS_SECONDS: readonly number[] = [
 
 /** Hard ceiling on distinct label combinations per metric (defence in depth). */
 export const MAX_SERIES_PER_METRIC = 500;
+
+/** One database connection pool, read from the driver at scrape time. */
+export interface DbPoolSnapshot {
+  /** Pool role; anything outside DB_POOL_LABELS is collapsed to `other`. */
+  pool: string;
+  /** Open connections (idle plus checked out). */
+  total: number;
+  /** Open connections sitting idle in the pool. */
+  idle: number;
+  /** Callers waiting for a free connection right now. */
+  waiting: number;
+  /** Configured maximum connections for the pool. */
+  max: number;
+}
 
 type LabelValues = Record<string, string>;
 
@@ -81,6 +97,23 @@ export class OperationalMetricsService {
     allowedLabels: this.feedQueries.allowedLabels,
   };
 
+  private readonly dbPoolConnections: MetricDefinition = {
+    name: 'xconfess_db_pool_connections',
+    help: 'Database connections per pool by state (total, idle, active, max).',
+    allowedLabels: {
+      pool: DB_POOL_LABELS,
+      state: DB_POOL_STATE_LABELS,
+    },
+  };
+
+  private readonly dbPoolWaiting: MetricDefinition = {
+    name: 'xconfess_db_pool_waiting_requests',
+    help: 'Requests waiting for a free database connection, per pool.',
+    allowedLabels: {
+      pool: DB_POOL_LABELS,
+    },
+  };
+
   private readonly droppedSeriesDefinition: MetricDefinition = {
     name: 'xconfess_metrics_dropped_series_total',
     help: 'Label combinations dropped because a metric hit its series limit.',
@@ -89,6 +122,7 @@ export class OperationalMetricsService {
 
   private counters = new Map<string, Map<string, CounterSeries>>();
   private histograms = new Map<string, Map<string, HistogramSeries>>();
+  private dbPools = new Map<string, DbPoolSnapshot>();
   private droppedSeries = 0;
 
   // ---------------------------------------------------------------------------
@@ -141,6 +175,34 @@ export class OperationalMetricsService {
     }
   }
 
+  /**
+   * Replace the database pool gauges with a fresh reading.
+   *
+   * Pool names are collapsed to the closed DB_POOL_LABELS set. Entries that
+   * share a label (for example two read replicas) are summed, so each label
+   * set is emitted exactly once.
+   */
+  setDbPoolSnapshot(pools: readonly DbPoolSnapshot[]): void {
+    const next = new Map<string, DbPoolSnapshot>();
+    for (const pool of pools) {
+      const known = (DB_POOL_LABELS as readonly string[]).includes(pool.pool);
+      const label = known ? pool.pool : 'other';
+      const current = next.get(label) ?? {
+        pool: label,
+        total: 0,
+        idle: 0,
+        waiting: 0,
+        max: 0,
+      };
+      current.total += nonNegative(pool.total);
+      current.idle += nonNegative(pool.idle);
+      current.waiting += nonNegative(pool.waiting);
+      current.max += nonNegative(pool.max);
+      next.set(label, current);
+    }
+    this.dbPools = next;
+  }
+
   /** Render every metric in Prometheus text exposition format. */
   renderPrometheus(): string {
     const lines: string[] = [];
@@ -177,6 +239,34 @@ export class OperationalMetricsService {
     }
 
     lines.push(
+      `# HELP ${this.dbPoolConnections.name} ${this.dbPoolConnections.help}`,
+    );
+    lines.push(`# TYPE ${this.dbPoolConnections.name} gauge`);
+    for (const pool of this.dbPools.values()) {
+      const states: Array<[string, number]> = [
+        ['total', pool.total],
+        ['idle', pool.idle],
+        ['active', Math.max(pool.total - pool.idle, 0)],
+        ['max', pool.max],
+      ];
+      for (const [state, value] of states) {
+        lines.push(
+          `${this.dbPoolConnections.name}${formatLabels({ pool: pool.pool, state })} ${value}`,
+        );
+      }
+    }
+
+    lines.push(
+      `# HELP ${this.dbPoolWaiting.name} ${this.dbPoolWaiting.help}`,
+    );
+    lines.push(`# TYPE ${this.dbPoolWaiting.name} gauge`);
+    for (const pool of this.dbPools.values()) {
+      lines.push(
+        `${this.dbPoolWaiting.name}${formatLabels({ pool: pool.pool })} ${pool.waiting}`,
+      );
+    }
+
+    lines.push(
       `# HELP ${this.droppedSeriesDefinition.name} ${this.droppedSeriesDefinition.help}`,
     );
     lines.push(`# TYPE ${this.droppedSeriesDefinition.name} counter`);
@@ -189,6 +279,7 @@ export class OperationalMetricsService {
   reset(): void {
     this.counters.clear();
     this.histograms.clear();
+    this.dbPools.clear();
     this.droppedSeries = 0;
   }
 
@@ -250,6 +341,10 @@ export class OperationalMetricsService {
 
 function elapsedSeconds(startNs: bigint): number {
   return Number(process.hrtime.bigint() - startNs) / 1e9;
+}
+
+function nonNegative(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function getOrCreate<V>(

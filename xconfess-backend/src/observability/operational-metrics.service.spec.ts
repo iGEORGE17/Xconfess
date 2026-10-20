@@ -143,6 +143,119 @@ describe('OperationalMetricsService', () => {
     });
   });
 
+  describe('database pool metrics', () => {
+    it('emits connection counts per pool and state, plus the waiting queue', () => {
+      service.setDbPoolSnapshot([
+        { pool: 'primary', total: 6, idle: 2, waiting: 3, max: 10 },
+      ]);
+
+      const out = lines(service);
+      expect(out).toContain('# TYPE xconfess_db_pool_connections gauge');
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="total"} 6',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="idle"} 2',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="active"} 4',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="max"} 10',
+      );
+      expect(out).toContain('# TYPE xconfess_db_pool_waiting_requests gauge');
+      expect(out).toContain(
+        'xconfess_db_pool_waiting_requests{pool="primary"} 3',
+      );
+    });
+
+    it('sums replicas into one series so each label set appears once', () => {
+      service.setDbPoolSnapshot([
+        { pool: 'replica', total: 2, idle: 1, waiting: 0, max: 5 },
+        { pool: 'replica', total: 3, idle: 3, waiting: 1, max: 5 },
+      ]);
+
+      const out = lines(service);
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="replica",state="total"} 5',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="replica",state="max"} 10',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_waiting_requests{pool="replica"} 1',
+      );
+      expect(
+        out.filter((line) =>
+          line.startsWith(
+            'xconfess_db_pool_connections{pool="replica",state="total"}',
+          ),
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('collapses unknown pool names and never echoes them', () => {
+      service.setDbPoolSnapshot([
+        { pool: 'user-42@example.com', total: 1, idle: 1, waiting: 0, max: 1 },
+      ]);
+
+      const output = service.renderPrometheus();
+      expect(output).toContain(
+        'xconfess_db_pool_connections{pool="other",state="total"} 1',
+      );
+      expect(output).not.toContain('example.com');
+      expect(output).not.toContain('user-42');
+    });
+
+    it('replaces the previous reading instead of accumulating', () => {
+      service.setDbPoolSnapshot([
+        { pool: 'primary', total: 9, idle: 0, waiting: 0, max: 10 },
+      ]);
+      service.setDbPoolSnapshot([
+        { pool: 'primary', total: 2, idle: 2, waiting: 0, max: 10 },
+      ]);
+
+      expect(lines(service)).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="total"} 2',
+      );
+    });
+
+    it('treats negative or non-finite readings as zero', () => {
+      service.setDbPoolSnapshot([
+        {
+          pool: 'primary',
+          total: Number.NaN,
+          idle: -1,
+          waiting: Infinity,
+          max: 4,
+        },
+      ]);
+
+      const out = lines(service);
+      expect(out).toContain(
+        'xconfess_db_pool_connections{pool="primary",state="total"} 0',
+      );
+      expect(out).toContain(
+        'xconfess_db_pool_waiting_requests{pool="primary"} 0',
+      );
+    });
+
+    it('only uses the documented pool and state label names', () => {
+      service.setDbPoolSnapshot([
+        { pool: 'primary', total: 1, idle: 0, waiting: 0, max: 1 },
+      ]);
+
+      const labelNames = [
+        ...service.renderPrometheus().matchAll(/([a-z_]+)="/g),
+      ].map((match) => match[1]);
+      const allowed = ['pool', 'state', 'le'];
+      expect(labelNames).toEqual(expect.arrayContaining(['pool', 'state']));
+      for (const name of labelNames) {
+        expect(allowed).toContain(name);
+      }
+    });
+  });
+
   describe('privacy constraints', () => {
     it('collapses unknown label values into "other" so identifiers cannot leak', () => {
       service.recordHttpRequest({
