@@ -39,24 +39,9 @@ jest.mock('@/app/lib/utils/errorHandler', () => ({
   },
 }));
 
-import axios from 'axios';
-
 // Import after mocks so the interceptors are registered with the mocked store
 import apiClient from '../client';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeAxios401(): ReturnType<typeof axios.create> {
-  // Simulate an Axios AxiosError with status 401
-  const err = Object.assign(new Error('Unauthorized'), {
-    isAxiosError: true,
-    response: { status: 401, data: { message: 'Session expired' } },
-    config: { url: '/api/confessions', __retryCount: 0 },
-  });
-  return err as unknown as ReturnType<typeof axios.create>;
-}
+import { resetSessionExpiryCoordinator } from '../../auth/sessionExpiry';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -67,6 +52,7 @@ describe('apiClient response interceptor — session expiry (401)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetSessionExpiryCoordinator();
     Object.defineProperty(globalThis, 'crypto', {
       value: { randomUUID: () => 'test-uuid' },
       configurable: true,
@@ -133,5 +119,21 @@ describe('apiClient response interceptor — session expiry (401)', () => {
     await expect(apiClient.get('/api/confessions')).rejects.toThrow();
 
     expect(mockLogout).not.toHaveBeenCalled();
+  });
+
+  it('coordinates parallel 401 responses into one logout and cleanup request', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    apiClient.defaults.adapter = async (config) => Promise.reject(Object.assign(new Error('401'), {
+      isAxiosError: true,
+      response: { status: 401, data: {} },
+      config,
+    }));
+
+    await Promise.allSettled([apiClient.get('/api/feed'), apiClient.get('/api/profile')]);
+
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith('/api/auth/session', { method: 'DELETE' });
+    fetchSpy.mockRestore();
   });
 });
