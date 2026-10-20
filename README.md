@@ -364,7 +364,7 @@ When adding a new API endpoint, follow the [API endpoint contributor checklist](
 
 - [Account Recovery Guide](docs/account-recovery.md) — What to do if you connect the wrong wallet or network
 - [Contributor Guide](docs/CONTRIBUTOR_GUIDE.md) — Local setup, branch hygiene, PR expectations, and validation commands
-- [Stellar Testnet Development Guide](docs/STELLAR_TESTNET_GUIDE.md) — Running Stellar/Soroban locally against testnet, wallet prerequisites, key handling, and disabling Stellar features
+- [Leaked Secrets Incident Response](docs/incident-response-leaked-secrets.md) — Secret rotation, session invalidation, log review, and containment procedures
 
 ## Package Docs
 - `xconfess-backend/README.md`
